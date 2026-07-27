@@ -68,7 +68,10 @@ _Last updated: 2026-07-27 (session start)_
       stores/redis_store.py is only 26% covered because no local Redis
       server was available in this environment (documented, not fabricated).
       mypy --strict clean, ruff clean.
-- [ ] Phase 14: docs (README + docs/*.md + SECURITY/CONTRIBUTING/etc.)
+- [x] Phase 14: docs -- README rewritten (real problem, runnable example,
+      Mermaid architecture + lifecycle diagrams, exact demo output from a
+      real run), all 19 required docs/*.md files, SECURITY.md,
+      CONTRIBUTING.md, CODE_OF_CONDUCT.md, CHANGELOG.md
 - [ ] Phase 15: CI/packaging
 - [ ] Phase 16: final verification
 
