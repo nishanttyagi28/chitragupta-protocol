@@ -19,6 +19,7 @@ from chitragupta.adapters.base import (
     OutcomeProof,
 )
 from chitragupta.crypto.keys import SigningKey
+from chitragupta.delegation.attenuation import assert_grant_narrower_or_equal
 from chitragupta.domain.common import Principal
 from chitragupta.domain.manifest import EffectManifest
 from chitragupta.domain.seal import SealedManifest
@@ -209,6 +210,74 @@ class ChitraguptaEngine:
         )
         return grant
 
+    # --- DELEGATE -----------------------------------------------------------
+
+    def delegate(
+        self,
+        parent: ExecutionGrant,
+        *,
+        issuer: Principal,
+        subject: Principal,
+        signing_key: SigningKey,
+        grant_id: str | None = None,
+        nonce: str | None = None,
+        audience: tuple[str, ...] | None = None,
+        allowed_effect_types: tuple[str, ...] | None = None,
+        scope: ScopeConstraints | None = None,
+        not_before: datetime | None = None,
+        expires_at: datetime | None = None,
+        max_uses: int | None = None,
+        manifest_hash: str | None = None,
+    ) -> ExecutionGrant:
+        """Issue a child grant delegated from ``parent``.
+
+        Fields left as ``None`` inherit the parent's exact value (the
+        narrowest possible default); pass an explicit, narrower value to
+        narrow further. Never returns a grant that would widen authority
+        relative to ``parent`` (invariants #15-#18) -- ``issuer`` must be a
+        human or service principal, never the agent holding ``parent``
+        (invariant #30 applies identically to delegation).
+        """
+        child = issue_grant(
+            grant_id=grant_id or str(uuid.uuid4()),
+            issuer=issuer,
+            subject=subject,
+            audience=audience if audience is not None else parent.audience,
+            allowed_effect_types=(
+                allowed_effect_types
+                if allowed_effect_types is not None
+                else parent.allowed_effect_types
+            ),
+            scope=scope if scope is not None else parent.scope,
+            not_before=not_before if not_before is not None else parent.not_before,
+            expires_at=expires_at if expires_at is not None else parent.expires_at,
+            nonce=nonce or uuid.uuid4().hex,
+            signing_key=signing_key,
+            manifest_hash=manifest_hash,
+            max_uses=max_uses if max_uses is not None else parent.max_uses,
+            parent_grant_id=parent.grant_id,
+            clock=self._ctx.clock,
+        )
+        try:
+            assert_grant_narrower_or_equal(child, parent)
+        except ChitraguptaError:
+            self._ctx.audit.record(
+                event_type="grant.delegation_denied",
+                decision="blocked_widening",
+                grant_id=child.grant_id,
+                actor_id=issuer.principal_id,
+                metadata={"parent_grant_id": parent.grant_id},
+            )
+            raise
+        self._ctx.audit.record(
+            event_type="grant.delegated",
+            decision="allowed",
+            grant_id=child.grant_id,
+            actor_id=issuer.principal_id,
+            metadata={"parent_grant_id": parent.grant_id, "subject": subject.principal_id},
+        )
+        return child
+
     # --- COMMIT -----------------------------------------------------------
 
     def commit(
@@ -296,6 +365,23 @@ class ChitraguptaEngine:
                 "grant.revoked",
                 "blocked_revoked",
                 GrantRevokedError(f"grant {grant_id} is revoked"),
+            )
+
+        if grant.parent_grant_id is not None and self._ctx.grant_store.is_revoked(
+            grant.parent_grant_id
+        ):
+            # One-hop revocation propagation: if the immediate parent capability was
+            # revoked, this delegated grant cannot be used even though it was never
+            # itself revoked. Deeper ancestor chains must be checked explicitly via
+            # chitragupta.delegation.verify_delegation_chain with the full chain of
+            # grant objects -- the store only tracks revocation by grant_id, not
+            # full lineage, so we cannot walk further than one hop from here alone.
+            deny(
+                "grant.parent_revoked",
+                "blocked_parent_revoked",
+                GrantRevokedError(
+                    f"grant {grant_id}'s parent grant {grant.parent_grant_id} is revoked"
+                ),
             )
 
         if not self._ctx.grant_store.reserve(grant_id, grant.max_uses):
