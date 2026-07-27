@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import pytest
 
+from chitragupta.adapters.base import (
+    CommitResult,
+    CompensationResult,
+    OutcomeProof,
+    PreconditionResult,
+)
+from chitragupta.audit.journal import AuditJournal
+from chitragupta.config.clock import FixedClock
 from chitragupta.crypto import Keyring, SigningKey, generate_signing_key
 from chitragupta.domain import (
     AdapterIdentity,
@@ -16,6 +26,8 @@ from chitragupta.domain import (
     RiskClassification,
     StateFingerprint,
 )
+from chitragupta.engine import ChitraguptaEngine, EngineContext
+from chitragupta.stores.memory import InMemoryGrantStore
 
 
 @pytest.fixture
@@ -111,5 +123,97 @@ def manifest_factory(now, agent_principal, human_principal, adapter_identity):
         kwargs.setdefault("principal", human_principal)
         kwargs.setdefault("adapter", adapter_identity)
         return make_manifest(**kwargs)
+
+    return _factory
+
+
+@dataclass
+class FakeAdapterState:
+    committed: list[dict[str, str]] = field(default_factory=list)
+    precondition_ok: bool = True
+    precondition_reason: str = "external state changed since prepare"
+    fail_commit: bool = False
+    raise_on_commit: bool = False
+    matched_expected: bool = True
+    compensation_attempted: bool = True
+    compensation_succeeded: bool = True
+
+
+class FakeAdapter:
+    """A minimal in-memory adapter used only to exercise the engine in tests.
+
+    Real adapters (sqlite/email/payment) are implemented in
+    ``chitragupta.adapters`` for phase 8; this fake exists purely so engine
+    orchestration can be unit-tested independent of any real side effect.
+    """
+
+    adapter_id = "payment.simulator"
+    adapter_version = "1.0.0"
+
+    def __init__(self, state: FakeAdapterState, clock: FixedClock) -> None:
+        self.state = state
+        self.clock = clock
+
+    def prepare(self, request: EffectManifest, context: Any) -> EffectManifest:
+        return request
+
+    def validate_preconditions(self, manifest: EffectManifest, context: Any) -> PreconditionResult:
+        if self.state.precondition_ok:
+            return PreconditionResult(satisfied=True)
+        return PreconditionResult(satisfied=False, reason=self.state.precondition_reason)
+
+    def commit(self, manifest: EffectManifest, grant: Any, context: Any) -> CommitResult:
+        if self.state.raise_on_commit:
+            raise RuntimeError("simulated adapter crash")
+        if self.state.fail_commit:
+            return CommitResult(
+                success=False, idempotency_key=manifest.idempotency_key, detail="simulated failure"
+            )
+        ref = f"ref-{len(self.state.committed) + 1}"
+        self.state.committed.append({"manifest_id": manifest.manifest_id, "ref": ref})
+        return CommitResult(
+            success=True, idempotency_key=manifest.idempotency_key, provider_reference=ref
+        )
+
+    def verify(
+        self, manifest: EffectManifest, commit_result: CommitResult, context: Any
+    ) -> OutcomeProof:
+        return OutcomeProof(
+            matched_expected=self.state.matched_expected, observed_at=self.clock.now()
+        )
+
+    def compensate(
+        self, manifest: EffectManifest, commit_result: CommitResult, context: Any
+    ) -> CompensationResult:
+        return CompensationResult(
+            attempted=self.state.compensation_attempted, succeeded=self.state.compensation_succeeded
+        )
+
+
+@pytest.fixture
+def fake_adapter_state() -> FakeAdapterState:
+    return FakeAdapterState()
+
+
+@pytest.fixture
+def fixed_clock(now) -> FixedClock:
+    return FixedClock(now)
+
+
+@pytest.fixture
+def fake_adapter(fake_adapter_state, fixed_clock) -> FakeAdapter:
+    return FakeAdapter(fake_adapter_state, fixed_clock)
+
+
+@pytest.fixture
+def engine_factory(keyring, fixed_clock):
+    def _factory(*, grant_store=None):
+        ctx = EngineContext(
+            keyring=keyring,
+            grant_store=grant_store or InMemoryGrantStore(),
+            audit=AuditJournal(clock=fixed_clock),
+            clock=fixed_clock,
+        )
+        return ChitraguptaEngine(ctx)
 
     return _factory
