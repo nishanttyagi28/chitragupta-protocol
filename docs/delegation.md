@@ -91,12 +91,12 @@ ancestors.
 ```python
 child = engine.delegate(
     parent_grant,
-    issuer=human_or_service_principal,   # never the agent
+    issuer=human_or_service_principal,  # never the agent
     subject=child_agent_principal,
     signing_key=signing_key,
-    scope=narrower_scope,                # omit to inherit parent's exact scope
+    scope=narrower_scope,  # omit to inherit parent's exact scope
     expires_at=earlier_or_equal_datetime,  # omit to inherit parent's
-    max_uses=narrower_or_equal_int,       # omit to inherit parent's
+    max_uses=narrower_or_equal_int,  # omit to inherit parent's
 )
 ```
 

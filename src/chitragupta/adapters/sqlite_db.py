@@ -100,7 +100,7 @@ class SQLiteRowAdapter:
         # manifest/agent/user), so this f-string is safe; all row values are still
         # bound as parameters, never interpolated.
         row = conn.execute(
-            f"SELECT balance, version FROM {self.table} WHERE id = ?",  # noqa: S608
+            f"SELECT balance, version FROM {self.table} WHERE id = ?",  # noqa: S608  # nosec B608
             (row_id,),
         ).fetchone()
         return tuple(row) if row is not None else None
@@ -152,7 +152,7 @@ class SQLiteRowAdapter:
 
     def validate_preconditions(self, manifest: EffectManifest, context: Any) -> PreconditionResult:
         row_id = str(manifest.parameters["row_id"])
-        assert manifest.state_fingerprint is not None
+        assert manifest.state_fingerprint is not None  # nosec B101 - set unconditionally by this adapter's own prepare()
         expected_version = int(manifest.state_fingerprint.value)
         conn = self._connect()
         try:
@@ -183,7 +183,7 @@ class SQLiteRowAdapter:
     def commit(self, manifest: EffectManifest, grant: Any, context: Any) -> CommitResult:
         row_id = str(manifest.parameters["row_id"])
         operation = manifest.parameters["operation"]
-        assert manifest.state_fingerprint is not None
+        assert manifest.state_fingerprint is not None  # nosec B101 - set unconditionally by this adapter's own prepare()
         expected_version = int(manifest.state_fingerprint.value)
         now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -193,7 +193,7 @@ class SQLiteRowAdapter:
                 new_balance = _int_param(manifest.parameters["new_balance"])
                 try:
                     cur = conn.execute(
-                        f"INSERT INTO {self.table}(id, balance, version, updated_at) "  # noqa: S608
+                        f"INSERT INTO {self.table}(id, balance, version, updated_at) "  # noqa: S608  # nosec B608
                         "VALUES (?, ?, 0, ?)",
                         (row_id, new_balance, now_iso),
                     )
@@ -208,14 +208,14 @@ class SQLiteRowAdapter:
             elif operation == "update":
                 new_balance = _int_param(manifest.parameters["new_balance"])
                 cur = conn.execute(
-                    f"UPDATE {self.table} SET balance = ?, version = version + 1, "  # noqa: S608
+                    f"UPDATE {self.table} SET balance = ?, version = version + 1, "  # noqa: S608  # nosec B608
                     "updated_at = ? WHERE id = ? AND version = ?",
                     (new_balance, now_iso, row_id, expected_version),
                 )
                 affected = cur.rowcount
             else:  # delete
                 cur = conn.execute(
-                    f"DELETE FROM {self.table} WHERE id = ? AND version = ?",  # noqa: S608
+                    f"DELETE FROM {self.table} WHERE id = ? AND version = ?",  # noqa: S608  # nosec B608
                     (row_id, expected_version),
                 )
                 affected = cur.rowcount
@@ -286,7 +286,7 @@ class SQLiteRowAdapter:
         try:
             if operation == "insert":
                 cur = conn.execute(
-                    f"DELETE FROM {self.table} WHERE id = ?",  # noqa: S608
+                    f"DELETE FROM {self.table} WHERE id = ?",  # noqa: S608  # nosec B608
                     (row_id,),
                 )
                 ok = cur.rowcount > 0
@@ -305,7 +305,7 @@ class SQLiteRowAdapter:
                     reason="no previous balance recorded to restore",
                 )
             cur = conn.execute(
-                f"UPDATE {self.table} SET balance = ?, version = version + 1 "  # noqa: S608
+                f"UPDATE {self.table} SET balance = ?, version = version + 1 "  # noqa: S608  # nosec B608
                 "WHERE id = ?",
                 (previous_balance, row_id),
             )

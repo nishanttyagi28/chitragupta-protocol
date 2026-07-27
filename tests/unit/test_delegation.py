@@ -356,8 +356,12 @@ def test_verify_delegation_chain_rejects_root_with_a_parent(
     from chitragupta.stores.memory import InMemoryGrantStore
 
     fake_root = _base_grant(
-        now, human_principal, agent_principal, issuer_signing_key,
-        grant_id="root", parent_grant_id="some-other-grant",
+        now,
+        human_principal,
+        agent_principal,
+        issuer_signing_key,
+        grant_id="root",
+        parent_grant_id="some-other-grant",
     )
     with pytest.raises(DelegationError):
         verify_delegation_chain(

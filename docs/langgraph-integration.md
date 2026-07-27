@@ -27,11 +27,13 @@ result = app.invoke({"request": my_request}, config=config)
 # result["status"] == "sealed"; graph is paused at "authorize"
 
 resumed = app.invoke(
-    Command(resume={
-        "approved": True,
-        "issuer": {"principal_id": "approver-1", "principal_type": "human"},
-        "subject": {"principal_id": "agent-1", "principal_type": "agent"},
-    }),
+    Command(
+        resume={
+            "approved": True,
+            "issuer": {"principal_id": "approver-1", "principal_type": "human"},
+            "subject": {"principal_id": "agent-1", "principal_type": "agent"},
+        }
+    ),
     config=config,
 )
 # resumed["status"] == "verified"

@@ -15,7 +15,7 @@ import os
 from fastapi import Header, HTTPException
 
 DEV_MODE_ENV = "CHITRAGUPTA_API_DEV_MODE"
-TOKEN_ENV = "CHITRAGUPTA_API_TOKEN"  # noqa: S105 - this is an env var *name*, not a credential
+TOKEN_ENV = "CHITRAGUPTA_API_TOKEN"  # noqa: S105  # nosec B105 - env var *name*, not a credential
 
 
 def is_dev_mode() -> bool:

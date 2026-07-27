@@ -200,7 +200,7 @@ class PaymentSimulatorAdapter:
         )
 
     def validate_preconditions(self, manifest: EffectManifest, context: Any) -> PreconditionResult:
-        assert manifest.state_fingerprint is not None
+        assert manifest.state_fingerprint is not None  # nosec B101 - set unconditionally by this adapter's own prepare()
         source_account = str(manifest.parameters["source_account"])
         current_balance = self.simulator.get_balance(source_account)
         expected_balance = int(manifest.state_fingerprint.value.removeprefix("balance:"))

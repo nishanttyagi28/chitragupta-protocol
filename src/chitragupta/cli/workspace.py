@@ -200,7 +200,7 @@ class Workspace:
         if not events:
             return
         last = events[-1]
-        assert last.to_state is not None
+        assert last.to_state is not None  # nosec B101 - guaranteed by the filter above, not a security check
         engine.seed_lifecycle_state(manifest_id, LifecycleState(last.to_state))
 
 

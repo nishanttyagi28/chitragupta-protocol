@@ -51,7 +51,7 @@ def build_chitragupta_graph(
     adapter: EffectAdapter,
     signing_key: SigningKey,
     checkpointer: BaseCheckpointSaver[Any] | None = None,
-) -> CompiledStateGraph:
+) -> CompiledStateGraph[Any, Any, Any]:
     """Build a compiled LangGraph app implementing prepare -> seal -> pause
     for authorization -> commit -> verify.
 
@@ -122,7 +122,7 @@ def build_chitragupta_graph(
         manifest_id = state["manifest_dict"]["manifest_id"]
         sealed = sealed_registry[manifest_id]
         grant_dict = state["grant_dict"]
-        assert grant_dict is not None
+        assert grant_dict is not None  # nosec B101 - guaranteed by the status=="authorized" check above
         grant = grant_registry[grant_dict["grant_id"]]
 
         try:
@@ -154,7 +154,7 @@ def build_chitragupta_graph(
             "status": "verified" if proof.matched_expected else "verification_mismatch",
         }
 
-    graph: StateGraph = StateGraph(ChitraguptaGraphState)
+    graph: StateGraph[ChitraguptaGraphState, Any, Any, Any] = StateGraph(ChitraguptaGraphState)
     graph.add_node("prepare", prepare_node)
     graph.add_node("seal", seal_node)
     graph.add_node("authorize", authorize_node)

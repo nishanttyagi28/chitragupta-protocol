@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff format --check .
+      - run: ruff check .
+
+  typecheck:
+    name: Type check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[all]" mypy
+      - run: mypy src
+
+  test:
+    name: Test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[all]"
+      - run: pip install pytest pytest-asyncio pytest-cov hypothesis freezegun
+      - run: pytest -v
+        env:
+          REDIS_URL: redis://localhost:6379/0
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[all]"
+      - run: pip install pytest pytest-asyncio pytest-cov hypothesis freezegun
+      - run: pytest --cov=chitragupta --cov-report=term-missing --cov-report=xml --cov-fail-under=90
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  build:
+    name: Build package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      - run: python -m build
+      - run: python -m twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  install-smoke-test:
+    name: Install wheel + demo smoke test
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - run: pip install dist/*.whl
+      - run: python -c "import chitragupta; print(chitragupta.__version__)"
+      - run: chitragupta version
+      - run: chitragupta --help
+      - run: chitragupta doctor || true  # workspace not initialized yet; exercises the command path
+      - run: chitragupta demo --all
+
+  docs-check:
+    name: Documentation checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify required documentation files exist
+        run: |
+          set -e
+          for f in README.md SECURITY.md CONTRIBUTING.md CODE_OF_CONDUCT.md CHANGELOG.md LICENSE \
+                   docs/architecture.md docs/protocol-spec.md docs/effect-manifest.md \
+                   docs/execution-grants.md docs/delegation.md docs/state-machine.md \
+                   docs/threat-model.md docs/security-model.md docs/storage-semantics.md \
+                   docs/crash-recovery.md docs/adapter-authoring.md docs/langgraph-integration.md \
+                   docs/agenteval-integration.md docs/action-passports.md docs/api.md docs/cli.md \
+                   docs/deployment.md docs/limitations.md docs/comparison.md; do
+            if [ ! -f "$f" ]; then echo "Missing required doc: $f"; exit 1; fi
+          done
+          echo "All required documentation files present."

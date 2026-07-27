@@ -107,7 +107,9 @@ PASS  15. Failure exports a regression fixture: written to <tmp>/fixtures/mismat
 from datetime import datetime, timedelta, timezone
 
 from chitragupta.adapters.payment_simulator import (
-    PaymentRequest, PaymentSimulator, PaymentSimulatorAdapter,
+    PaymentRequest,
+    PaymentSimulator,
+    PaymentSimulatorAdapter,
 )
 from chitragupta.audit.journal import AuditJournal
 from chitragupta.crypto import Keyring, generate_signing_key
@@ -118,11 +120,13 @@ from chitragupta.grants.model import ScopeConstraints
 from chitragupta.stores.memory import InMemoryGrantStore
 
 signing_key = generate_signing_key("issuer-1")
-engine = ChitraguptaEngine(EngineContext(
-    keyring=Keyring([signing_key.verification_key()]),
-    grant_store=InMemoryGrantStore(),
-    audit=AuditJournal(),
-))
+engine = ChitraguptaEngine(
+    EngineContext(
+        keyring=Keyring([signing_key.verification_key()]),
+        grant_store=InMemoryGrantStore(),
+        audit=AuditJournal(),
+    )
+)
 
 simulator = PaymentSimulator()
 simulator.fund_account("acct-src", 1_000_000)
@@ -132,19 +136,30 @@ agent = Principal(principal_id="agent-1", principal_type=PrincipalType.AGENT)
 human = Principal(principal_id="alice", principal_type=PrincipalType.HUMAN)
 
 request = PaymentRequest(
-    actor=agent, principal=human, source_account="acct-src",
-    beneficiary="merchant-A", amount_minor_units=150_000, currency="INR",
-    reference="invoice-42", idempotency_key="idem-42",
+    actor=agent,
+    principal=human,
+    source_account="acct-src",
+    beneficiary="merchant-A",
+    amount_minor_units=150_000,
+    currency="INR",
+    reference="invoice-42",
+    idempotency_key="idem-42",
 )
 
-manifest = engine.prepare(adapter, request, context=None)   # PROPOSE + PREPARE
-sealed = engine.seal(manifest, signing_key)                 # SEAL
+manifest = engine.prepare(adapter, request, context=None)  # PROPOSE + PREPARE
+sealed = engine.seal(manifest, signing_key)  # SEAL
 
 now = datetime.now(timezone.utc)
-grant = engine.authorize(                                   # AUTHORIZE
-    sealed, issuer=human, subject=agent, audience=("payment.simulator",),
-    allowed_effect_types=("payment.transfer",), scope=ScopeConstraints(),
-    not_before=now, expires_at=now + timedelta(minutes=5), signing_key=signing_key,
+grant = engine.authorize(  # AUTHORIZE
+    sealed,
+    issuer=human,
+    subject=agent,
+    audience=("payment.simulator",),
+    allowed_effect_types=("payment.transfer",),
+    scope=ScopeConstraints(),
+    not_before=now,
+    expires_at=now + timedelta(minutes=5),
+    signing_key=signing_key,
 )
 
 result = engine.commit(sealed, grant, adapter, context=None)  # COMMIT
