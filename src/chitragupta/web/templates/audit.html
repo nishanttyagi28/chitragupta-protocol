@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Audit - Chitragupta Console{% endblock %}
+{% block content %}
+<h1>Audit timeline</h1>
+<p>
+  {% if audit_ok %}
+    <span class="badge badge-ok">chain verified</span>
+  {% else %}
+    <span class="badge badge-bad">TAMPERING DETECTED</span>
+  {% endif %}
+</p>
+<table>
+  <tr><th>#</th><th>Time</th><th>Event</th><th>Decision</th><th>Manifest</th><th>Grant</th><th>Transition</th></tr>
+  {% for e in events %}
+  <tr>
+    <td>{{ e.sequence }}</td>
+    <td>{{ e.timestamp }}</td>
+    <td>{{ e.event_type }}</td>
+    <td>{{ e.decision }}</td>
+    <td>{{ (e.manifest_id or "")[:8] }}</td>
+    <td>{{ (e.grant_id or "")[:8] }}</td>
+    <td>{{ e.from_state or "" }} -&gt; {{ e.to_state or "" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

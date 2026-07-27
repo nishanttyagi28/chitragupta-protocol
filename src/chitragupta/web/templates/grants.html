@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Grants - Chitragupta Console{% endblock %}
+{% block content %}
+<h1>Grants</h1>
+<p>The "Parent" column traces each grant's delegation lineage back to its root.</p>
+
+<table>
+  <tr><th>Grant</th><th>Subject</th><th>Issuer</th><th>Uses</th><th>Status</th><th>Parent</th><th></th></tr>
+  {% for g in grants %}
+  <tr id="{{ g.grant_id }}">
+    <td>{{ g.grant_id[:8] }}</td>
+    <td>{{ g.subject }}</td>
+    <td>{{ g.issuer }}</td>
+    <td>{{ g.use_count }}/{{ g.max_uses }}</td>
+    <td>
+      {% if g.revoked %}<span class="badge badge-bad">revoked</span>{% else %}<span class="badge badge-ok">active</span>{% endif %}
+    </td>
+    <td>{{ g.parent_grant_id[:8] if g.parent_grant_id else "-" }}</td>
+    <td>
+      {% if not g.revoked %}
+      <form class="inline" method="post" action="/console/grants/{{ g.grant_id }}/revoke">
+        <button type="submit">Revoke</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

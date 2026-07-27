@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Manifest {{ manifest.manifest_id }}{% endblock %}
+{% block content %}
+<h1>Manifest {{ manifest.manifest_id }}</h1>
+<p>Lifecycle state: <span class="badge badge-ok">{{ lifecycle_state }}</span></p>
+
+<h2>Exact effect (before/after)</h2>
+<table>
+  <tr><th>Field</th><th>Value</th></tr>
+  <tr><td>Effect type</td><td>{{ manifest.effect_type }}</td></tr>
+  <tr><td>Target resource</td><td>{{ manifest.target_resource }}</td></tr>
+  <tr><td>Parameters</td><td><pre>{{ manifest.parameters }}</pre></td></tr>
+  <tr><td>Before-state digest</td><td>{{ manifest.before_state_digest or "n/a" }}</td></tr>
+  <tr><td>Expected after-state digest</td><td>{{ manifest.expected_after_state_digest or "n/a" }}</td></tr>
+  <tr><td>Risk</td><td>{{ manifest.risk }}</td></tr>
+  <tr><td>Reversibility</td><td>{{ manifest.reversibility }}</td></tr>
+  <tr><td>Blast radius</td><td>{{ manifest.blast_radius }}</td></tr>
+  <tr><td>Manifest hash</td><td>{{ seal.manifest_hash }}</td></tr>
+</table>
+
+{% if lifecycle_state == "sealed" %}
+<h2>Approve or deny</h2>
+<form method="post" action="/console/manifests/{{ manifest.manifest_id }}/approve">
+  <fieldset>
+    <legend>Approve</legend>
+    <label>Issuer id <input name="issuer_id" value="approver-1" /></label><br />
+    <label>Issuer type
+      <select name="issuer_type">
+        <option value="human">human</option>
+        <option value="service">service</option>
+      </select>
+    </label><br />
+    <label>Subject id <input name="subject_id" value="{{ manifest.actor.principal_id }}" /></label><br />
+    <label>Max uses <input name="max_uses" type="number" value="1" /></label><br />
+    <label>TTL seconds <input name="ttl_seconds" type="number" value="300" /></label><br />
+    <button type="submit">Approve</button>
+  </fieldset>
+</form>
+<form method="post" action="/console/manifests/{{ manifest.manifest_id }}/deny">
+  <fieldset>
+    <legend>Deny</legend>
+    <label>Reason <input name="reason" value="" /></label>
+    <button type="submit">Deny</button>
+  </fieldset>
+</form>
+{% endif %}
+
+<h2>Grants for this manifest</h2>
+<table>
+  <tr><th>Grant</th><th></th></tr>
+  {% for gid in grant_ids %}
+  <tr>
+    <td><a href="/console/grants#{{ gid }}">{{ gid[:8] }}</a></td>
+    <td>
+      <form class="inline" method="post" action="/console/grants/{{ gid }}/revoke">
+        <button type="submit">Revoke</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
