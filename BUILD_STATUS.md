@@ -41,16 +41,20 @@ _Last updated: 2026-07-27 (session start)_
       GrantStore protocol + in-memory backend, EffectAdapter contract -- these
       were needed for the engine to be real/testable, not stubs) -- 19 tests
       Running total: 104 tests, mypy --strict clean, ruff clean.
-- [ ] Phase 5: stores (SQLite + Redis backends, crash recovery docs/tests)
-- [ ] Phase 6: delegation
-- [ ] Phase 7: audit + passport (durable backend, CLI-facing query/verify, passport gen)
-- [ ] Phase 8: adapters (sqlite db, email sandbox, payment simulator)
-- [ ] Phase 9: langgraph
-- [ ] Phase 10: CLI
+- [x] Phase 5: stores (SQLite + Redis backends) -- 11 tests (+6 skipped, no local Redis)
+- [x] Phase 6: delegation attenuation + multi-hop chain verification -- 18 tests
+- [x] Phase 7: audit SQLite backend + Action Passport -- 15 tests
+- [x] Phase 8: adapters (sqlite db, email sandbox, payment simulator) -- 25 tests + 3 e2e
+- [x] Phase 9: langgraph integration (pause/resume/authorize) -- 6 tests
+- [x] Phase 12: AgentEval bridge -- 5 tests (done early since CLI demo needed it)
+- [x] Bugfix: engine.commit() now cryptographically verifies the seal
+      (was hash-check only) -- found via the CLI demo suite, regression test added
+- [x] Phase 10: CLI (init/key/prepare/seal/grant/execute/verify/compensate/
+      audit/passport/demo/doctor/version) -- 11 tests
+      Running total: 192 tests passing, 6 skipped (Redis), mypy --strict clean, ruff clean.
 - [ ] Phase 11: FastAPI + console
-- [ ] Phase 12: AgentEval bridge
-- [ ] Phase 13: test hardening
-- [ ] Phase 14: docs
+- [ ] Phase 13: test hardening (property-based, adversarial, concurrency)
+- [ ] Phase 14: docs (README + docs/*.md + SECURITY/CONTRIBUTING/etc.)
 - [ ] Phase 15: CI/packaging
 - [ ] Phase 16: final verification
 
