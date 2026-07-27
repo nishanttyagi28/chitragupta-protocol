@@ -12,6 +12,7 @@ from chitragupta.errors import (
     GrantExpiredError,
     GrantManifestMismatchError,
     GrantRevokedError,
+    InvalidSignatureError,
     ManifestTamperedError,
     StaleManifestError,
 )
@@ -128,6 +129,38 @@ def test_changed_target_after_seal_invalidates_seal(
     tampered_sealed = sealed.model_copy(update={"manifest": tampered_manifest})
     with pytest.raises(ManifestTamperedError):
         engine.commit(tampered_sealed, grant, fake_adapter, context=None)
+
+
+def test_forged_seal_signature_with_unchanged_content_is_blocked(
+    engine_factory,
+    manifest_factory,
+    service_principal,
+    agent_principal,
+    issuer_signing_key,
+    other_signing_key,
+    now,
+    fake_adapter,
+):
+    # Regression test: the manifest content (and therefore its hash) is
+    # completely unchanged -- only the seal's signature bytes are forged.
+    # commit() must still fail closed via cryptographic verification, not
+    # just hash-based tamper detection.
+    engine = engine_factory()
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    grant = _authorize(
+        engine,
+        sealed,
+        issuer=service_principal,
+        subject=agent_principal,
+        issuer_signing_key=issuer_signing_key,
+        now=now,
+    )
+    forged_signature = other_signing_key.sign(sealed.seal.manifest_hash.encode("utf-8"))
+    forged_seal = sealed.seal.model_copy(update={"signature": forged_signature})
+    forged_sealed = sealed.model_copy(update={"seal": forged_seal})
+    with pytest.raises(InvalidSignatureError):
+        engine.commit(forged_sealed, grant, fake_adapter, context=None)
 
 
 def test_expired_grant_is_blocked(

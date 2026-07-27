@@ -57,6 +57,19 @@ class ChitraguptaEngine:
     def get_lifecycle_state(self, manifest_id: str) -> LifecycleState:
         return self._get_record(manifest_id).state
 
+    def seed_lifecycle_state(self, manifest_id: str, state: LifecycleState) -> None:
+        """Seed the in-memory lifecycle record for ``manifest_id`` to ``state``
+        without performing a transition or writing an audit event.
+
+        This engine's lifecycle records are process-local; the durable
+        record of what actually happened lives in the audit journal. A
+        long-running host that reconstructs a fresh engine per invocation
+        (the CLI, in particular) uses this to restore the correct starting
+        state from the audit journal before continuing the lifecycle --
+        never to fabricate a state that didn't actually happen.
+        """
+        self._records[manifest_id] = LifecycleRecord(manifest_id=manifest_id, state=state)
+
     def _get_record(self, manifest_id: str) -> LifecycleRecord:
         record = self._records.get(manifest_id)
         if record is None:
@@ -305,9 +318,12 @@ class ChitraguptaEngine:
             raise exc
 
         try:
-            sealed.verify_integrity()
+            # Full cryptographic verification, not just hash-based tamper detection:
+            # a manifest whose content is untouched but whose seal signature has been
+            # forged or swapped for an untrusted/unknown key must still fail closed.
+            verify_seal(sealed, self._ctx.keyring)
         except ChitraguptaError as exc:
-            deny("manifest.tamper_detected", "blocked_tampered_manifest", exc)
+            deny("manifest.seal_verification_failed", f"blocked_{type(exc).__name__}", exc)
 
         try:
             verify_grant(
