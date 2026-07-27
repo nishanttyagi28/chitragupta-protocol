@@ -8,8 +8,7 @@ docs/protocol-spec.md for the canonicalization/hashing algorithm.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Union
+from datetime import datetime, timedelta
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
@@ -28,9 +27,12 @@ from chitragupta.domain.enums import (
     ReversibilityClassification,
     RiskClassification,
 )
-from chitragupta.protocol.versioning import CURRENT_SCHEMA_VERSION, assert_supported_schema_version
+from chitragupta.protocol.versioning import (
+    CURRENT_SCHEMA_VERSION,
+    assert_supported_schema_version,
+)
 
-ParameterValue = Union[str, int, bool, None]
+ParameterValue = str | int | bool | None
 
 
 class EffectManifest(BaseModel):
@@ -91,9 +93,7 @@ class EffectManifest(BaseModel):
     def _validate_target_resource(cls, v: str) -> str:
         limits = DEFAULT_SETTINGS.manifest_limits
         if not v or len(v) > limits.max_target_resource_length:
-            raise ValueError(
-                f"target_resource must be 1-{limits.max_target_resource_length} chars"
-            )
+            raise ValueError(f"target_resource must be 1-{limits.max_target_resource_length} chars")
         return v
 
     @field_validator("created_at", "expires_at")
@@ -154,7 +154,8 @@ class EffectManifest(BaseModel):
 
     @classmethod
     def default_expiry(cls, created_at: datetime, ttl_seconds: int | None = None) -> datetime:
-        ttl = ttl_seconds if ttl_seconds is not None else DEFAULT_SETTINGS.manifest_limits.default_ttl_seconds
+        default_ttl = DEFAULT_SETTINGS.manifest_limits.default_ttl_seconds
+        ttl = ttl_seconds if ttl_seconds is not None else default_ttl
         return created_at + timedelta(seconds=ttl)
 
 

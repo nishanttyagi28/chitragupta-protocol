@@ -33,7 +33,6 @@ def test_sealed_manifest_detects_tamper_via_reconstruction(manifest_factory, now
         sealed.verify_integrity()
 
 
-def test_seal_rejects_malformed_manifest_hash(manifest_factory, now):
-    m = manifest_factory()
-    with pytest.raises(Exception):
+def test_seal_rejects_malformed_manifest_hash(now):
+    with pytest.raises(ValueError):
         Seal(key_id="k1", manifest_hash="not-a-real-hash", signature="sig", sealed_at=now)

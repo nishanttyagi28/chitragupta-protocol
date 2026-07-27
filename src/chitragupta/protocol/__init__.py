@@ -7,6 +7,12 @@ from chitragupta.protocol.versioning import (
     parse_major,
 )
 
+# NOTE: `chitragupta.protocol.sealing` is intentionally *not* re-exported here.
+# sealing.py depends on chitragupta.domain (EffectManifest, SealedManifest),
+# while chitragupta.domain.manifest depends on chitragupta.protocol.versioning.
+# Importing sealing here would create protocol -> domain -> protocol import
+# cycle at package-init time. Import `chitragupta.protocol.sealing` directly.
+
 __all__ = [
     "CURRENT_SCHEMA_VERSION",
     "SUPPORTED_MAJOR_VERSIONS",

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from chitragupta.crypto import Keyring, SigningKey, generate_signing_key
 from chitragupta.domain import (
     AdapterIdentity,
     BlastRadiusClassification,
@@ -15,7 +15,6 @@ from chitragupta.domain import (
     ReversibilityClassification,
     RiskClassification,
     StateFingerprint,
-    StateFingerprintKind,
 )
 
 
@@ -26,12 +25,16 @@ def now() -> datetime:
 
 @pytest.fixture
 def agent_principal() -> Principal:
-    return Principal(principal_id="agent-1", principal_type=PrincipalType.AGENT, display_name="Agent One")
+    return Principal(
+        principal_id="agent-1", principal_type=PrincipalType.AGENT, display_name="Agent One"
+    )
 
 
 @pytest.fixture
 def human_principal() -> Principal:
-    return Principal(principal_id="user-1", principal_type=PrincipalType.HUMAN, display_name="Alice")
+    return Principal(
+        principal_id="user-1", principal_type=PrincipalType.HUMAN, display_name="Alice"
+    )
 
 
 @pytest.fixture
@@ -69,7 +72,9 @@ def make_manifest(
         principal=principal,
         adapter=adapter,
         target_resource=target_resource,
-        parameters=parameters if parameters is not None else {"amount": amount_minor_units, "currency": currency},
+        parameters=parameters
+        if parameters is not None
+        else {"amount": amount_minor_units, "currency": currency},
         state_fingerprint=state_fingerprint,
         risk=RiskClassification.HIGH,
         reversibility=ReversibilityClassification.COMPENSATABLE,
@@ -81,6 +86,21 @@ def make_manifest(
         nonce=nonce,
         parent_manifest_id=parent_manifest_id,
     )
+
+
+@pytest.fixture
+def issuer_signing_key() -> SigningKey:
+    return generate_signing_key("dev-issuer-1")
+
+
+@pytest.fixture
+def other_signing_key() -> SigningKey:
+    return generate_signing_key("dev-issuer-2")
+
+
+@pytest.fixture
+def keyring(issuer_signing_key) -> Keyring:
+    return Keyring([issuer_signing_key.verification_key()])
 
 
 @pytest.fixture

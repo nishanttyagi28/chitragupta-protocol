@@ -91,7 +91,8 @@ class MonetaryAmount(BaseModel):
     def __le__(self, other: MonetaryAmount) -> bool:
         if self.currency != other.currency:
             raise ValueError(
-                f"cannot compare amounts in different currencies: {self.currency} vs {other.currency}"
+                f"cannot compare amounts in different currencies: "
+                f"{self.currency} vs {other.currency}"
             )
         return self.minor_units <= other.minor_units
 
