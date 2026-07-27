@@ -1,6 +1,12 @@
 # Build Status — Chitragupta Protocol v0.1
 
-_Last updated: 2026-07-27 (session start)_
+_Last updated: 2026-07-27 (final verification pass complete)_
+
+**Status: all 16 planned phases complete.** 272 tests passing, 6 skipped
+(documented reasons below), mypy --strict clean, ruff clean, bandit clean,
+pip-audit clean, package builds reproducibly, CLI verified from a clean
+wheel-only install. See "Final verification results" near the end of this
+file for the full command-by-command record.
 
 ## Repository state at session start
 
@@ -72,8 +78,53 @@ _Last updated: 2026-07-27 (session start)_
       Mermaid architecture + lifecycle diagrams, exact demo output from a
       real run), all 19 required docs/*.md files, SECURITY.md,
       CONTRIBUTING.md, CODE_OF_CONDUCT.md, CHANGELOG.md
-- [ ] Phase 15: CI/packaging
-- [ ] Phase 16: final verification
+- [x] Phase 15: CI/packaging -- GH Actions (ci/security/release workflows),
+      Dependabot, issue/PR templates, Dockerfile, docker-compose.yml,
+      .env.example, release checklist. pip-audit found 15 known CVEs
+      (cryptography 43.0.3; langgraph/langchain-core/langgraph-checkpoint/
+      langgraph-sdk older pins) -- all fixed by bumping version constraints
+      (cryptography >=44,<50; langgraph >=1.0.10,<2; langchain-core >=1.0,<2;
+      langgraph-checkpoint >=4.1.1,<5), full suite re-verified green with
+      no code changes beyond 2 mypy generic-type-arg annotations for the
+      newer langgraph type stubs. `pip-audit` now reports zero known
+      vulnerabilities. Reproducible build verified (two separate
+      `python -m build` runs produce byte-identical wheel/sdist SHA-256).
+- [x] Phase 16: final verification run (see below)
+
+## Final verification results (2026-07-27, this environment)
+
+All commands run for real; results below are from actual command output,
+not assumed.
+
+| Command | Result |
+|---|---|
+| `ruff format --check .` | PASS (138 files already formatted) |
+| `ruff check .` | PASS (all checks passed) |
+| `mypy src` | PASS (0 errors, 76 source files) |
+| `pytest` | PASS (272 passed, 6 skipped) |
+| `pytest --cov=chitragupta --cov-report=term-missing` | PASS, 90% overall coverage |
+| `python -m build` | PASS (sdist + wheel built); re-run twice, byte-identical SHA-256 hashes both times |
+| `python -m twine check dist/*` | PASS (both artifacts) |
+| `pip-audit` | PASS -- 0 known vulnerabilities (15 found and fixed during this phase, see Phase 15 note) |
+| `bandit -r src/chitragupta` | PASS -- 0 issues (12 findings reviewed and suppressed with `# nosec` + comment justifying each: fixed-table-name SQL f-strings, an env-var-name constant, and 5 type-narrowing `assert`s guaranteed safe by preceding logic) |
+| `chitragupta doctor` (fresh workspace) | PASS -- all 6 checks OK |
+| `chitragupta demo --all` | PASS -- 15/15 scenarios, both from the dev venv and from a clean wheel-only install |
+| Clean venv + wheel install: `python -c "import chitragupta; print(chitragupta.__version__)"` | `0.1.0` |
+| Clean venv + wheel install: `chitragupta version` | `0.1.0` |
+| Clean venv + wheel install: `chitragupta --help` | PASS, all subcommands listed |
+
+**Skipped, with reason (not fabricated as passing):**
+- Redis-specific tests (`tests/unit/test_stores_redis.py`, 6 tests) and any
+  Redis-backed CI matrix behavior: no local Redis server was reachable at
+  `localhost:6379` in this environment. The Redis backend's code
+  (`stores/redis_store.py`) is implemented and reviewed but was not
+  exercised against a live server in this session. The CI workflow
+  (`ci.yml`) does start a real Redis service container, so this gap does
+  not apply to CI runs.
+- Docker / `docker compose up` verification: the `docker` CLI is not
+  installed in this environment (`docker: command not found`). The
+  Dockerfile/`docker-compose.yml` were written and reviewed but not
+  actually built/run in this session.
 
 ## Notes on scope ordering vs. spec's phase list
 
