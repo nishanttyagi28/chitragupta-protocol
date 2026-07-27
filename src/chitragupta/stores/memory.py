@@ -77,5 +77,9 @@ class InMemoryGrantStore:
         with self._lock:
             return self._idempotency.get(idempotency_key)
 
+    def record_idempotent_outcome(self, idempotency_key: str, outcome_ref: str) -> None:
+        with self._lock:
+            self._idempotency[idempotency_key] = outcome_ref
+
 
 __all__ = ["InMemoryGrantStore"]

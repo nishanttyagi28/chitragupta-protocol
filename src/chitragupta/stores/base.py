@@ -52,5 +52,13 @@ class GrantStore(Protocol):
         without first checking whether it already happened."""
         ...
 
+    def record_idempotent_outcome(self, idempotency_key: str, outcome_ref: str) -> None:
+        """Backfill the idempotency ledger directly, independent of any
+        grant reservation. Used only by ambiguous-outcome crash recovery
+        (see docs/crash-recovery.md) after independently re-observing
+        external state -- never as a substitute for the normal
+        reserve -> commit path."""
+        ...
+
 
 __all__ = ["GrantStore"]

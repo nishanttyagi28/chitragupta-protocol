@@ -137,6 +137,10 @@ class FakeAdapterState:
     matched_expected: bool = True
     compensation_attempted: bool = True
     compensation_succeeded: bool = True
+    # Simulates the adapter's own external system of record, keyed by
+    # idempotency_key -- independent of anything chitragupta's grant store
+    # tracks. Used to test ambiguous-outcome crash recovery.
+    external_effects: dict[str, str] = field(default_factory=dict)
 
 
 class FakeAdapter:
@@ -171,6 +175,7 @@ class FakeAdapter:
             )
         ref = f"ref-{len(self.state.committed) + 1}"
         self.state.committed.append({"manifest_id": manifest.manifest_id, "ref": ref})
+        self.state.external_effects[manifest.idempotency_key] = ref
         return CommitResult(
             success=True, idempotency_key=manifest.idempotency_key, provider_reference=ref
         )
@@ -178,6 +183,20 @@ class FakeAdapter:
     def verify(
         self, manifest: EffectManifest, commit_result: CommitResult, context: Any
     ) -> OutcomeProof:
+        if commit_result.provider_reference is None:
+            # Ambiguous-outcome recovery probe: independently check external
+            # state by idempotency_key rather than trusting commit_result.
+            ref = self.state.external_effects.get(manifest.idempotency_key)
+            if ref is None:
+                return OutcomeProof(
+                    matched_expected=False, observed_at=self.clock.now(), detail="no evidence found"
+                )
+            return OutcomeProof(
+                matched_expected=True,
+                observed_at=self.clock.now(),
+                observed_after_state_digest=ref,
+                detail="evidence found in external system of record",
+            )
         return OutcomeProof(
             matched_expected=self.state.matched_expected, observed_at=self.clock.now()
         )

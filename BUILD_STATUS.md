@@ -34,14 +34,17 @@ _Last updated: 2026-07-27 (session start)_
 
 ## Progress log
 
-- [ ] Phase 1: scaffold
-- [ ] Phase 2: domain + canonical
-- [ ] Phase 3: crypto + grants
-- [ ] Phase 4: state machine + engine
-- [ ] Phase 5: stores
+- [x] Phase 1: scaffold (pyproject, src layout, LICENSE, .gitignore)
+- [x] Phase 2: domain + canonical (EffectManifest, Seal, canonical hashing) -- 24 tests
+- [x] Phase 3: crypto + grants (Ed25519 keys/keyring, ExecutionGrant, sealing) -- 36 tests
+- [x] Phase 4: state machine + engine (also pulled in: audit journal in-memory,
+      GrantStore protocol + in-memory backend, EffectAdapter contract -- these
+      were needed for the engine to be real/testable, not stubs) -- 19 tests
+      Running total: 104 tests, mypy --strict clean, ruff clean.
+- [ ] Phase 5: stores (SQLite + Redis backends, crash recovery docs/tests)
 - [ ] Phase 6: delegation
-- [ ] Phase 7: audit + passport
-- [ ] Phase 8: adapters
+- [ ] Phase 7: audit + passport (durable backend, CLI-facing query/verify, passport gen)
+- [ ] Phase 8: adapters (sqlite db, email sandbox, payment simulator)
 - [ ] Phase 9: langgraph
 - [ ] Phase 10: CLI
 - [ ] Phase 11: FastAPI + console
@@ -50,6 +53,17 @@ _Last updated: 2026-07-27 (session start)_
 - [ ] Phase 14: docs
 - [ ] Phase 15: CI/packaging
 - [ ] Phase 16: final verification
+
+## Notes on scope ordering vs. spec's phase list
+
+Spec commit #4 is "state machine and core engine". The engine cannot function
+without *some* grant store and audit sink, so a first, real (non-stub)
+in-memory AuditJournal and InMemoryGrantStore were implemented in that same
+commit. Phase 5 will add SQLite and (optionally, if a local Redis is
+reachable) Redis-backed implementations of the same `GrantStore` protocol,
+plus dedicated crash-recovery tests. Phase 7 will add a durable audit
+backend option and the passport/CLI-facing layer on top of the same
+`AuditJournal`/`AuditBackend` abstraction -- no rewrite needed.
 
 ## Known scope decisions (recorded up front, not asked as questions)
 

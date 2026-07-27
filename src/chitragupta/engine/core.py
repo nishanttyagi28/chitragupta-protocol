@@ -408,6 +408,44 @@ class ChitraguptaEngine:
         )
         return commit_result
 
+    # --- AMBIGUOUS-OUTCOME CRASH RECOVERY --------------------------------------
+
+    def recover_ambiguous_commit(
+        self, manifest: EffectManifest, adapter: EffectAdapter, context: Any
+    ) -> OutcomeProof:
+        """Resolve an ambiguous outcome after a crash between the adapter's
+        external effect succeeding and the local store finalizing the
+        reservation (see docs/crash-recovery.md).
+
+        This never performs the external effect itself. It asks the adapter
+        to independently re-observe external state for
+        ``manifest.idempotency_key`` -- exactly the same way :meth:`verify`
+        does -- and, if evidence of a prior successful effect is found,
+        backfills the idempotency ledger so a subsequent :meth:`commit` call
+        takes the fast idempotent-replay path instead of re-invoking the
+        adapter. Callers must call this (or otherwise confirm external
+        state) before retrying an ambiguous commit; never retry blindly.
+        """
+        probe = CommitResult(
+            success=True,
+            idempotency_key=manifest.idempotency_key,
+            provider_reference=None,
+            detail="ambiguous-outcome recovery probe",
+        )
+        proof = adapter.verify(manifest, probe, context)
+        self._ctx.audit.record(
+            event_type="effect.ambiguous_recovery_probe",
+            decision="evidence_found" if proof.matched_expected else "no_evidence_found",
+            manifest_id=manifest.manifest_id,
+            manifest_hash=manifest.canonical_hash(),
+            actor_id=manifest.actor.principal_id,
+            metadata={"detail": (proof.detail or "")[:200]},
+        )
+        if proof.matched_expected:
+            outcome_ref = proof.observed_after_state_digest or "recovered-externally"
+            self._ctx.grant_store.record_idempotent_outcome(manifest.idempotency_key, outcome_ref)
+        return proof
+
     # --- VERIFY -----------------------------------------------------------
 
     def verify(

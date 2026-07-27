@@ -300,7 +300,7 @@ def test_concurrent_commits_produce_at_most_one_success(
         barrier.wait()
         try:
             results.append(engine.commit(sealed, grant, adapter, context=None))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - collecting whatever concurrent threads raise
             errors.append(exc)
 
     threads = [threading.Thread(target=attempt) for _ in range(8)]
