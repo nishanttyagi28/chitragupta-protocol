@@ -39,6 +39,20 @@ class AuditEvent(BaseModel):
     def _validate_timestamp(cls, v: datetime) -> datetime:
         return ensure_utc(v)
 
+    @field_validator("sequence")
+    @classmethod
+    def _validate_sequence(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("sequence must be >= 1")
+        return v
+
+    @field_validator("event_id", "event_type", "decision")
+    @classmethod
+    def _validate_nonempty(cls, v: str) -> str:
+        if not v or len(v) > 256:
+            raise ValueError("must be 1-256 chars")
+        return v
+
     @field_validator("metadata")
     @classmethod
     def _validate_metadata(cls, v: dict[str, str]) -> dict[str, str]:

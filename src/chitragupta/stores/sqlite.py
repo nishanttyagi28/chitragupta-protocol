@@ -10,11 +10,22 @@ backend for that).
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 import threading
 from pathlib import Path
 
 from chitragupta.errors import StoreUnavailableError
+
+
+def _safe_rollback(conn: sqlite3.Connection) -> None:
+    """Best-effort rollback: if the connection itself is dead, rollback()
+    can raise too -- that secondary failure must never mask the
+    StoreUnavailableError the caller is about to raise (fail closed either
+    way, but with a clear, single error)."""
+    with contextlib.suppress(sqlite3.Error):
+        conn.rollback()
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS grant_slots (
@@ -59,7 +70,7 @@ class SQLiteGrantStore:
                 )
                 self._conn.commit()
             except sqlite3.Error as exc:
-                self._conn.rollback()
+                _safe_rollback(self._conn)
                 raise StoreUnavailableError(
                     f"sqlite reserve() failed for grant {grant_id}"
                 ) from exc
@@ -73,7 +84,7 @@ class SQLiteGrantStore:
                 )
                 self._conn.commit()
             except sqlite3.Error as exc:
-                self._conn.rollback()
+                _safe_rollback(self._conn)
                 raise StoreUnavailableError(
                     f"sqlite release() failed for grant {grant_id}"
                 ) from exc
@@ -87,7 +98,7 @@ class SQLiteGrantStore:
                     (grant_id,),
                 )
                 if cur.rowcount != 1:
-                    self._conn.rollback()
+                    _safe_rollback(self._conn)
                     raise StoreUnavailableError(
                         f"commit() called for grant {grant_id!r} without a held reservation"
                     )
@@ -98,7 +109,7 @@ class SQLiteGrantStore:
                 )
                 self._conn.commit()
             except sqlite3.Error as exc:
-                self._conn.rollback()
+                _safe_rollback(self._conn)
                 raise StoreUnavailableError(f"sqlite commit() failed for grant {grant_id}") from exc
 
     def revoke(self, grant_id: str) -> None:
@@ -113,7 +124,7 @@ class SQLiteGrantStore:
                 )
                 self._conn.commit()
             except sqlite3.Error as exc:
-                self._conn.rollback()
+                _safe_rollback(self._conn)
                 raise StoreUnavailableError(f"sqlite revoke() failed for grant {grant_id}") from exc
 
     def is_revoked(self, grant_id: str) -> bool:
@@ -148,7 +159,7 @@ class SQLiteGrantStore:
                 )
                 self._conn.commit()
             except sqlite3.Error as exc:
-                self._conn.rollback()
+                _safe_rollback(self._conn)
                 raise StoreUnavailableError(
                     f"sqlite record_idempotent_outcome() failed for key {idempotency_key}"
                 ) from exc

@@ -410,14 +410,21 @@ class ChitraguptaEngine:
                 ),
             )
 
-        self._transition(
-            manifest_id,
-            LifecycleState.COMMITTING,
-            event_type="effect.committing",
-            manifest_hash=manifest_hash,
-            grant_id=grant_id,
-            actor_id=actor_id,
-        )
+        try:
+            self._transition(
+                manifest_id,
+                LifecycleState.COMMITTING,
+                event_type="effect.committing",
+                manifest_hash=manifest_hash,
+                grant_id=grant_id,
+                actor_id=actor_id,
+            )
+        except Exception:
+            # Audit failure before a consequential commit must block execution
+            # (invariant #23) -- but the reservation slot must not leak forever,
+            # so release it before propagating.
+            self._ctx.grant_store.release(grant_id)
+            raise
 
         existing_outcome = self._ctx.grant_store.get_idempotent_outcome(manifest.idempotency_key)
         if existing_outcome is not None:

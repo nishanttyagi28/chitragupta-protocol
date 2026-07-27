@@ -93,6 +93,13 @@ def test_parent_unrestricted_allows_any_child_value():
     assert_scope_narrower_or_equal(child, parent)  # must not raise
 
 
+def test_child_amount_cannot_go_unrestricted_when_parent_caps_it():
+    parent = ScopeConstraints(max_amount=MonetaryAmount(currency="INR", minor_units=500000))
+    child = ScopeConstraints(max_amount=None)
+    with pytest.raises(ConstraintWideningError):
+        assert_scope_narrower_or_equal(child, parent)
+
+
 # --- grant-level attenuation -------------------------------------------------
 
 
@@ -108,6 +115,24 @@ def test_grant_expiry_cannot_outlive_parent(
         grant_id="child-1",
         nonce="child-nonce-1",
         expires_at=now + timedelta(hours=2),  # outlives parent's 1-hour window
+        parent_grant_id=parent.grant_id,
+    )
+    with pytest.raises(ConstraintWideningError):
+        assert_grant_narrower_or_equal(child, parent)
+
+
+def test_grant_not_before_cannot_start_earlier_than_parent(
+    now, human_principal, agent_principal, issuer_signing_key
+):
+    parent = _base_grant(now, human_principal, agent_principal, issuer_signing_key)
+    child = _base_grant(
+        now,
+        human_principal,
+        agent_principal,
+        issuer_signing_key,
+        grant_id="child-1",
+        nonce="child-nonce-1",
+        not_before=now - timedelta(minutes=10),  # starts before parent's window opens
         parent_grant_id=parent.grant_id,
     )
     with pytest.raises(ConstraintWideningError):
@@ -314,6 +339,30 @@ def test_verify_delegation_chain_accepts_valid_chain(
         ),
     )
     verify_delegation_chain([root, mid, leaf], keyring=keyring, grant_store=store, now=now)
+
+
+def test_verify_delegation_chain_rejects_empty_chain(keyring):
+    from chitragupta.errors import DelegationError
+    from chitragupta.stores.memory import InMemoryGrantStore
+
+    with pytest.raises(DelegationError):
+        verify_delegation_chain([], keyring=keyring, grant_store=InMemoryGrantStore(), now=None)
+
+
+def test_verify_delegation_chain_rejects_root_with_a_parent(
+    keyring, human_principal, agent_principal, issuer_signing_key, now
+):
+    from chitragupta.errors import DelegationError
+    from chitragupta.stores.memory import InMemoryGrantStore
+
+    fake_root = _base_grant(
+        now, human_principal, agent_principal, issuer_signing_key,
+        grant_id="root", parent_grant_id="some-other-grant",
+    )
+    with pytest.raises(DelegationError):
+        verify_delegation_chain(
+            [fake_root], keyring=keyring, grant_store=InMemoryGrantStore(), now=now
+        )
 
 
 def test_verify_delegation_chain_rejects_broken_parent_link(

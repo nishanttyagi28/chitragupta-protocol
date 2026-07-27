@@ -132,3 +132,8 @@ def test_schema_version_accepts_current_major():
 def test_schema_version_rejects_malformed():
     with pytest.raises(SchemaVersionError):
         assert_supported_schema_version("garbage")
+
+
+def test_schema_version_rejects_non_digit_minor():
+    with pytest.raises(SchemaVersionError):
+        assert_supported_schema_version("1.x")

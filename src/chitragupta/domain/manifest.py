@@ -94,6 +94,8 @@ class EffectManifest(BaseModel):
         limits = DEFAULT_SETTINGS.manifest_limits
         if not v or len(v) > limits.max_target_resource_length:
             raise ValueError(f"target_resource must be 1-{limits.max_target_resource_length} chars")
+        if any(ord(c) < 0x20 for c in v):
+            raise ValueError("target_resource must not contain control characters")
         return v
 
     @field_validator("created_at", "expires_at")

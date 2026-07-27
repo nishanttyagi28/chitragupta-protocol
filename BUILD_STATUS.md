@@ -52,8 +52,22 @@ _Last updated: 2026-07-27 (session start)_
 - [x] Phase 10: CLI (init/key/prepare/seal/grant/execute/verify/compensate/
       audit/passport/demo/doctor/version) -- 11 tests
       Running total: 192 tests passing, 6 skipped (Redis), mypy --strict clean, ruff clean.
-- [ ] Phase 11: FastAPI + console
-- [ ] Phase 13: test hardening (property-based, adversarial, concurrency)
+- [x] Phase 11: FastAPI control plane + server-rendered console -- 12 tests
+- [x] Phase 13: test hardening (property-based x6 files/hypothesis, adversarial
+      x2 files, cross-process canonicalization fixtures) -- 46 new tests
+      Found and fixed 2 more real gaps this phase:
+      1. sqlite store's rollback-inside-except could itself raise on a fully
+         dead connection, masking the intended StoreUnavailableError -- fixed
+         with a suppress-and-reraise helper.
+      2. AuditEvent/target_resource lacked a few adversarial-input guards
+         (sequence>=1, non-empty event_id/event_type/decision, control chars
+         in target_resource) -- added.
+      Running total: 272 tests passing, 6 skipped (Redis), 90% overall
+      coverage. protocol/, grants/verifier.py, state_machine/, delegation/
+      all at 100%. stores/memory.py 97%, stores/sqlite.py 100%;
+      stores/redis_store.py is only 26% covered because no local Redis
+      server was available in this environment (documented, not fabricated).
+      mypy --strict clean, ruff clean.
 - [ ] Phase 14: docs (README + docs/*.md + SECURITY/CONTRIBUTING/etc.)
 - [ ] Phase 15: CI/packaging
 - [ ] Phase 16: final verification

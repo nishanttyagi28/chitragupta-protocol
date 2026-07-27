@@ -88,3 +88,21 @@ def test_concurrent_reserve_at_most_one_thread_succeeds(store):
 def test_record_idempotent_outcome_without_grant(store):
     store.record_idempotent_outcome("idem-standalone", "ref-standalone")
     assert store.get_idempotent_outcome("idem-standalone") == "ref-standalone"
+
+
+def test_backend_failure_fails_closed_on_every_mutating_method(tmp_path):
+    """Simulate a broken backend connection (closed database) and confirm
+    every mutating method translates the raw sqlite3.Error into
+    StoreUnavailableError rather than leaking it or silently succeeding."""
+    s = SQLiteGrantStore(tmp_path / "broken.db")
+    s._conn.close()  # simulate the connection dying underneath the store
+    with pytest.raises(StoreUnavailableError):
+        s.reserve("g1", 1)
+    with pytest.raises(StoreUnavailableError):
+        s.release("g1")
+    with pytest.raises(StoreUnavailableError):
+        s.commit("g1", "idem-1", "ref-1")
+    with pytest.raises(StoreUnavailableError):
+        s.revoke("g1")
+    with pytest.raises(StoreUnavailableError):
+        s.record_idempotent_outcome("idem-1", "ref-1")
