@@ -175,3 +175,7 @@ class UnsupportedCompensationError(AdapterError):
 
 class BlastRadiusExceededError(AdapterError):
     """Effect would affect more resources than the configured safety ceiling."""
+
+
+class RecipientNotAllowedError(AdapterError):
+    """A recipient/target is not on the adapter's configured allow-list."""
