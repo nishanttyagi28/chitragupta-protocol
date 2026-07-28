@@ -37,7 +37,35 @@ def test_dict_key_order_never_affects_hash(d):
     assert canonical_hash(d) == canonical_hash(shuffled)
 
 
-@given(_json_tree)
+_no_separator_scalar = st.one_of(
+    st.none(),
+    st.booleans(),
+    st.integers(min_value=-(10**15), max_value=10**15),
+    st.text(max_size=50).filter(lambda s: ", " not in s and ": " not in s),
+)
+
+
+def _no_separator_value(children):
+    return st.one_of(
+        _no_separator_scalar,
+        st.lists(children, max_size=5),
+        st.dictionaries(
+            st.text(max_size=20).filter(lambda s: ", " not in s and ": " not in s),
+            children,
+            max_size=5,
+        ),
+    )
+
+
+# Structural separators (", " and ": ") must never appear *between tokens* in
+# the output. String scalars are deliberately excluded from containing those
+# exact substrings here so the test can use a plain substring check without
+# false positives from separator-shaped content living inside a JSON string
+# literal (e.g. the string value ": " legitimately encodes to b'": "').
+_no_separator_tree = st.recursive(_no_separator_scalar, _no_separator_value, max_leaves=20)
+
+
+@given(_no_separator_tree)
 @settings(max_examples=200, deadline=None)
 def test_canonical_bytes_have_no_insignificant_whitespace(value):
     out = canonical_json_bytes(value)
