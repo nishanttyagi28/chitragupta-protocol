@@ -68,6 +68,13 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   local dev on this" tradeoff, not a claim that the file is protected on
   Windows.
 
+- **The public sandbox demo (`CHITRAGUPTA_PUBLIC_DEMO=1`) is a single
+  shared, in-memory session**, not multi-tenant: every visitor to a given
+  deployment sees and can affect the same sandbox state until it
+  auto-resets on a timer. It is a reference demo for exploring the
+  protocol interactively, not a template for a multi-user production
+  service. See [docs/deployment.md](deployment.md#public-sandbox-demo-mode).
+
 ## What "feature-complete" means here
 
 Every capability listed in the original specification (protocol lifecycle,
