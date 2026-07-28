@@ -16,10 +16,20 @@ from fastapi import Header, HTTPException
 
 DEV_MODE_ENV = "CHITRAGUPTA_API_DEV_MODE"
 TOKEN_ENV = "CHITRAGUPTA_API_TOKEN"  # noqa: S105  # nosec B105 - env var *name*, not a credential
+PUBLIC_DEMO_ENV = "CHITRAGUPTA_PUBLIC_DEMO"
 
 
 def is_dev_mode() -> bool:
     return os.environ.get(DEV_MODE_ENV) == "1"
+
+
+def is_public_demo() -> bool:
+    """Whether the safe, unauthenticated public demo surface (``/demo/*``) is
+    mounted. Independent of ``is_dev_mode()``: the public demo never grants
+    access to the real control-plane API or console -- those stay fail-closed
+    exactly as they do in any other non-dev deployment (see docs/deployment.md).
+    """
+    return os.environ.get(PUBLIC_DEMO_ENV) == "1"
 
 
 async def require_auth(authorization: str | None = Header(default=None)) -> None:
@@ -38,4 +48,11 @@ async def require_auth(authorization: str | None = Header(default=None)) -> None
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
-__all__ = ["DEV_MODE_ENV", "TOKEN_ENV", "is_dev_mode", "require_auth"]
+__all__ = [
+    "DEV_MODE_ENV",
+    "PUBLIC_DEMO_ENV",
+    "TOKEN_ENV",
+    "is_dev_mode",
+    "is_public_demo",
+    "require_auth",
+]
