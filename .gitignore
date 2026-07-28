@@ -15,7 +15,10 @@ htmlcov/
 .coverage.*
 coverage.xml
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
+.chitragupta-api/
 .env
 !.env.example
 *.pem

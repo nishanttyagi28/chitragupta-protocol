@@ -29,7 +29,7 @@ from fastapi.templating import Jinja2Templates
 from chitragupta.adapters.payment_simulator import PaymentRequest
 from chitragupta.errors import ChitraguptaError
 from chitragupta.grants.model import ScopeConstraints
-from chitragupta.passports import build_passport, render_passport_html
+from chitragupta.passports import build_passport, render_passport_markdown
 from chitragupta.web.demo_scenarios import SCENARIO_ORDER, SCENARIO_TITLES, SCENARIOS
 from chitragupta.web.demo_state import (
     AGENT,
@@ -214,13 +214,12 @@ def passport_view(manifest_id: str, request: Request) -> HTMLResponse:
         commit_result=commit_result,
         outcome_proof=session.outcome_proofs.get(manifest_id),
     )
-    body = render_passport_html(passport)
-    wrapper_style = (
-        "max-width:900px;margin:2rem auto;font-family:-apple-system,Segoe UI,sans-serif;"
-    )
-    return HTMLResponse(
-        f'<div style="{wrapper_style}">'
-        f'<p><a href="/demo/refund/{manifest_id}">&larr; back to demo</a></p>{body}</div>'
+    return _templates.TemplateResponse(
+        request,
+        "demo/passport.html",
+        _ctx(
+            request, manifest_id=manifest_id, passport_markdown=render_passport_markdown(passport)
+        ),
     )
 
 

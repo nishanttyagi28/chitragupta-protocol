@@ -1,0 +1,8 @@
+{% extends "demo/base.html" %}
+{% block title %}Action Passport — Chitragupta sandbox{% endblock %}
+{% block content %}
+<div class="card" style="background:#fff; color:#111;">
+  <p><a href="/demo/refund/{{ manifest_id }}">&larr; back to demo</a></p>
+  <div style="font-family:monospace; font-size:0.85rem; line-height:1.5; white-space:pre-wrap;">{{ passport_markdown }}</div>
+</div>
+{% endblock %}
