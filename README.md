@@ -1,11 +1,40 @@
 # Chitragupta Protocol
 
-**Seal the intended effect. Verify the actual outcome.**
+**Category: Verified Effect Commit Protocol for AI Agents**
+
+Chitragupta Protocol cryptographically binds approval to one exact
+resolved effect, revalidates its external preconditions at commit time,
+executes it with exactly-once safeguards, independently verifies the
+resulting external state, and produces an Action Passport proving the
+intent-to-outcome chain.
 
 **Status: v0.1.0, feature-complete reference implementation of an explicitly
 versioned, experimental protocol.** This is not a certified, audited, or
 "production proven" system — see [Limitations](#limitations) and
 [docs/threat-model.md](docs/threat-model.md).
+
+## At a glance: allowed tool call vs. verified effect
+
+```text
+Generic tool-permission layer / policy gate:
+  agent.call("payment.transfer", {...})  ->  ALLOWED (schema matched, policy passed)
+  ... but was INR 1,500 actually paid to customer-priya, exactly once,
+  and independently confirmed against the real ledger? Not answered here.
+
+Chitragupta Protocol:
+  PROPOSE -> PREPARE -> SEAL -> AUTHORIZE -> COMMIT -> VERIFY -> PROVE
+  ALLOWED, AND: sealed manifest hash sha256:e5590..., grant bound to that
+  exact hash, commit succeeded, independent re-observation of the payment
+  ledger confirms matched_expected=True, Action Passport issued.
+```
+
+An "allowed" tool call answers one question: *may the agent attempt this?*
+A verified effect answers a different, harder question: *did the exact
+thing a human approved actually happen, once, and can it be proven?* See
+[Not another agent permission layer](#not-another-agent-permission-layer)
+below for how this compares to IAM, OAuth-style delegation, and policy
+gateways. Full runnable version of the walkthrough above:
+[A concrete refund example](#a-concrete-refund-example-python-api).
 
 ## The business problem
 
@@ -35,6 +64,35 @@ re-validates external state immediately before committing, executes with
 exactly-once semantics, and independently verifies the actual outcome
 afterward — producing a signed **Action Passport** as proof of what really
 happened.
+
+## Not another agent permission layer
+
+Several categories of tooling already exist around AI agents acting in the
+world, and it's easy to mistake Chitragupta Protocol for a reskin of one of
+them. It isn't — each answers a different question, and Chitragupta
+Protocol assumes the others (if present) have already run:
+
+| Layer | Question it answers |
+|---|---|
+| **IAM** | *Who is this agent, and what identity does it hold?* |
+| **OAuth-style delegation / credential brokers** | *Which service credentials, under what scope, may this agent use?* |
+| **Policy gates / agent gateways** | *Is this tool call allowed right now, against current policy?* |
+| **Chitragupta Protocol** | *Did the exact real-world effect a human approved become the exact real-world outcome that actually happened — provably?* |
+
+Concretely: an IAM system can confirm the caller really is `refund-agent`.
+A credential broker can hand that agent a short-lived, scoped API key for
+the payments service. A policy gate can confirm `payment.transfer` is a
+tool this agent is allowed to call at all. None of those three — by their
+own stated scope — resolve the call into one exact, cryptographically
+sealed amount/recipient/precondition set; re-check that nothing changed
+between approval and execution; guarantee the payment happens at most
+once even under retries; or independently re-observe the payment ledger
+afterward to prove the money actually moved to the right place. That's
+the specific, narrower job Chitragupta Protocol does, and it's designed to
+sit *after* those other layers, not replace them. A factual,
+sourced, capability-boundary comparison against five publicly documented
+products in this space (Grantex, AgentLattice, Xybern, OpenLeash, and
+Meandr) is in [docs/comparison.md](docs/comparison.md#capability-boundary-comparison).
 
 ## Try it live
 
@@ -249,25 +307,49 @@ the [live sandbox](#try-it-live) or run `chitragupta demo --all`.
 
 ## Core security invariants
 
-30 invariants are implemented and tested — a sample:
+30 invariants are implemented and tested. The **primary differentiators**
+— the specific claims that distinguish Chitragupta Protocol from a
+tool-permission layer, IAM system, or credential broker — are:
 
-- A grant issued for manifest A cannot execute manifest B (bound by hash).
-- A single-use grant cannot execute more than once, even under concurrent
-  retries (atomic reserve/commit — memory lock, SQLite `UPDATE...WHERE`, or
-  a Redis Lua script).
-- External state changes after preparation invalidate the manifest unless
-  safely re-prepared (TOCTOU — see below).
-- A child delegated grant can never be wider than its parent on any
-  dimension (recipients, amount, time window, use count, audience).
-- Audit records are append-only and hash-chained; tampering with any past
-  event is detected deterministically.
-- The agent/model can never be the principal that issues or authorizes a
-  grant — structurally enforced, not a policy convention.
-- Irreversible effects are never described as reversible; compensation is
-  always best-effort and says so honestly.
+1. **Canonical Effect Manifest** — exact target, parameters, expected
+   state, and preconditions resolved into one canonically-hashed object
+   (`EffectManifest.canonical_hash()`), not a tool name.
+2. **Cryptographic binding of approval to that exact manifest** — a grant
+   is only valid for the one sealed effect it was issued against
+   (`grant.manifest_hash == sealed.seal.manifest_hash`, invariant #2).
+3. **Commit-time TOCTOU revalidation** — `validate_preconditions()` is
+   re-checked immediately before the effect, not only at approval time;
+   fails closed with `StaleManifestError` if anything drifted.
+4. **Atomic exactly-once successful-effect semantics** — a slot is
+   reserved before the adapter runs and only permanently consumed on
+   success; concurrent retries race for one slot, exactly one wins.
+5. **Explicit ambiguous-outcome crash recovery, never a blind retry** —
+   `engine.recover_ambiguous_commit()` re-observes external state before
+   any retry is considered safe (see [docs/crash-recovery.md](docs/crash-recovery.md)).
+6. **Independent post-commit observation of real external state** —
+   `adapter.verify()` re-queries the adapter's own external system of
+   record; a successful commit response is never treated as proof.
+7. **Mismatch detection** — when a provider reports success but reality
+   differs, `OutcomeProof.matched_expected=False` is recorded, not hidden.
+8. **Action Passport** — independently re-verifies the seal, grant, and
+   audit chain at generation time and proves the full proposed → approved
+   → committed → verified chain for one specific effect.
+9. **Honest compensation and irreversible-effect semantics** —
+   compensation is always best-effort and says so; irreversible effects
+   are never described as reversible.
 
-Full list of all 30, each mapped to its enforcing code and the test that
-verifies it: [docs/security-model.md](docs/security-model.md).
+**Supporting security controls** (real, tested, but not the primary
+claim): grants are scoped, time-limited, single-use-by-default, and
+revocable; delegated child grants can never be wider than their parent on
+any dimension (recipients, amount, time window, use count, audience); the
+agent/model can never be the principal that issues or authorizes a grant
+(invariant #30); the audit journal is append-only and hash-chained. These
+exist to bound *who may approve what, for how long* — they are necessary,
+but the manifest-sealing/TOCTOU/exactly-once/verification chain above is
+what actually proves the effect happened as approved.
+
+Full list of all 30 invariants, each mapped to its enforcing code and the
+test that verifies it: [docs/security-model.md](docs/security-model.md).
 
 ## Exactly-once execution and TOCTOU protection
 

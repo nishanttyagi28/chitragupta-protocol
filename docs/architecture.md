@@ -1,5 +1,16 @@
 # Architecture
 
+The mechanisms that make this a **verified effect commit protocol** rather
+than a permission layer are the manifest canonicalization/sealing
+(`domain/`, `canonical/`, `protocol/`), commit-time precondition
+revalidation and atomic reservation (`engine/core.py`'s `commit()`), and
+independent post-commit verification (`adapter.verify()`, `passports/`).
+`grants/` and `delegation/` scope, expire, and narrow *who may approve
+what* — real, tested controls, but supporting ones; they do not by
+themselves prove an effect happened as approved. See the README's
+["Core security invariants"](../README.md#core-security-invariants)
+section for the full primary-vs-supporting breakdown.
+
 ## Components
 
 ```mermaid

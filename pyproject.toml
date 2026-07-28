@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "chitragupta-protocol"
 version = "0.1.0"
-description = "A verified-effect execution protocol that stages, seals, authorizes, executes, and proves consequential AI-agent actions."
+description = "Verified Effect Commit Protocol for AI agents: binds approval to one exact resolved effect, revalidates preconditions at commit time, executes exactly once, and independently verifies the real outcome."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 license = "MIT"
@@ -13,12 +13,13 @@ license-files = ["LICENSE"]
 authors = [{ name = "Nishant Tyagi", email = "jollytyagi360@gmail.com" }]
 keywords = [
     "ai-agents",
-    "authorization",
-    "security",
-    "audit",
+    "verified-effect",
+    "effect-manifest",
     "toctou",
-    "execution-grant",
+    "exactly-once",
+    "action-passport",
     "agent-safety",
+    "audit",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
