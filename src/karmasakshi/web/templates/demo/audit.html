@@ -1,0 +1,35 @@
+{% extends "demo/base.html" %}
+{% block title %}Audit timeline — KarmaSakshi sandbox{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Audit timeline</h1>
+  <p>
+    Chain integrity:
+    {% if audit_ok %}<span class="badge badge-ok">verified</span>
+    {% else %}<span class="badge badge-bad">TAMPERING DETECTED</span>{% endif %}
+    ({{ events|length }} events)
+  </p>
+  {% if events %}
+  <table>
+    <tr><th>#</th><th>Event</th><th>Decision</th><th>From &rarr; To</th><th>Timestamp</th></tr>
+    {% for e in events %}
+    <tr>
+      <td>{{ e.sequence }}</td>
+      <td>{{ e.event_type }}</td>
+      <td>
+        {% if "blocked" in e.decision or "denied" in e.decision or "tampered" in e.decision %}
+          <span class="badge badge-blocked">{{ e.decision }}</span>
+        {% else %}
+          <span class="badge badge-ok">{{ e.decision }}</span>
+        {% endif %}
+      </td>
+      <td>{{ e.from_state or "—" }} &rarr; {{ e.to_state or "—" }}</td>
+      <td>{{ e.timestamp }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No events yet — run the guided refund flow or a scenario first.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from chitragupta.adapters.payment_simulator import (
+from karmasakshi.adapters.payment_simulator import (
     PaymentRequest,
     PaymentSimulator,
     PaymentSimulatorAdapter,

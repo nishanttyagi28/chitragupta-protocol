@@ -4,8 +4,8 @@ import threading
 
 import pytest
 
-from chitragupta.errors import StoreUnavailableError
-from chitragupta.stores.sqlite import SQLiteGrantStore
+from karmasakshi.errors import StoreUnavailableError
+from karmasakshi.stores.sqlite import SQLiteGrantStore
 
 
 @pytest.fixture

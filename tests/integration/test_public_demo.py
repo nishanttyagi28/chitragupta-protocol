@@ -13,11 +13,11 @@ pytest.importorskip("jinja2")
 
 from fastapi.testclient import TestClient
 
-from chitragupta.api.app import PublicDemoMisconfiguredError, create_app
-from chitragupta.api.auth import DEV_MODE_ENV, PUBLIC_DEMO_ENV
-from chitragupta.web import demo_state
-from chitragupta.web.demo_scenarios import SCENARIO_ORDER
-from chitragupta.web.rate_limit import reset_rate_limiter
+from karmasakshi.api.app import PublicDemoMisconfiguredError, create_app
+from karmasakshi.api.auth import DEV_MODE_ENV, PUBLIC_DEMO_ENV
+from karmasakshi.web import demo_state
+from karmasakshi.web.demo_scenarios import SCENARIO_ORDER
+from karmasakshi.web.rate_limit import reset_rate_limiter
 
 
 @pytest.fixture(autouse=True)
@@ -56,7 +56,7 @@ def test_health_and_ready_unaffected_by_public_demo(demo_client):
 
 def test_admin_and_docs_surfaces_stay_fail_closed(demo_client):
     # The authenticated control-plane API/console must remain unreachable without
-    # CHITRAGUPTA_API_DEV_MODE or a bearer token, even while the public demo is mounted.
+    # KARMASAKSHI_API_DEV_MODE or a bearer token, even while the public demo is mounted.
     assert demo_client.get("/console/").status_code == 500
     assert demo_client.get("/manifests").status_code == 500
     assert demo_client.get("/kill-switch").status_code == 500
@@ -160,7 +160,7 @@ def test_ttl_based_auto_reset(monkeypatch):
 def test_rate_limiter_blocks_after_threshold():
     from fastapi import HTTPException
 
-    from chitragupta.web.rate_limit import RateLimiter
+    from karmasakshi.web.rate_limit import RateLimiter
 
     limiter = RateLimiter(limit_per_minute=3)
     for _ in range(3):
@@ -172,7 +172,7 @@ def test_rate_limiter_blocks_after_threshold():
 
 
 def test_rate_limit_returns_429_over_http(demo_client, monkeypatch):
-    from chitragupta.web import rate_limit as rate_limit_module
+    from karmasakshi.web import rate_limit as rate_limit_module
 
     monkeypatch.setattr(
         rate_limit_module, "_limiter", rate_limit_module.RateLimiter(limit_per_minute=3)

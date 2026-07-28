@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 
-from chitragupta.adapters.base import CommitResult, OutcomeProof
-from chitragupta.config.clock import FixedClock
-from chitragupta.integrations.agenteval import (
+from karmasakshi.adapters.base import CommitResult, OutcomeProof
+from karmasakshi.config.clock import FixedClock
+from karmasakshi.integrations.agenteval import (
     RegressionFixture,
     export_regression_fixture,
     write_fixture,

@@ -1,18 +1,18 @@
 """End-to-end tests running real adapters (not the test FakeAdapter) through
-the actual ChitraguptaEngine: prepare -> seal -> authorize -> commit -> verify.
+the actual KarmaSakshiEngine: prepare -> seal -> authorize -> commit -> verify.
 """
 
 from __future__ import annotations
 
 from datetime import timedelta
 
-from chitragupta.adapters.email_sandbox import EmailRequest, EmailSandboxAdapter, SandboxOutbox
-from chitragupta.adapters.payment_simulator import (
+from karmasakshi.adapters.email_sandbox import EmailRequest, EmailSandboxAdapter, SandboxOutbox
+from karmasakshi.adapters.payment_simulator import (
     PaymentRequest,
     PaymentSimulator,
     PaymentSimulatorAdapter,
 )
-from chitragupta.grants.model import ScopeConstraints
+from karmasakshi.grants.model import ScopeConstraints
 
 
 def _authorize(engine, sealed, adapter, *, issuer, subject, issuer_signing_key, now):
@@ -103,7 +103,7 @@ def test_email_sandbox_changed_recipient_after_seal_is_blocked(
 ):
     import pytest
 
-    from chitragupta.errors import ManifestTamperedError
+    from karmasakshi.errors import ManifestTamperedError
 
     engine = engine_factory()
     outbox = SandboxOutbox()

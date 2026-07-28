@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from chitragupta.errors import IllegalTransitionError
-from chitragupta.state_machine import LifecycleRecord, LifecycleState
-from chitragupta.state_machine.states import TRANSITIONS, is_legal_transition
+from karmasakshi.errors import IllegalTransitionError
+from karmasakshi.state_machine import LifecycleRecord, LifecycleState
+from karmasakshi.state_machine.states import TRANSITIONS, is_legal_transition
 
 _now = datetime(2026, 1, 1, tzinfo=timezone.utc)
 _states = st.sampled_from(list(LifecycleState))

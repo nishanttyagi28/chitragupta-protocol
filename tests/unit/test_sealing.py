@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from chitragupta.crypto import Keyring
-from chitragupta.errors import InvalidSignatureError, ManifestTamperedError, UnknownKeyError
-from chitragupta.protocol.sealing import seal_manifest, verify_seal
+from karmasakshi.crypto import Keyring
+from karmasakshi.errors import InvalidSignatureError, ManifestTamperedError, UnknownKeyError
+from karmasakshi.protocol.sealing import seal_manifest, verify_seal
 
 
 def test_seal_and_verify_roundtrip(manifest_factory, issuer_signing_key, keyring):

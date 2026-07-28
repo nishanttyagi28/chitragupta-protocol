@@ -5,7 +5,7 @@ from datetime import timedelta
 
 import pytest
 
-from chitragupta.errors import (
+from karmasakshi.errors import (
     AdapterMismatchError,
     GrantAudienceError,
     GrantExhaustedError,
@@ -16,8 +16,8 @@ from chitragupta.errors import (
     ManifestTamperedError,
     StaleManifestError,
 )
-from chitragupta.grants.model import ScopeConstraints
-from chitragupta.state_machine import LifecycleState
+from karmasakshi.grants.model import ScopeConstraints
+from karmasakshi.state_machine import LifecycleState
 
 
 def _prepare_and_seal(engine, adapter, manifest, signing_key):
@@ -297,7 +297,7 @@ def test_single_use_grant_cannot_execute_twice(authorized, fake_adapter, fake_ad
 def test_concurrent_commits_produce_at_most_one_success(
     authorized, fake_adapter_state, fixed_clock
 ):
-    from chitragupta.adapters.base import CommitResult, PreconditionResult
+    from karmasakshi.adapters.base import CommitResult, PreconditionResult
 
     engine, sealed, grant = authorized
 
@@ -398,7 +398,7 @@ def test_idempotent_retry_does_not_recommit(
 
 
 def test_store_multi_use_ceiling_allows_configured_number_of_uses():
-    from chitragupta.stores.memory import InMemoryGrantStore
+    from karmasakshi.stores.memory import InMemoryGrantStore
 
     store = InMemoryGrantStore()
     assert store.reserve("g1", max_uses=2) is True
@@ -414,7 +414,7 @@ def test_store_multi_use_ceiling_allows_configured_number_of_uses():
 
 
 def test_store_failed_attempt_releases_without_consuming_a_use():
-    from chitragupta.stores.memory import InMemoryGrantStore
+    from karmasakshi.stores.memory import InMemoryGrantStore
 
     store = InMemoryGrantStore()
     assert store.reserve("g1", max_uses=1) is True

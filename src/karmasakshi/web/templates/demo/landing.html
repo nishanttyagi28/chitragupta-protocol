@@ -1,0 +1,49 @@
+{% extends "demo/base.html" %}
+{% block title %}KarmaSakshi Protocol — Live Sandbox Demo{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Did the exact approved effect happen — or just an API call that returned 200?</h1>
+  <p>
+    AI agents can now send emails, issue refunds, and update databases. Tool permissions only answer
+    <em>whether</em> an agent may call a tool — not whether the exact effect a human approved is the
+    exact effect that actually ran. KarmaSakshi seals the intended effect, binds authorization to that
+    exact sealed effect, and independently verifies the real outcome afterward.
+  </p>
+  <form method="post" action="/demo/refund/propose">
+    <button type="submit">▶ Start the guided refund walkthrough</button>
+  </form>
+  {% if refund_pending %}
+  <p style="margin-top:0.75rem;"><a href="/demo/refund/{{ refund_manifest_id }}">Resume the in-progress refund walkthrough &rarr;</a></p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>10 more scenarios: what gets blocked, and what's allowed</h2>
+  <p style="color:var(--muted); margin-top:0;">Each button runs the real engine against real reference adapters — nothing here is a mock.</p>
+  <div class="grid">
+    {% for key in scenarios %}
+    {% set run = runs.get(key) %}
+    <form method="post" action="/demo/scenario/{{ key }}/run">
+      <button type="submit" class="scenario-btn">
+        {{ loop.index }}. {{ scenario_titles[key] }}
+        <span class="status">
+          {% if run %}
+            {% if run.passed %}<span class="badge badge-ok">behaved as expected</span>{% else %}<span class="badge badge-bad">unexpected result</span>{% endif %}
+          {% else %}
+            not yet run — click to run
+          {% endif %}
+        </span>
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Lifecycle</h2>
+  <p style="color:var(--muted); margin-top:0;">Every effect in this demo moves through the same seven states:</p>
+  <p style="font-family:monospace; font-size:0.95rem; overflow-x:auto;">
+    PROPOSE &rarr; PREPARE &rarr; SEAL &rarr; AUTHORIZE &rarr; COMMIT &rarr; VERIFY &rarr; PROVE
+  </p>
+</div>
+{% endblock %}

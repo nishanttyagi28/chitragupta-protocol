@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from chitragupta.adapters.email_sandbox import EmailRequest, EmailSandboxAdapter, SandboxOutbox
-from chitragupta.errors import RecipientNotAllowedError
+from karmasakshi.adapters.email_sandbox import EmailRequest, EmailSandboxAdapter, SandboxOutbox
+from karmasakshi.errors import RecipientNotAllowedError
 
 
 @pytest.fixture

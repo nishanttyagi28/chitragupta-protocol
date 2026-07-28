@@ -10,8 +10,8 @@ pytest.importorskip("jinja2")
 
 from fastapi.testclient import TestClient
 
-from chitragupta.api.app import create_app
-from chitragupta.api.auth import DEV_MODE_ENV, TOKEN_ENV
+from karmasakshi.api.app import create_app
+from karmasakshi.api.auth import DEV_MODE_ENV, TOKEN_ENV
 
 
 @pytest.fixture

@@ -9,7 +9,7 @@ checks like test_canonical_properties.py.
 
 from __future__ import annotations
 
-from chitragupta.canonical import canonical_hash
+from karmasakshi.canonical import canonical_hash
 
 _FIXTURES = [
     ({"a": 1, "b": 2}, "sha256:43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777"),

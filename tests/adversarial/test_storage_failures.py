@@ -12,8 +12,8 @@ from datetime import timedelta
 
 import pytest
 
-from chitragupta.errors import AuditWriteError, StoreUnavailableError
-from chitragupta.grants.model import ScopeConstraints
+from karmasakshi.errors import AuditWriteError, StoreUnavailableError
+from karmasakshi.grants.model import ScopeConstraints
 
 
 class _ExplodingGrantStore:
@@ -105,14 +105,14 @@ def test_audit_backend_failure_blocks_commit_before_adapter_is_called(
     issuer_signing_key,
     now,
 ):
-    from chitragupta.audit.journal import AuditJournal
-    from chitragupta.config.clock import FixedClock
-    from chitragupta.engine import ChitraguptaEngine, EngineContext
-    from chitragupta.stores.memory import InMemoryGrantStore
+    from karmasakshi.audit.journal import AuditJournal
+    from karmasakshi.config.clock import FixedClock
+    from karmasakshi.engine import EngineContext, KarmaSakshiEngine
+    from karmasakshi.stores.memory import InMemoryGrantStore
 
     keyring = engine_factory().context.keyring
     clock = FixedClock(now)
-    good_engine = ChitraguptaEngine(
+    good_engine = KarmaSakshiEngine(
         EngineContext(
             keyring=keyring,
             grant_store=InMemoryGrantStore(),
@@ -134,7 +134,7 @@ def test_audit_backend_failure_blocks_commit_before_adapter_is_called(
 
     # Swap in a failing audit backend right before commit, simulating an
     # audit sink that goes down between authorization and execution.
-    failing_engine = ChitraguptaEngine(
+    failing_engine = KarmaSakshiEngine(
         EngineContext(
             keyring=keyring,
             grant_store=good_engine.context.grant_store,

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from chitragupta.domain import (
+from karmasakshi.domain import (
     AdapterIdentity,
     BlastRadiusClassification,
     EffectManifest,

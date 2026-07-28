@@ -18,7 +18,7 @@ coverage.xml
 *.db-shm
 *.db-wal
 *.sqlite3
-.chitragupta-api/
+.karmasakshi-api/
 .env
 !.env.example
 *.pem

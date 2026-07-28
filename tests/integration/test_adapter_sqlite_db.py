@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from chitragupta.adapters.sqlite_db import RowEffectRequest, SQLiteRowAdapter
+from karmasakshi.adapters.sqlite_db import RowEffectRequest, SQLiteRowAdapter
 
 
 @pytest.fixture

@@ -3,7 +3,7 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from chitragupta.canonical import CanonicalizationError, canonical_hash, canonical_json_bytes
+from karmasakshi.canonical import CanonicalizationError, canonical_hash, canonical_json_bytes
 
 _json_scalar = st.one_of(
     st.none(),

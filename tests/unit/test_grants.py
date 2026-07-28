@@ -5,16 +5,16 @@ from datetime import timedelta
 import pytest
 from pydantic import ValidationError
 
-from chitragupta.crypto import Keyring
-from chitragupta.errors import (
+from karmasakshi.crypto import Keyring
+from karmasakshi.errors import (
     GrantExpiredError,
     GrantIssuerNotAuthorizedError,
     GrantNotYetValidError,
     InvalidSignatureError,
     UnknownKeyError,
 )
-from chitragupta.grants import ExecutionGrant, ScopeConstraints, issue_grant, verify_grant
-from chitragupta.grants.verifier import verify_grant_signature, verify_grant_time_window
+from karmasakshi.grants import ExecutionGrant, ScopeConstraints, issue_grant, verify_grant
+from karmasakshi.grants.verifier import verify_grant_signature, verify_grant_time_window
 
 
 def _issue(now, issuer, subject, signing_key, **overrides):

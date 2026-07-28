@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from chitragupta.canonical import CanonicalizationError, canonical_hash, canonical_json_bytes
+from karmasakshi.canonical import CanonicalizationError, canonical_hash, canonical_json_bytes
 
 
 def test_key_order_does_not_affect_hash():
