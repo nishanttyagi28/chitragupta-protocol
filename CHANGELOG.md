@@ -16,7 +16,7 @@ version `1.0`.
 - Lifecycle state machine (`PROPOSED` → `PREPARED` → `SEALED` →
   `AUTHORIZED` → `COMMITTING` → `COMMITTED` → `VERIFIED`, plus `FAILED`,
   `REVOKED`, `EXPIRED`, `COMPENSATING`, `COMPENSATED`) and the
-  `ChitraguptaEngine` orchestrator enforcing all 30 documented security
+  `KarmaSakshiEngine` orchestrator enforcing all 30 documented security
   invariants (see `docs/security-model.md`).
 - Storage backends: in-memory, SQLite (durable, single-node), and Redis
   (distributed, Lua-script atomic consumption).
@@ -31,7 +31,7 @@ version `1.0`.
 - Optional LangGraph integration: pause-for-authorization, resume, commit,
   verify, with the signing key kept out of graph state/checkpoints.
 - Optional AgentEval bridge: versioned, neutral regression-fixture export.
-- CLI (`chitragupta`): init, key management, prepare/seal, grant
+- CLI (`karmasakshi`): init, key management, prepare/seal, grant
   issue/verify/delegate/revoke/inspect, execute/verify/compensate, audit
   list/show/verify, passport generation, a 15-scenario deterministic demo
   suite, and a doctor command.

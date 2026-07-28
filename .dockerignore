@@ -17,8 +17,8 @@ build/
 .github/
 tests/
 docs/
-.chitragupta/
-.chitragupta-api/
+.karmasakshi/
+.karmasakshi-api/
 *.db
 *.sqlite3
 .env

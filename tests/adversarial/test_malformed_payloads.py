@@ -13,9 +13,9 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
-from chitragupta.audit.events import AuditEvent
-from chitragupta.canonical import CanonicalizationError, canonical_json_bytes
-from chitragupta.domain import (
+from karmasakshi.audit.events import AuditEvent
+from karmasakshi.canonical import CanonicalizationError, canonical_json_bytes
+from karmasakshi.domain import (
     AdapterIdentity,
     BlastRadiusClassification,
     MonetaryAmount,
@@ -26,8 +26,8 @@ from chitragupta.domain import (
     StateFingerprint,
     StateFingerprintKind,
 )
-from chitragupta.domain.manifest import EffectManifest
-from chitragupta.grants.model import ExecutionGrant, ScopeConstraints
+from karmasakshi.domain.manifest import EffectManifest
+from karmasakshi.grants.model import ExecutionGrant, ScopeConstraints
 
 _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 _ACTOR = Principal(principal_id="agent-1", principal_type=PrincipalType.AGENT)

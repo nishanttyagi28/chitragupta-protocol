@@ -4,9 +4,9 @@ from datetime import timezone
 
 import pytest
 
-from chitragupta.domain import SealedManifest
-from chitragupta.domain.seal import Seal
-from chitragupta.errors import ManifestTamperedError
+from karmasakshi.domain import SealedManifest
+from karmasakshi.domain.seal import Seal
+from karmasakshi.errors import ManifestTamperedError
 
 
 def _seal_for(manifest, now, key_id="k1", signature="fake-signature-base64"):

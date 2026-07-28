@@ -72,7 +72,7 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[all]"
       - run: pip install pytest pytest-asyncio pytest-cov hypothesis freezegun
-      - run: pytest --cov=chitragupta --cov-report=term-missing --cov-report=xml --cov-fail-under=90
+      - run: pytest --cov=karmasakshi --cov-report=term-missing --cov-report=xml --cov-fail-under=90
       - uses: actions/upload-artifact@v4
         with:
           name: coverage-xml
@@ -108,11 +108,11 @@ jobs:
           name: dist
           path: dist/
       - run: pip install dist/*.whl
-      - run: python -c "import chitragupta; print(chitragupta.__version__)"
-      - run: chitragupta version
-      - run: chitragupta --help
-      - run: chitragupta doctor || true  # workspace not initialized yet; exercises the command path
-      - run: chitragupta demo --all
+      - run: python -c "import karmasakshi; print(karmasakshi.__version__)"
+      - run: karmasakshi version
+      - run: karmasakshi --help
+      - run: karmasakshi doctor || true  # workspace not initialized yet; exercises the command path
+      - run: karmasakshi demo --all
 
   docs-check:
     name: Documentation checks

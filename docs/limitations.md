@@ -45,7 +45,7 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
 - **The CLI's `email` and `payment` reference adapters are in-memory
   only** — state does not persist across separate CLI process
   invocations (only the `sqlite` adapter does, via its own database file).
-  `chitragupta demo --all` is the way to see a full single-process
+  `karmasakshi demo --all` is the way to see a full single-process
   walkthrough of all three.
 - **No rate limiting, DoS protection, or resource-exhaustion defense**
   anywhere in the CLI, API, or engine.
@@ -68,7 +68,7 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   local dev on this" tradeoff, not a claim that the file is protected on
   Windows.
 
-- **The public sandbox demo (`CHITRAGUPTA_PUBLIC_DEMO=1`) is a single
+- **The public sandbox demo (`KARMASAKSHI_PUBLIC_DEMO=1`) is a single
   shared, in-memory session**, not multi-tenant: every visitor to a given
   deployment sees and can affect the same sandbox state until it
   auto-resets on a timer. It is a reference demo for exploring the

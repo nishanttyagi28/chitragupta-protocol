@@ -1,10 +1,21 @@
 # Architecture
 
+The mechanisms that make this a **verified effect commit protocol** rather
+than a permission layer are the manifest canonicalization/sealing
+(`domain/`, `canonical/`, `protocol/`), commit-time precondition
+revalidation and atomic reservation (`engine/core.py`'s `commit()`), and
+independent post-commit verification (`adapter.verify()`, `passports/`).
+`grants/` and `delegation/` scope, expire, and narrow *who may approve
+what* — real, tested controls, but supporting ones; they do not by
+themselves prove an effect happened as approved. See the README's
+["Core security invariants"](../README.md#core-security-invariants)
+section for the full primary-vs-supporting breakdown.
+
 ## Components
 
 ```mermaid
 flowchart TB
-    subgraph "src/chitragupta"
+    subgraph "src/karmasakshi"
         domain["domain/\nEffectManifest, Principal,\nMonetaryAmount, StateFingerprint"]
         canonical["canonical/\ncanonical hashing"]
         crypto["crypto/\nEd25519 keys, keyring"]
@@ -14,7 +25,7 @@ flowchart TB
         state_machine["state_machine/\nlifecycle graph"]
         stores["stores/\nmemory, sqlite, redis"]
         audit["audit/\nhash-chained journal"]
-        engine["engine/\nChitraguptaEngine (orchestrator)"]
+        engine["engine/\nKarmaSakshiEngine (orchestrator)"]
         adapters["adapters/\nsqlite_db, email_sandbox,\npayment_simulator"]
         passports["passports/\nAction Passport"]
         integrations["integrations/\nlanggraph, agenteval"]
@@ -68,7 +79,7 @@ dependency on either.
 6. **VERIFY** — `engine.verify(...)` calls `adapter.verify()`, which
    independently re-observes external state rather than trusting the commit
    result (invariant #21).
-7. **PROVE** — `chitragupta.passports.build_passport(...)` assembles an
+7. **PROVE** — `karmasakshi.passports.build_passport(...)` assembles an
    Action Passport from the sealed manifest, grant, commit result, outcome
    proof, and audit journal.
 
@@ -77,7 +88,7 @@ audit journal before anything else happens at that step.
 
 ## Process model
 
-`ChitraguptaEngine` holds lifecycle state (`LifecycleRecord`) in memory,
+`KarmaSakshiEngine` holds lifecycle state (`LifecycleRecord`) in memory,
 keyed by `manifest_id`. This is intentional: the *durable* record of what
 happened is always the audit journal (in-memory for tests, SQLite-backed
 for the CLI and API by default, pluggable to Redis for the grant store).

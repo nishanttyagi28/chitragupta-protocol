@@ -1,6 +1,6 @@
 # Execution Grants
 
-`chitragupta.grants.model.ExecutionGrant` is a signed, scoped, expiring,
+`karmasakshi.grants.model.ExecutionGrant` is a signed, scoped, expiring,
 revocable, consumable authorization. Like `EffectManifest`, it is frozen
 and rejects unknown fields.
 
@@ -51,7 +51,7 @@ issue_grant(..., issuer=agent_principal, ...)
 
 This is invariant #30 and is enforced structurally, not by policy
 convention — there is no code path in `issue_grant()` or
-`ChitraguptaEngine.authorize()`/`.delegate()` that succeeds with an
+`KarmaSakshiEngine.authorize()`/`.delegate()` that succeeds with an
 agent-typed issuer, and this holds identically whether the call originates
 from the CLI, the API, or the LangGraph integration.
 
@@ -61,5 +61,5 @@ At `commit()` time, the engine requires `grant.manifest_hash ==
 sealed.seal.manifest_hash` exactly (string equality of two independently
 computed SHA-256 hex digests). A grant approved for manifest A can never
 execute manifest B, even if B is byte-for-byte similar — this is invariant
-#2 and is the core of what makes Chitragupta Protocol's authorization
+#2 and is the core of what makes KarmaSakshi Protocol's authorization
 model different from "the agent may call this tool."

@@ -1,11 +1,11 @@
 # CLI Reference
 
-`chitragupta [--workspace PATH] [--json] <command> ...`
+`karmasakshi [--workspace PATH] [--json] <command> ...`
 
-`--workspace` defaults to `.chitragupta` under the current directory (or
-`$CHITRAGUPTA_HOME`). `--json` switches every command to machine-readable
+`--workspace` defaults to `.karmasakshi` under the current directory (or
+`$KARMASAKSHI_HOME`). `--json` switches every command to machine-readable
 JSON output. Exit codes: `0` success, `1` general/validation error, `2`
-security-denied (any `ChitraguptaError` subclass).
+security-denied (any `KarmaSakshiError` subclass).
 
 ## Workspace
 
@@ -15,39 +15,39 @@ SQLite-backed grant store (`grants.db`), and a SQLite-backed audit journal
 (`audit.db`) — everything needed to run `prepare`, `seal`, `grant issue`,
 `execute`, `verify`, `compensate`, `passport`, and `audit` as *separate*
 process invocations while keeping a consistent lifecycle state. See
-`chitragupta.cli.workspace.Workspace.reconstruct_lifecycle_state()` and
+`karmasakshi.cli.workspace.Workspace.reconstruct_lifecycle_state()` and
 [docs/state-machine.md](state-machine.md) for how that consistency is
 maintained across processes.
 
 ## Commands
 
 ```text
-chitragupta init
-chitragupta key generate <key_id>
-chitragupta key list
+karmasakshi init
+karmasakshi key generate <key_id>
+karmasakshi key list
 
-chitragupta prepare --adapter {sqlite,email,payment} --actor-id ID [adapter-specific options...]
-chitragupta seal <manifest_id> --key-id ID
+karmasakshi prepare --adapter {sqlite,email,payment} --actor-id ID [adapter-specific options...]
+karmasakshi seal <manifest_id> --key-id ID
 
-chitragupta grant issue <manifest_id> --issuer-id ID --subject-id ID --key-id ID [--audience ...] [--max-uses N]
-chitragupta grant verify <grant_id>
-chitragupta grant delegate <parent_grant_id> --issuer-id ID --subject-id ID --key-id ID [--max-uses N] [--ttl-seconds N]
-chitragupta grant revoke <grant_id> [--manifest-id ID]
-chitragupta grant inspect <grant_id>
+karmasakshi grant issue <manifest_id> --issuer-id ID --subject-id ID --key-id ID [--audience ...] [--max-uses N]
+karmasakshi grant verify <grant_id>
+karmasakshi grant delegate <parent_grant_id> --issuer-id ID --subject-id ID --key-id ID [--max-uses N] [--ttl-seconds N]
+karmasakshi grant revoke <grant_id> [--manifest-id ID]
+karmasakshi grant inspect <grant_id>
 
-chitragupta execute <manifest_id> --grant-id ID --adapter {sqlite,email,payment} [adapter-specific options...]
-chitragupta verify <manifest_id> --adapter {sqlite,email,payment} [...]
-chitragupta compensate <manifest_id> --adapter {sqlite,email,payment} [...]
+karmasakshi execute <manifest_id> --grant-id ID --adapter {sqlite,email,payment} [adapter-specific options...]
+karmasakshi verify <manifest_id> --adapter {sqlite,email,payment} [...]
+karmasakshi compensate <manifest_id> --adapter {sqlite,email,payment} [...]
 
-chitragupta audit list
-chitragupta audit show <manifest_id>
-chitragupta audit verify
+karmasakshi audit list
+karmasakshi audit show <manifest_id>
+karmasakshi audit verify
 
-chitragupta passport <manifest_id> [--format json|markdown|html] [--grant-id ID] [-o FILE]
+karmasakshi passport <manifest_id> [--format json|markdown|html] [--grant-id ID] [-o FILE]
 
-chitragupta demo --all
-chitragupta doctor
-chitragupta version
+karmasakshi demo --all
+karmasakshi doctor
+karmasakshi version
 ```
 
 ## Adapter-specific `prepare`/`execute`/`verify`/`compensate` options
@@ -72,7 +72,7 @@ security-focused tool. Third-party adapters are used via the Python API.
 memory only. A fresh CLI process starts them from empty (zero balance,
 empty outbox) — there is no cross-process persistence for these two
 reference adapters (only `sqlite` persists naturally, via its own database
-file). Use `chitragupta demo --all` to see a full single-process
+file). Use `karmasakshi demo --all` to see a full single-process
 walkthrough of all three, or drive the Python API directly for real
 multi-step usage against the in-memory adapters.
 

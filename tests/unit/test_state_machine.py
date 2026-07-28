@@ -4,8 +4,8 @@ import itertools
 
 import pytest
 
-from chitragupta.errors import IllegalTransitionError
-from chitragupta.state_machine import (
+from karmasakshi.errors import IllegalTransitionError
+from karmasakshi.state_machine import (
     LifecycleRecord,
     LifecycleState,
     assert_legal_transition,
@@ -105,7 +105,7 @@ def test_lifecycle_record_rejects_illegal_transition(now):
 
 def test_every_non_terminal_state_can_reach_a_terminal_state():
     # Reachability sanity check via BFS over the transition graph.
-    from chitragupta.state_machine.states import TERMINAL_STATES, TRANSITIONS
+    from karmasakshi.state_machine.states import TERMINAL_STATES, TRANSITIONS
 
     for start in LifecycleState:
         if start in TERMINAL_STATES:

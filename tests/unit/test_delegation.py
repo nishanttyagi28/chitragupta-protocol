@@ -4,19 +4,19 @@ from datetime import timedelta
 
 import pytest
 
-from chitragupta.delegation import (
+from karmasakshi.delegation import (
     assert_grant_narrower_or_equal,
     assert_scope_narrower_or_equal,
     verify_delegation_chain,
 )
-from chitragupta.domain.common import MonetaryAmount
-from chitragupta.errors import (
+from karmasakshi.domain.common import MonetaryAmount
+from karmasakshi.errors import (
     ConstraintWideningError,
     GrantRevokedError,
     IncomparableConstraintError,
 )
-from chitragupta.grants.issuer import issue_grant
-from chitragupta.grants.model import ScopeConstraints
+from karmasakshi.grants.issuer import issue_grant
+from karmasakshi.grants.model import ScopeConstraints
 
 
 def _base_grant(now, issuer, subject, signing_key, **overrides):
@@ -310,7 +310,7 @@ def test_verify_delegation_chain_accepts_valid_chain(
     issuer_signing_key,
     now,
 ):
-    from chitragupta.stores.memory import InMemoryGrantStore
+    from karmasakshi.stores.memory import InMemoryGrantStore
 
     store = InMemoryGrantStore()
     root = _base_grant(now, human_principal, agent_principal, issuer_signing_key, grant_id="root")
@@ -342,8 +342,8 @@ def test_verify_delegation_chain_accepts_valid_chain(
 
 
 def test_verify_delegation_chain_rejects_empty_chain(keyring):
-    from chitragupta.errors import DelegationError
-    from chitragupta.stores.memory import InMemoryGrantStore
+    from karmasakshi.errors import DelegationError
+    from karmasakshi.stores.memory import InMemoryGrantStore
 
     with pytest.raises(DelegationError):
         verify_delegation_chain([], keyring=keyring, grant_store=InMemoryGrantStore(), now=None)
@@ -352,8 +352,8 @@ def test_verify_delegation_chain_rejects_empty_chain(keyring):
 def test_verify_delegation_chain_rejects_root_with_a_parent(
     keyring, human_principal, agent_principal, issuer_signing_key, now
 ):
-    from chitragupta.errors import DelegationError
-    from chitragupta.stores.memory import InMemoryGrantStore
+    from karmasakshi.errors import DelegationError
+    from karmasakshi.stores.memory import InMemoryGrantStore
 
     fake_root = _base_grant(
         now,
@@ -376,8 +376,8 @@ def test_verify_delegation_chain_rejects_broken_parent_link(
     issuer_signing_key,
     now,
 ):
-    from chitragupta.errors import DelegationError
-    from chitragupta.stores.memory import InMemoryGrantStore
+    from karmasakshi.errors import DelegationError
+    from karmasakshi.stores.memory import InMemoryGrantStore
 
     store = InMemoryGrantStore()
     root = _base_grant(now, human_principal, agent_principal, issuer_signing_key, grant_id="root")
@@ -401,7 +401,7 @@ def test_verify_delegation_chain_rejects_if_any_ancestor_revoked(
     issuer_signing_key,
     now,
 ):
-    from chitragupta.stores.memory import InMemoryGrantStore
+    from karmasakshi.stores.memory import InMemoryGrantStore
 
     store = InMemoryGrantStore()
     root = _base_grant(now, human_principal, agent_principal, issuer_signing_key, grant_id="root")

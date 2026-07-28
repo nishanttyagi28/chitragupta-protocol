@@ -7,7 +7,7 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from chitragupta.cli.app import app
+from karmasakshi.cli.app import app
 
 runner = CliRunner()
 

@@ -4,8 +4,8 @@ from datetime import timedelta
 
 import pytest
 
-from chitragupta.grants.model import ScopeConstraints
-from chitragupta.passports import build_passport, render_passport_html, render_passport_markdown
+from karmasakshi.grants.model import ScopeConstraints
+from karmasakshi.passports import build_passport, render_passport_html, render_passport_markdown
 
 
 def _authorize(engine, sealed, *, issuer, subject, issuer_signing_key, now, **overrides):
@@ -173,7 +173,7 @@ def test_passport_json_roundtrip(full_run, keyring):
         commit_result=commit_result,
         outcome_proof=outcome_proof,
     )
-    from chitragupta.passports.model import ActionPassport
+    from karmasakshi.passports.model import ActionPassport
 
     data = passport.model_dump_json()
     restored = ActionPassport.model_validate_json(data)

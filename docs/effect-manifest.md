@@ -1,6 +1,6 @@
 # The Effect Manifest
 
-`chitragupta.domain.manifest.EffectManifest` is the canonical representation
+`karmasakshi.domain.manifest.EffectManifest` is the canonical representation
 of the exact resolved effect an agent proposes. It is a frozen
 (`model_config = ConfigDict(extra="forbid", frozen=True)`) Pydantic v2
 model — unknown fields are rejected outright, and once constructed it

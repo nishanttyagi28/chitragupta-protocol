@@ -3,9 +3,9 @@ requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
 
 [project]
-name = "chitragupta-protocol"
+name = "karmasakshi-protocol"
 version = "0.1.0"
-description = "A verified-effect execution protocol that stages, seals, authorizes, executes, and proves consequential AI-agent actions."
+description = "Verified Effect Commit Protocol for AI agents: binds approval to one exact resolved effect, revalidates preconditions at commit time, executes exactly once, and independently verifies the real outcome."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 license = "MIT"
@@ -13,12 +13,13 @@ license-files = ["LICENSE"]
 authors = [{ name = "Nishant Tyagi", email = "jollytyagi360@gmail.com" }]
 keywords = [
     "ai-agents",
-    "authorization",
-    "security",
-    "audit",
+    "verified-effect",
+    "effect-manifest",
     "toctou",
-    "execution-grant",
+    "exactly-once",
+    "action-passport",
     "agent-safety",
+    "audit",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -46,16 +47,16 @@ dependencies = [
 redis = ["redis>=5.0,<6"]
 api = ["fastapi>=0.111,<1.0", "uvicorn[standard]>=0.30,<1.0", "jinja2>=3.1,<4", "python-multipart>=0.0.9"]
 langgraph = ["langgraph>=1.0.10,<2", "langchain-core>=1.0,<2", "langgraph-checkpoint>=4.1.1,<5"]
-all = ["chitragupta-protocol[redis,api,langgraph]"]
+all = ["karmasakshi-protocol[redis,api,langgraph]"]
 
 [project.scripts]
-chitragupta = "chitragupta.cli.app:main"
+karmasakshi = "karmasakshi.cli.app:main"
 
 [project.urls]
-Homepage = "https://github.com/nishanttyagi/chitragupta-protocol"
-Documentation = "https://github.com/nishanttyagi/chitragupta-protocol/tree/main/docs"
-Issues = "https://github.com/nishanttyagi/chitragupta-protocol/issues"
-Changelog = "https://github.com/nishanttyagi/chitragupta-protocol/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/nishanttyagi28/karmasakshi-protocol"
+Documentation = "https://github.com/nishanttyagi28/karmasakshi-protocol/tree/main/docs"
+Issues = "https://github.com/nishanttyagi28/karmasakshi-protocol/issues"
+Changelog = "https://github.com/nishanttyagi28/karmasakshi-protocol/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
@@ -74,7 +75,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/chitragupta"]
+packages = ["src/karmasakshi"]
 
 [tool.hatch.build.targets.sdist]
 # Screenshots/demo video are for the README on GitHub, not needed to build
@@ -98,7 +99,7 @@ ignore = ["S101"]
 "scripts/**" = ["S603", "S310", "E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["chitragupta"]
+known-first-party = ["karmasakshi"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -123,7 +124,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src/chitragupta"]
+source = ["src/karmasakshi"]
 branch = true
 
 [tool.coverage.report]

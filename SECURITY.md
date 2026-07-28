@@ -24,7 +24,7 @@ fixes. There is no long-term-support branch at this stage.
 
 ## Scope
 
-In scope: the core protocol (`chitragupta.domain`, `.crypto`, `.grants`,
+In scope: the core protocol (`karmasakshi.domain`, `.crypto`, `.grants`,
 `.engine`, `.delegation`, `.stores`, `.audit`), the reference adapters, the
 CLI, and the optional FastAPI control plane, as shipped in this
 repository.

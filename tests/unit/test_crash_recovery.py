@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from chitragupta.grants.model import ScopeConstraints
+from karmasakshi.grants.model import ScopeConstraints
 
 
 def _prepare_seal_authorize(
@@ -41,7 +41,7 @@ def test_ambiguous_recovery_detects_effect_that_already_happened(
 
     # Simulate: the adapter's external effect already happened (e.g. payment
     # provider received and processed the request), but the process crashed
-    # before chitragupta's local store could finalize the reservation --
+    # before karmasakshi's local store could finalize the reservation --
     # bypass engine.commit() entirely to model that ambiguity.
     fake_adapter.commit(manifest, grant=None, context=None)
     assert len(fake_adapter_state.committed) == 1

@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, timezone
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from chitragupta.errors import GrantExpiredError, GrantNotYetValidError
-from chitragupta.grants.model import ExecutionGrant, ScopeConstraints
-from chitragupta.grants.verifier import verify_grant_time_window
+from karmasakshi.errors import GrantExpiredError, GrantNotYetValidError
+from karmasakshi.grants.model import ExecutionGrant, ScopeConstraints
+from karmasakshi.grants.verifier import verify_grant_time_window
 
 _BASE = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 

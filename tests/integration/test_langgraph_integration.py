@@ -16,18 +16,18 @@ langgraph = pytest.importorskip("langgraph")
 
 from langgraph.types import Command  # noqa: E402
 
-from chitragupta.adapters.payment_simulator import (  # noqa: E402
+from karmasakshi.adapters.payment_simulator import (  # noqa: E402
     PaymentRequest,
     PaymentSimulator,
     PaymentSimulatorAdapter,
 )
-from chitragupta.audit.journal import AuditJournal  # noqa: E402
-from chitragupta.crypto import Keyring, generate_signing_key  # noqa: E402
-from chitragupta.domain.common import Principal  # noqa: E402
-from chitragupta.domain.enums import PrincipalType  # noqa: E402
-from chitragupta.engine import ChitraguptaEngine, EngineContext  # noqa: E402
-from chitragupta.integrations.langgraph import build_chitragupta_graph  # noqa: E402
-from chitragupta.stores.memory import InMemoryGrantStore  # noqa: E402
+from karmasakshi.audit.journal import AuditJournal  # noqa: E402
+from karmasakshi.crypto import Keyring, generate_signing_key  # noqa: E402
+from karmasakshi.domain.common import Principal  # noqa: E402
+from karmasakshi.domain.enums import PrincipalType  # noqa: E402
+from karmasakshi.engine import EngineContext, KarmaSakshiEngine  # noqa: E402
+from karmasakshi.integrations.langgraph import build_karmasakshi_graph  # noqa: E402
+from karmasakshi.stores.memory import InMemoryGrantStore  # noqa: E402
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def engine(signing_key):
         grant_store=InMemoryGrantStore(),
         audit=AuditJournal(),
     )
-    return ChitraguptaEngine(ctx)
+    return KarmaSakshiEngine(ctx)
 
 
 @pytest.fixture
@@ -60,7 +60,7 @@ def adapter(simulator):
 
 @pytest.fixture
 def app(engine, adapter, signing_key):
-    return build_chitragupta_graph(engine=engine, adapter=adapter, signing_key=signing_key)
+    return build_karmasakshi_graph(engine=engine, adapter=adapter, signing_key=signing_key)
 
 
 AGENT = Principal(principal_id="agent-1", principal_type=PrincipalType.AGENT)

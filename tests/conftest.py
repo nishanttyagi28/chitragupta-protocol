@@ -6,16 +6,16 @@ from typing import Any
 
 import pytest
 
-from chitragupta.adapters.base import (
+from karmasakshi.adapters.base import (
     CommitResult,
     CompensationResult,
     OutcomeProof,
     PreconditionResult,
 )
-from chitragupta.audit.journal import AuditJournal
-from chitragupta.config.clock import FixedClock
-from chitragupta.crypto import Keyring, SigningKey, generate_signing_key
-from chitragupta.domain import (
+from karmasakshi.audit.journal import AuditJournal
+from karmasakshi.config.clock import FixedClock
+from karmasakshi.crypto import Keyring, SigningKey, generate_signing_key
+from karmasakshi.domain import (
     AdapterIdentity,
     BlastRadiusClassification,
     EffectManifest,
@@ -26,8 +26,8 @@ from chitragupta.domain import (
     RiskClassification,
     StateFingerprint,
 )
-from chitragupta.engine import ChitraguptaEngine, EngineContext
-from chitragupta.stores.memory import InMemoryGrantStore
+from karmasakshi.engine import EngineContext, KarmaSakshiEngine
+from karmasakshi.stores.memory import InMemoryGrantStore
 
 
 @pytest.fixture
@@ -138,7 +138,7 @@ class FakeAdapterState:
     compensation_attempted: bool = True
     compensation_succeeded: bool = True
     # Simulates the adapter's own external system of record, keyed by
-    # idempotency_key -- independent of anything chitragupta's grant store
+    # idempotency_key -- independent of anything karmasakshi's grant store
     # tracks. Used to test ambiguous-outcome crash recovery.
     external_effects: dict[str, str] = field(default_factory=dict)
 
@@ -147,7 +147,7 @@ class FakeAdapter:
     """A minimal in-memory adapter used only to exercise the engine in tests.
 
     Real adapters (sqlite/email/payment) are implemented in
-    ``chitragupta.adapters`` for phase 8; this fake exists purely so engine
+    ``karmasakshi.adapters`` for phase 8; this fake exists purely so engine
     orchestration can be unit-tested independent of any real side effect.
     """
 
@@ -233,6 +233,6 @@ def engine_factory(keyring, fixed_clock):
             audit=AuditJournal(clock=fixed_clock),
             clock=fixed_clock,
         )
-        return ChitraguptaEngine(ctx)
+        return KarmaSakshiEngine(ctx)
 
     return _factory

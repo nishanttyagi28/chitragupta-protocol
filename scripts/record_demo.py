@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Record a real, reproducible demo video of the Chitragupta Protocol
+"""Record a real, reproducible demo video of the KarmaSakshi Protocol
 public sandbox: the actual running application, driven by a real browser
 via Playwright -- not a hand-designed animation.
 
@@ -8,7 +8,7 @@ Produces:
     docs/assets/demo/demo-preview.gif  (optimized loop, embedded in README)
 
 Prerequisites:
-    pip install chitragupta-protocol[api]
+    pip install karmasakshi-protocol[api]
     pip install playwright
     playwright install chromium
     ffmpeg on PATH (https://ffmpeg.org/) -- used only to transcode the raw
@@ -114,7 +114,7 @@ def record(base_url: str, video_dir: Path) -> Path:
         _title_card(
             page,
             "Did the exact approved effect happen — or just an API call that returned 200?",
-            "Chitragupta Protocol: seal the intended effect, verify the actual outcome.",
+            "KarmaSakshi Protocol: seal the intended effect, witness the actual outcome.",
             10000,
         )
 
@@ -180,12 +180,12 @@ def record(base_url: str, video_dir: Path) -> Path:
         _title_card(
             page,
             "AgentEval asks: did the agent behave correctly during development and CI?",
-            "Chitragupta asks: did the exact approved effect match the actual executed outcome?",
+            "KarmaSakshi asks: did the exact approved effect match the actual executed outcome?",
             11000,
         )
         _title_card(
             page,
-            "chitragupta-protocol",
+            "karmasakshi-protocol",
             "MIT licensed • reference implementation • not a security certification",
             5500,
         )
@@ -233,7 +233,7 @@ def transcode(webm_path: Path) -> None:
     # most representative ~20s (manifest sealed -> approve -> execution
     # result) rather than encoding the entire ~90s recording at GIF sizes.
     gif_path = OUT_DIR / "demo-preview.gif"
-    palette_path = Path(tempfile.gettempdir()) / "chitragupta-demo-palette.png"
+    palette_path = Path(tempfile.gettempdir()) / "karmasakshi-demo-palette.png"
     clip_start, clip_duration = "14", "20"
     filters = "fps=6,scale=640:-1:flags=lanczos"
     subprocess.run(
@@ -276,7 +276,7 @@ def transcode(webm_path: Path) -> None:
 
 
 def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="chitragupta-video-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="karmasakshi-video-") as tmp:
         video_dir = Path(tmp)
         with demo_server() as base_url:
             webm_path = record(base_url, video_dir)

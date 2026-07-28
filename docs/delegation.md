@@ -49,9 +49,9 @@ from `ConstraintWideningError`, and callers must treat it identically:
 reject the delegation. There is no silent "assume compatible" path.
 
 ```python
-from chitragupta.delegation import assert_scope_narrower_or_equal
-from chitragupta.domain.common import MonetaryAmount
-from chitragupta.grants.model import ScopeConstraints
+from karmasakshi.delegation import assert_scope_narrower_or_equal
+from karmasakshi.domain.common import MonetaryAmount
+from karmasakshi.grants.model import ScopeConstraints
 
 parent = ScopeConstraints(max_amount=MonetaryAmount(currency="INR", minor_units=500_000))
 child = ScopeConstraints(max_amount=MonetaryAmount(currency="USD", minor_units=100))

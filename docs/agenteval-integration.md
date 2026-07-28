@@ -1,6 +1,6 @@
 # AgentEval Bridge
 
-`chitragupta.integrations.agenteval` exports a failed or mismatched
+`karmasakshi.integrations.agenteval` exports a failed or mismatched
 production execution as a **versioned, neutral regression fixture** —
 redacted, reproducible information only, never credentials or raw
 sensitive data.
@@ -20,7 +20,7 @@ module needing to change.
 ## Usage
 
 ```python
-from chitragupta.integrations.agenteval import export_regression_fixture, write_fixture
+from karmasakshi.integrations.agenteval import export_regression_fixture, write_fixture
 
 fixture = export_regression_fixture(
     manifest=sealed_manifest.manifest,
@@ -52,6 +52,6 @@ asserts the serialized fixture never contains the substrings `"password"`,
 
 ## Demo
 
-`chitragupta demo --all` scenario 15 constructs a deliberate outcome
+`karmasakshi demo --all` scenario 15 constructs a deliberate outcome
 mismatch (scenario 12) and exports it as a real fixture file, printing the
 path.

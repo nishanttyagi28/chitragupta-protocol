@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from chitragupta.audit import AuditJournal
-from chitragupta.config import FixedClock
-from chitragupta.errors import AuditTamperedError, AuditWriteError
+from karmasakshi.audit import AuditJournal
+from karmasakshi.config import FixedClock
+from karmasakshi.errors import AuditTamperedError, AuditWriteError
 
 
 def test_first_event_has_no_previous_hash(now):

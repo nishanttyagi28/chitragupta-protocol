@@ -1,0 +1,12 @@
+{% extends "demo/base.html" %}
+{% block title %}Not found — KarmaSakshi sandbox{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Not found in this sandbox session</h1>
+  <p>
+    No {{ kind }} <code>{{ key }}</code> exists in the current sandbox session. The demo
+    auto-resets periodically, or you may have followed a stale link.
+  </p>
+  <p><a class="btn" href="/demo/">&larr; back to the guided demo</a></p>
+</div>
+{% endblock %}

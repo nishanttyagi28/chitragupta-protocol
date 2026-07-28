@@ -4,10 +4,10 @@ import sqlite3
 
 import pytest
 
-from chitragupta.audit.journal import AuditJournal
-from chitragupta.audit.sqlite_backend import SQLiteAuditBackend
-from chitragupta.config.clock import FixedClock
-from chitragupta.errors import AuditTamperedError
+from karmasakshi.audit.journal import AuditJournal
+from karmasakshi.audit.sqlite_backend import SQLiteAuditBackend
+from karmasakshi.config.clock import FixedClock
+from karmasakshi.errors import AuditTamperedError
 
 
 @pytest.fixture

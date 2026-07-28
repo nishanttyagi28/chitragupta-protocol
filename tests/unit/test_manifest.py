@@ -5,9 +5,9 @@ from datetime import timedelta
 import pytest
 from pydantic import ValidationError
 
-from chitragupta.domain import EffectManifest
-from chitragupta.errors import SchemaVersionError
-from chitragupta.protocol.versioning import assert_supported_schema_version
+from karmasakshi.domain import EffectManifest
+from karmasakshi.errors import SchemaVersionError
+from karmasakshi.protocol.versioning import assert_supported_schema_version
 
 
 def test_manifest_canonical_hash_is_deterministic(manifest_factory):

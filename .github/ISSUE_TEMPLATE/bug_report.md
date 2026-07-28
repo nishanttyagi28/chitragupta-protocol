@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a bug in Chitragupta Protocol
+about: Report a bug in KarmaSakshi Protocol
 title: "[Bug] "
 labels: bug
 ---
@@ -22,7 +22,7 @@ What you expected to happen.
 What actually happened (include the full traceback/error message).
 
 **Environment**
-- chitragupta-protocol version:
+- karmasakshi-protocol version:
 - Python version:
 - OS:
 - Storage backend (memory / sqlite / redis):

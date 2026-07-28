@@ -1,11 +1,47 @@
-# Chitragupta Protocol
+# KarmaSakshi Protocol
 
-**Seal the intended effect. Verify the actual outcome.**
+**Seal the intended effect. Witness the actual outcome.**
+
+**A Verified Effect Commit Protocol for AI Agents.**
+
+KarmaSakshi Protocol cryptographically binds approval to one exact
+resolved effect, revalidates its external preconditions at commit time,
+executes it with exactly-once safeguards, independently verifies the
+resulting external state, and produces an Action Passport proving the
+intent-to-outcome chain.
+
+**About the name:** "Karma" means action or deed; "Sakshi" means witness.
+KarmaSakshi is a system that witnesses and proves the relationship between
+an approved action and its actual external outcome — nothing more claimed
+than that.
 
 **Status: v0.1.0, feature-complete reference implementation of an explicitly
 versioned, experimental protocol.** This is not a certified, audited, or
 "production proven" system — see [Limitations](#limitations) and
 [docs/threat-model.md](docs/threat-model.md).
+
+## At a glance: allowed tool call vs. verified effect
+
+```text
+Generic tool-permission layer / policy gate:
+  agent.call("payment.transfer", {...})  ->  ALLOWED (schema matched, policy passed)
+  ... but was INR 1,500 actually paid to customer-priya, exactly once,
+  and independently confirmed against the real ledger? Not answered here.
+
+KarmaSakshi Protocol:
+  PROPOSE -> PREPARE -> SEAL -> AUTHORIZE -> COMMIT -> VERIFY -> PROVE
+  ALLOWED, AND: sealed manifest hash sha256:e5590..., grant bound to that
+  exact hash, commit succeeded, independent re-observation of the payment
+  ledger confirms matched_expected=True, Action Passport issued.
+```
+
+An "allowed" tool call answers one question: *may the agent attempt this?*
+A verified effect answers a different, harder question: *did the exact
+thing a human approved actually happen, once, and can it be proven?* See
+[Not another agent permission layer](#not-another-agent-permission-layer)
+below for how this compares to IAM, OAuth-style delegation, and policy
+gateways. Full runnable version of the walkthrough above:
+[A concrete refund example](#a-concrete-refund-example-python-api).
 
 ## The business problem
 
@@ -28,7 +64,7 @@ None of that requires a malicious model — a timeout-and-retry loop, a race
 between two approvals, or a database row that changed between "approved"
 and "executed" is enough.
 
-**Chitragupta Protocol** resolves the proposed action into an exact,
+**KarmaSakshi Protocol** resolves the proposed action into an exact,
 canonical **Effect Manifest**, seals it cryptographically, binds
 authorization to that *sealed effect* rather than to a tool name,
 re-validates external state immediately before committing, executes with
@@ -36,17 +72,46 @@ exactly-once semantics, and independently verifies the actual outcome
 afterward — producing a signed **Action Passport** as proof of what really
 happened.
 
+## Not another agent permission layer
+
+Several categories of tooling already exist around AI agents acting in the
+world, and it's easy to mistake KarmaSakshi Protocol for a reskin of one of
+them. It isn't — each answers a different question, and KarmaSakshi
+Protocol assumes the others (if present) have already run:
+
+| Layer | Question it answers |
+|---|---|
+| **IAM** | *Who is this agent, and what identity does it hold?* |
+| **OAuth-style delegation / credential brokers** | *Which service credentials, under what scope, may this agent use?* |
+| **Policy gates / agent gateways** | *Is this tool call allowed right now, against current policy?* |
+| **KarmaSakshi Protocol** | *Did the exact real-world effect a human approved become the exact real-world outcome that actually happened — provably?* |
+
+Concretely: an IAM system can confirm the caller really is `refund-agent`.
+A credential broker can hand that agent a short-lived, scoped API key for
+the payments service. A policy gate can confirm `payment.transfer` is a
+tool this agent is allowed to call at all. None of those three — by their
+own stated scope — resolve the call into one exact, cryptographically
+sealed amount/recipient/precondition set; re-check that nothing changed
+between approval and execution; guarantee the payment happens at most
+once even under retries; or independently re-observe the payment ledger
+afterward to prove the money actually moved to the right place. That's
+the specific, narrower job KarmaSakshi Protocol does, and it's designed to
+sit *after* those other layers, not replace them. A factual,
+sourced, capability-boundary comparison against five publicly documented
+products in this space (Grantex, AgentLattice, Xybern, OpenLeash, and
+Meandr) is in [docs/comparison.md](docs/comparison.md#capability-boundary-comparison).
+
 ## Try it live
 
 <p align="center">
-  <img src="docs/assets/demo/demo-preview.gif" alt="Chitragupta Protocol sandbox demo: an agent proposes an INR 1,500 refund, a human approves the exact sealed effect, and the payment executes exactly once with an independently verified outcome" width="640" />
+  <img src="docs/assets/demo/demo-preview.gif" alt="KarmaSakshi Protocol sandbox demo: an agent proposes an INR 1,500 refund, a human approves the exact sealed effect, and the payment executes exactly once with an independently verified outcome" width="640" />
 </p>
 
 **Full demo video (88s, with captions):** [docs/assets/demo/demo.mp4](docs/assets/demo/demo.mp4)
 — shows the full story: an agent proposes a refund, the exact Effect
 Manifest is sealed, a human approves it, execution succeeds exactly once
 and is independently verified, an Action Passport is produced, then an
-agent tampers with the recipient after approval and Chitragupta blocks it.
+agent tampers with the recipient after approval and KarmaSakshi blocks it.
 
 Reproduce it yourself: `python scripts/record_demo.py` (requires
 Playwright + ffmpeg — see the script's docstring). Same for the
@@ -60,8 +125,8 @@ what this repository can do on its own. Run it yourself in under a minute
 instead:
 
 ```bash
-pip install "chitragupta-protocol[api]"
-CHITRAGUPTA_PUBLIC_DEMO=1 python -m uvicorn chitragupta.api.app:create_app --factory
+pip install "karmasakshi-protocol[api]"
+KARMASAKSHI_PUBLIC_DEMO=1 python -m uvicorn karmasakshi.api.app:create_app --factory
 # open http://127.0.0.1:8000/demo/
 ```
 
@@ -85,12 +150,12 @@ or with Docker: `docker compose --profile demo up demo` (see
 AgentEval:
   Did the agent behave correctly during development and CI?
 
-Chitragupta Protocol:
+KarmaSakshi Protocol:
   Did the exact approved effect match the actual executed outcome?
 ```
 
 AgentEval evaluates agent behavior offline, before and during CI.
-Chitragupta Protocol gates and proves individual consequential actions at
+KarmaSakshi Protocol gates and proves individual consequential actions at
 runtime, in production. They are complementary, not competitors — see
 [docs/comparison.md](docs/comparison.md) and the
 [AgentEval bridge](docs/agenteval-integration.md), which exports a failed or
@@ -108,7 +173,7 @@ different from what a human actually looked at when they clicked approve.
 Traditional permission layer:
   Agent may call payment.transfer.
 
-Chitragupta Protocol:
+KarmaSakshi Protocol:
   Agent may execute exactly one INR 1,500 transfer to beneficiary X,
   for invoice Y, before timestamp Z, while the referenced invoice and
   beneficiary remain in the state observed during preparation.
@@ -178,21 +243,21 @@ Full transition table and rationale: [docs/state-machine.md](docs/state-machine.
 ```python
 from datetime import datetime, timedelta, timezone
 
-from chitragupta.adapters.payment_simulator import (
+from karmasakshi.adapters.payment_simulator import (
     PaymentRequest,
     PaymentSimulator,
     PaymentSimulatorAdapter,
 )
-from chitragupta.audit.journal import AuditJournal
-from chitragupta.crypto import Keyring, generate_signing_key
-from chitragupta.domain.common import Principal
-from chitragupta.domain.enums import PrincipalType
-from chitragupta.engine import ChitraguptaEngine, EngineContext
-from chitragupta.grants.model import ScopeConstraints
-from chitragupta.stores.memory import InMemoryGrantStore
+from karmasakshi.audit.journal import AuditJournal
+from karmasakshi.crypto import Keyring, generate_signing_key
+from karmasakshi.domain.common import Principal
+from karmasakshi.domain.enums import PrincipalType
+from karmasakshi.engine import KarmaSakshiEngine, EngineContext
+from karmasakshi.grants.model import ScopeConstraints
+from karmasakshi.stores.memory import InMemoryGrantStore
 
 signing_key = generate_signing_key("issuer-1")
-engine = ChitraguptaEngine(
+engine = KarmaSakshiEngine(
     EngineContext(
         keyring=Keyring([signing_key.verification_key()]),
         grant_store=InMemoryGrantStore(),
@@ -245,29 +310,53 @@ print(result.success, proof.matched_expected)  # True True
 If an agent swaps the beneficiary, changes the amount, or replays the same
 grant against a second payment before this point, every one of those is a
 distinct, tested failure mode — not a hypothetical. Try it interactively in
-the [live sandbox](#try-it-live) or run `chitragupta demo --all`.
+the [live sandbox](#try-it-live) or run `karmasakshi demo --all`.
 
 ## Core security invariants
 
-30 invariants are implemented and tested — a sample:
+30 invariants are implemented and tested. The **primary differentiators**
+— the specific claims that distinguish KarmaSakshi Protocol from a
+tool-permission layer, IAM system, or credential broker — are:
 
-- A grant issued for manifest A cannot execute manifest B (bound by hash).
-- A single-use grant cannot execute more than once, even under concurrent
-  retries (atomic reserve/commit — memory lock, SQLite `UPDATE...WHERE`, or
-  a Redis Lua script).
-- External state changes after preparation invalidate the manifest unless
-  safely re-prepared (TOCTOU — see below).
-- A child delegated grant can never be wider than its parent on any
-  dimension (recipients, amount, time window, use count, audience).
-- Audit records are append-only and hash-chained; tampering with any past
-  event is detected deterministically.
-- The agent/model can never be the principal that issues or authorizes a
-  grant — structurally enforced, not a policy convention.
-- Irreversible effects are never described as reversible; compensation is
-  always best-effort and says so honestly.
+1. **Canonical Effect Manifest** — exact target, parameters, expected
+   state, and preconditions resolved into one canonically-hashed object
+   (`EffectManifest.canonical_hash()`), not a tool name.
+2. **Cryptographic binding of approval to that exact manifest** — a grant
+   is only valid for the one sealed effect it was issued against
+   (`grant.manifest_hash == sealed.seal.manifest_hash`, invariant #2).
+3. **Commit-time TOCTOU revalidation** — `validate_preconditions()` is
+   re-checked immediately before the effect, not only at approval time;
+   fails closed with `StaleManifestError` if anything drifted.
+4. **Atomic exactly-once successful-effect semantics** — a slot is
+   reserved before the adapter runs and only permanently consumed on
+   success; concurrent retries race for one slot, exactly one wins.
+5. **Explicit ambiguous-outcome crash recovery, never a blind retry** —
+   `engine.recover_ambiguous_commit()` re-observes external state before
+   any retry is considered safe (see [docs/crash-recovery.md](docs/crash-recovery.md)).
+6. **Independent post-commit observation of real external state** —
+   `adapter.verify()` re-queries the adapter's own external system of
+   record; a successful commit response is never treated as proof.
+7. **Mismatch detection** — when a provider reports success but reality
+   differs, `OutcomeProof.matched_expected=False` is recorded, not hidden.
+8. **Action Passport** — independently re-verifies the seal, grant, and
+   audit chain at generation time and proves the full proposed → approved
+   → committed → verified chain for one specific effect.
+9. **Honest compensation and irreversible-effect semantics** —
+   compensation is always best-effort and says so; irreversible effects
+   are never described as reversible.
 
-Full list of all 30, each mapped to its enforcing code and the test that
-verifies it: [docs/security-model.md](docs/security-model.md).
+**Supporting security controls** (real, tested, but not the primary
+claim): grants are scoped, time-limited, single-use-by-default, and
+revocable; delegated child grants can never be wider than their parent on
+any dimension (recipients, amount, time window, use count, audience); the
+agent/model can never be the principal that issues or authorizes a grant
+(invariant #30); the audit journal is append-only and hash-chained. These
+exist to bound *who may approve what, for how long* — they are necessary,
+but the manifest-sealing/TOCTOU/exactly-once/verification chain above is
+what actually proves the effect happened as approved.
+
+Full list of all 30 invariants, each mapped to its enforcing code and the
+test that verifies it: [docs/security-model.md](docs/security-model.md).
 
 ## Exactly-once execution and TOCTOU protection
 
@@ -294,14 +383,14 @@ blindly retries an ambiguous commit.
 
 ## LangGraph integration
 
-Optional (`pip install "chitragupta-protocol[langgraph]"`); the core engine
+Optional (`pip install "karmasakshi-protocol[langgraph]"`); the core engine
 has zero import-time dependency on LangGraph.
 
 ```python
-from chitragupta.integrations.langgraph import build_chitragupta_graph
+from karmasakshi.integrations.langgraph import build_karmasakshi_graph
 from langgraph.types import Command
 
-app = build_chitragupta_graph(engine=engine, adapter=adapter, signing_key=signing_key)
+app = build_karmasakshi_graph(engine=engine, adapter=adapter, signing_key=signing_key)
 
 result = app.invoke({"request": my_request}, config=config)
 # result["status"] == "sealed"; the graph is paused at "authorize"
@@ -319,8 +408,8 @@ resumed = app.invoke(
 # resumed["status"] == "verified"
 ```
 
-`build_chitragupta_graph()` captures `signing_key` in the *builder's*
-closure — never in `ChitraguptaGraphState` — so it can never be serialized
+`build_karmasakshi_graph()` captures `signing_key` in the *builder's*
+closure — never in `KarmaSakshiGraphState` — so it can never be serialized
 into a LangGraph checkpoint or become visible to whatever code produced the
 agent's request. Full write-up, including the denied/expired/tampered
 cases and what is/isn't demonstrated:
@@ -329,10 +418,10 @@ cases and what is/isn't demonstrated:
 ## Five-minute quickstart
 
 ```bash
-pip install chitragupta-protocol
-chitragupta init
-chitragupta key generate issuer-1
-chitragupta demo --all
+pip install karmasakshi-protocol
+karmasakshi init
+karmasakshi key generate issuer-1
+karmasakshi demo --all
 ```
 
 `demo --all` runs a self-contained, deterministic walkthrough of every
@@ -342,7 +431,7 @@ external services, no real money, no real email. Exact output from a real
 run on this branch:
 
 ```text
-Chitragupta Protocol -- deterministic demonstration suite
+KarmaSakshi Protocol -- deterministic demonstration suite
 
 PASS  1. Action without a valid grant is blocked: UnknownKeyError
 PASS  2. Exact approved email succeeds: delivered=True, verified=True
@@ -372,32 +461,32 @@ it can be driven across separate CLI invocations end-to-end. Real,
 verified output from this exact sequence:
 
 ```bash
-chitragupta init
-chitragupta key generate issuer-1
+karmasakshi init
+karmasakshi key generate issuer-1
 
-chitragupta prepare --adapter sqlite --actor-id refund-agent \
+karmasakshi prepare --adapter sqlite --actor-id refund-agent \
   --sqlite-db-path ledger.db --sqlite-table refunds \
   --row-operation insert --row-id refund-8842 --new-balance 150000
-# Prepared manifest f049b954-... -> .chitragupta/manifests/f049b954-....unsealed.json
+# Prepared manifest f049b954-... -> .karmasakshi/manifests/f049b954-....unsealed.json
 
-chitragupta seal f049b954-... --key-id issuer-1
+karmasakshi seal f049b954-... --key-id issuer-1
 # Sealed f049b954-...: sha256:43113e4e3038...
 
-chitragupta grant issue f049b954-... --issuer-id finance-approver \
+karmasakshi grant issue f049b954-... --issuer-id finance-approver \
   --subject-id refund-agent --key-id issuer-1 --audience sqlite.row
 # Issued grant 4f55c7bb-... for manifest f049b954-...
 
-chitragupta execute f049b954-... --grant-id 4f55c7bb-... \
+karmasakshi execute f049b954-... --grant-id 4f55c7bb-... \
   --adapter sqlite --sqlite-db-path ledger.db --sqlite-table refunds
 # Commit succeeded for f049b954-...: refunds:refund-8842
 
-chitragupta verify f049b954-... --adapter sqlite --sqlite-db-path ledger.db --sqlite-table refunds
+karmasakshi verify f049b954-... --adapter sqlite --sqlite-db-path ledger.db --sqlite-table refunds
 # Verification for f049b954-...: matched expected outcome
 
-chitragupta audit verify
+karmasakshi audit verify
 # Audit chain verified: no tampering detected.
 
-chitragupta doctor
+karmasakshi doctor
 # OK workspace / OK keys / OK grant_store / OK audit / OK clock / OK adapters
 ```
 
@@ -406,10 +495,10 @@ in-memory-adapter cross-process limitation: [docs/cli.md](docs/cli.md).
 
 ## Action Passport example
 
-`chitragupta passport <manifest_id>` (or the `/demo/passport/{id}` page in
+`karmasakshi passport <manifest_id>` (or the `/demo/passport/{id}` page in
 the sandbox) independently re-verifies the seal, grant, and audit chain at
 generation time — it never trusts stored flags. Real output from the CLI
-sequence above (`chitragupta passport f049b954-... --format markdown`):
+sequence above (`karmasakshi passport f049b954-... --format markdown`):
 
 ```text
 # Action Passport: f049b954-8d38-41db-859d-a4be81a14484
@@ -464,15 +553,15 @@ means precisely: [docs/action-passports.md](docs/action-passports.md).
 
 ## Deployment
 
-The optional FastAPI control plane (`pip install "chitragupta-protocol[api]"`)
+The optional FastAPI control plane (`pip install "karmasakshi-protocol[api]"`)
 ships in three modes, controlled entirely by environment variables — see
 [docs/deployment.md](docs/deployment.md) for the full reference:
 
 | Mode | Env var | Who can reach it |
 |---|---|---|
-| Authenticated control plane | `CHITRAGUPTA_API_TOKEN=<token>` | Bearer-token holders only |
-| Local dev (unauthenticated) | `CHITRAGUPTA_API_DEV_MODE=1` | Anyone — local machine only, never deploy this |
-| **Public sandbox demo** | `CHITRAGUPTA_PUBLIC_DEMO=1` | Anyone, safely — simulators only, rate-limited, auto-resetting |
+| Authenticated control plane | `KARMASAKSHI_API_TOKEN=<token>` | Bearer-token holders only |
+| Local dev (unauthenticated) | `KARMASAKSHI_API_DEV_MODE=1` | Anyone — local machine only, never deploy this |
+| **Public sandbox demo** | `KARMASAKSHI_PUBLIC_DEMO=1` | Anyone, safely — simulators only, rate-limited, auto-resetting |
 
 `Dockerfile` builds and runs the control plane with a `/health` health
 check; `render.yaml` is a ready-to-use [Render](https://render.com)
@@ -483,7 +572,7 @@ not hidden.
 
 ## Test count and coverage
 
-From a real run on this branch (`pytest --cov=chitragupta --cov-report=term-missing`):
+From a real run on this branch (`pytest --cov=karmasakshi --cov-report=term-missing`):
 
 ```text
 296 passed, 6 skipped (Redis integration tests -- no local Redis in this

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Capture real screenshots of the running Chitragupta Protocol public demo.
+"""Capture real screenshots of the running KarmaSakshi Protocol public demo.
 
 Starts the actual FastAPI app (the same code path used by the Dockerfile
 and render.yaml), drives it with a real Chromium browser via Playwright,
@@ -7,7 +7,7 @@ and saves screenshots of genuine rendered pages -- no mockups, no hand-edited
 images. Re-run any time the demo UI changes to refresh docs/assets/screenshots/.
 
 Prerequisites:
-    pip install chitragupta-protocol[api]
+    pip install karmasakshi-protocol[api]
     pip install playwright
     playwright install chromium
 

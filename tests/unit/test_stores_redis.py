@@ -46,7 +46,7 @@ def redis_client():
 
 @pytest.fixture
 def store(redis_client):
-    from chitragupta.stores.redis_store import RedisGrantStore
+    from karmasakshi.stores.redis_store import RedisGrantStore
 
     return RedisGrantStore(redis_client, namespace=f"test-{uuid.uuid4().hex[:8]}")
 

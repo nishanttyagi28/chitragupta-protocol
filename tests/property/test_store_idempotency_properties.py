@@ -3,7 +3,7 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from chitragupta.stores.memory import InMemoryGrantStore
+from karmasakshi.stores.memory import InMemoryGrantStore
 
 _actions = st.lists(st.sampled_from(["reserve", "release", "commit"]), min_size=1, max_size=30)
 

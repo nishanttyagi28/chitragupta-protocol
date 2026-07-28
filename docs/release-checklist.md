@@ -2,12 +2,12 @@
 
 1. Update `CHANGELOG.md` with the new version's notes.
 2. Bump the version in `pyproject.toml` (`[project].version`) and
-   `src/chitragupta/__init__.py` (`__version__`) — they must match.
+   `src/karmasakshi/__init__.py` (`__version__`) — they must match.
 3. Run the full local verification pass (see README/CI for the exact
    commands): `ruff format --check .`, `ruff check .`, `mypy src`,
-   `pytest`, `pytest --cov=chitragupta --cov-report=term-missing`,
+   `pytest`, `pytest --cov=karmasakshi --cov-report=term-missing`,
    `python -m build`, `python -m twine check dist/*`, `pip-audit`,
-   `bandit -r src/chitragupta`.
+   `bandit -r src/karmasakshi`.
 4. Confirm CI is green on `main` for the commit being released.
 5. Tag the release: `git tag vX.Y.Z && git push origin vX.Y.Z`. This
    triggers `.github/workflows/release.yml`, which builds the package and
@@ -17,9 +17,9 @@
 6. After the tag is pushed and the release workflow succeeds, create a
    GitHub Release from the tag with the relevant `CHANGELOG.md` section as
    the release notes.
-7. Verify the published package: `pip install chitragupta-protocol==X.Y.Z`
-   in a clean virtualenv, then `python -c "import chitragupta; print(chitragupta.__version__)"`
-   and `chitragupta doctor`.
+7. Verify the published package: `pip install karmasakshi-protocol==X.Y.Z`
+   in a clean virtualenv, then `python -c "import karmasakshi; print(karmasakshi.__version__)"`
+   and `karmasakshi doctor`.
 
 None of steps 5-7 happen automatically from a local `git push` to `main` —
 publishing requires an explicit tag push and environment approval, by

@@ -3,10 +3,10 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from chitragupta.delegation import assert_scope_narrower_or_equal
-from chitragupta.domain.common import MonetaryAmount
-from chitragupta.errors import ConstraintWideningError, IncomparableConstraintError
-from chitragupta.grants.model import ScopeConstraints
+from karmasakshi.delegation import assert_scope_narrower_or_equal
+from karmasakshi.domain.common import MonetaryAmount
+from karmasakshi.errors import ConstraintWideningError, IncomparableConstraintError
+from karmasakshi.grants.model import ScopeConstraints
 
 _recipient_universe = ["merchant-A", "merchant-B", "merchant-C", "merchant-D", "merchant-E"]
 _recipient_sets = st.frozensets(st.sampled_from(_recipient_universe), min_size=1)

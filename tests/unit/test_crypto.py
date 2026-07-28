@@ -4,12 +4,12 @@ import base64
 
 import pytest
 
-from chitragupta.crypto import Keyring, generate_signing_key, save_signing_key_to_file
-from chitragupta.crypto.keys import (
+from karmasakshi.crypto import Keyring, generate_signing_key, save_signing_key_to_file
+from karmasakshi.crypto.keys import (
     load_signing_key_from_env,
     load_signing_key_from_file,
 )
-from chitragupta.errors import (
+from karmasakshi.errors import (
     InvalidSignatureError,
     KeyLoadError,
     UnknownKeyError,
@@ -107,19 +107,19 @@ def test_load_signing_key_from_file_rejects_bad_length(tmp_path):
 def test_load_signing_key_from_env(monkeypatch):
     key = generate_signing_key("k1")
     raw_b64 = base64.b64encode(key.private_bytes_for_storage()).decode("ascii")
-    monkeypatch.setenv("CHITRAGUPTA_TEST_KEY", raw_b64)
-    loaded = load_signing_key_from_env("CHITRAGUPTA_TEST_KEY", "k1")
+    monkeypatch.setenv("KARMASAKSHI_TEST_KEY", raw_b64)
+    loaded = load_signing_key_from_env("KARMASAKSHI_TEST_KEY", "k1")
     sig = loaded.sign(b"env round trip")
     key.verification_key().verify(b"env round trip", sig)
 
 
 def test_load_signing_key_from_env_missing(monkeypatch):
-    monkeypatch.delenv("CHITRAGUPTA_TEST_KEY_MISSING", raising=False)
+    monkeypatch.delenv("KARMASAKSHI_TEST_KEY_MISSING", raising=False)
     with pytest.raises(KeyLoadError):
-        load_signing_key_from_env("CHITRAGUPTA_TEST_KEY_MISSING", "k1")
+        load_signing_key_from_env("KARMASAKSHI_TEST_KEY_MISSING", "k1")
 
 
 def test_load_signing_key_from_env_invalid_base64(monkeypatch):
-    monkeypatch.setenv("CHITRAGUPTA_TEST_KEY_BAD", "not base64 at all !!")
+    monkeypatch.setenv("KARMASAKSHI_TEST_KEY_BAD", "not base64 at all !!")
     with pytest.raises(KeyLoadError):
-        load_signing_key_from_env("CHITRAGUPTA_TEST_KEY_BAD", "k1")
+        load_signing_key_from_env("KARMASAKSHI_TEST_KEY_BAD", "k1")
