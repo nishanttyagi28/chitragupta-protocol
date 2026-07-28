@@ -1,0 +1,34 @@
+# Render.com Blueprint for the public Chitragupta Protocol sandbox demo.
+#
+# This deploys the *existing* Dockerfile unmodified -- the same image used
+# for local `docker compose up` -- in the safe public-demo configuration
+# (CHITRAGUPTA_PUBLIC_DEMO=1). It never sets CHITRAGUPTA_API_DEV_MODE or
+# CHITRAGUPTA_API_TOKEN, so the authenticated control-plane API/console
+# stay fail-closed and unreachable; only /demo/*, /health, and /ready are
+# served. See docs/deployment.md for the full public-demo safety model and
+# a walkthrough of deploying this blueprint.
+#
+# Free-tier honesty note: Render's free web service plan spins the
+# instance down after ~15 minutes of no traffic and takes 30-60s to wake
+# back up on the next request. That is expected behavior for this sandbox,
+# not a bug -- see README.md.
+
+services:
+  - type: web
+    name: chitragupta-protocol-demo
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: CHITRAGUPTA_PUBLIC_DEMO
+        value: "1"
+      - key: CHITRAGUPTA_DEMO_TTL_SECONDS
+        value: "900"
+      - key: CHITRAGUPTA_DEMO_RATE_LIMIT_PER_MINUTE
+        value: "30"
+      # Explicitly absent (do not add): CHITRAGUPTA_API_DEV_MODE,
+      # CHITRAGUPTA_API_TOKEN. The public demo must be the only
+      # unauthenticated surface this deployment exposes.

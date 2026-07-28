@@ -1,0 +1,27 @@
+{% extends "demo/base.html" %}
+{% block title %}Scenario: {{ key }} — Chitragupta sandbox{% endblock %}
+{% block content %}
+<div class="card">
+  <p><a href="/demo/">&larr; back to all scenarios</a></p>
+  {% if run %}
+  <h1>{{ run.title }}</h1>
+  <p>
+    {% if run.passed %}<span class="badge badge-ok">behaved as expected</span>
+    {% else %}<span class="badge badge-bad">unexpected result — see steps below</span>{% endif %}
+  </p>
+  {% for step in run.steps %}
+  <div class="step {{ step.status }}">
+    <span class="label">{{ step.label }}</span> — {{ step.detail }}
+  </div>
+  {% endfor %}
+  <form method="post" action="/demo/scenario/{{ key }}/run" style="margin-top:1rem;">
+    <button type="submit" class="secondary">↻ Run again</button>
+  </form>
+  {% else %}
+  <h1>Scenario not yet run</h1>
+  <form method="post" action="/demo/scenario/{{ key }}/run">
+    <button type="submit">▶ Run this scenario</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

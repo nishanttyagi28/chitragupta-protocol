@@ -37,7 +37,9 @@ def test_manifest_is_immutable(manifest_factory):
         m.target_resource = "payment:beneficiary/other"  # type: ignore[misc]
 
 
-def test_manifest_rejects_unknown_fields(manifest_factory, now, agent_principal, human_principal, adapter_identity):
+def test_manifest_rejects_unknown_fields(
+    manifest_factory, now, agent_principal, human_principal, adapter_identity
+):
     with pytest.raises(ValidationError):
         EffectManifest(
             manifest_id="m1",
@@ -84,7 +86,9 @@ def test_manifest_rejects_expiry_before_creation(manifest_factory, now):
         manifest_factory(ttl_seconds=-10)
 
 
-def test_manifest_rejects_oversized_metadata(manifest_factory, now, agent_principal, human_principal, adapter_identity):
+def test_manifest_rejects_oversized_metadata(
+    manifest_factory, now, agent_principal, human_principal, adapter_identity
+):
     with pytest.raises(ValidationError):
         EffectManifest(
             manifest_id="m1",
@@ -128,3 +132,8 @@ def test_schema_version_accepts_current_major():
 def test_schema_version_rejects_malformed():
     with pytest.raises(SchemaVersionError):
         assert_supported_schema_version("garbage")
+
+
+def test_schema_version_rejects_non_digit_minor():
+    with pytest.raises(SchemaVersionError):
+        assert_supported_schema_version("1.x")

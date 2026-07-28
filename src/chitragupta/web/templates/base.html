@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{% block title %}Chitragupta Console{% endblock %}</title>
+  <style>
+    body { font-family: -apple-system, Segoe UI, Helvetica, Arial, sans-serif; margin: 2rem; color: #1a1a1a; background: #fafafa; }
+    h1 { font-size: 1.4rem; }
+    h2 { font-size: 1.1rem; margin-top: 2rem; }
+    nav a { margin-right: 1rem; }
+    table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; }
+    th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #ddd; font-size: 0.9rem; }
+    .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 0.5rem; font-size: 0.75rem; }
+    .badge-ok { background: #d7f5dd; color: #14532d; }
+    .badge-warn { background: #fde68a; color: #7c2d12; }
+    .badge-bad { background: #fecaca; color: #7f1d1d; }
+    form.inline { display: inline; }
+    .devmode { background: #fde68a; color: #7c2d12; padding: 0.3rem 0.6rem; border-radius: 0.4rem; font-size: 0.85rem; }
+    fieldset { margin-top: 0.5rem; }
+    input, select { margin: 0.15rem 0; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/console/">Dashboard</a>
+    <a href="/console/grants">Grants</a>
+    <a href="/console/audit">Audit</a>
+    {% if dev_mode %}<span class="devmode">UNAUTHENTICATED LOCAL DEV MODE</span>{% endif %}
+  </nav>
+  <hr />
+  {% block content %}{% endblock %}
+</body>
+</html>

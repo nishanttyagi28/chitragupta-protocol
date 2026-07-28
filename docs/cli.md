@@ -1,0 +1,91 @@
+# CLI Reference
+
+`chitragupta [--workspace PATH] [--json] <command> ...`
+
+`--workspace` defaults to `.chitragupta` under the current directory (or
+`$CHITRAGUPTA_HOME`). `--json` switches every command to machine-readable
+JSON output. Exit codes: `0` success, `1` general/validation error, `2`
+security-denied (any `ChitraguptaError` subclass).
+
+## Workspace
+
+The workspace holds dev keys (`keys/`), sealed manifests and their commit/
+verify/compensation results (`manifests/`), grants (`grants/`), a
+SQLite-backed grant store (`grants.db`), and a SQLite-backed audit journal
+(`audit.db`) — everything needed to run `prepare`, `seal`, `grant issue`,
+`execute`, `verify`, `compensate`, `passport`, and `audit` as *separate*
+process invocations while keeping a consistent lifecycle state. See
+`chitragupta.cli.workspace.Workspace.reconstruct_lifecycle_state()` and
+[docs/state-machine.md](state-machine.md) for how that consistency is
+maintained across processes.
+
+## Commands
+
+```text
+chitragupta init
+chitragupta key generate <key_id>
+chitragupta key list
+
+chitragupta prepare --adapter {sqlite,email,payment} --actor-id ID [adapter-specific options...]
+chitragupta seal <manifest_id> --key-id ID
+
+chitragupta grant issue <manifest_id> --issuer-id ID --subject-id ID --key-id ID [--audience ...] [--max-uses N]
+chitragupta grant verify <grant_id>
+chitragupta grant delegate <parent_grant_id> --issuer-id ID --subject-id ID --key-id ID [--max-uses N] [--ttl-seconds N]
+chitragupta grant revoke <grant_id> [--manifest-id ID]
+chitragupta grant inspect <grant_id>
+
+chitragupta execute <manifest_id> --grant-id ID --adapter {sqlite,email,payment} [adapter-specific options...]
+chitragupta verify <manifest_id> --adapter {sqlite,email,payment} [...]
+chitragupta compensate <manifest_id> --adapter {sqlite,email,payment} [...]
+
+chitragupta audit list
+chitragupta audit show <manifest_id>
+chitragupta audit verify
+
+chitragupta passport <manifest_id> [--format json|markdown|html] [--grant-id ID] [-o FILE]
+
+chitragupta demo --all
+chitragupta doctor
+chitragupta version
+```
+
+## Adapter-specific `prepare`/`execute`/`verify`/`compensate` options
+
+Only the three reference adapters are wired into the CLI (`sqlite`,
+`email`, `payment`) — this is deliberate: the CLI resolves `--adapter` to a
+concrete class, never dynamically imports/executes arbitrary adapter code
+from a string, to avoid an arbitrary-code-loading surface in a
+security-focused tool. Third-party adapters are used via the Python API.
+
+- `--adapter sqlite`: `--sqlite-db-path PATH` (required), `--sqlite-table
+  NAME`, `--row-operation {insert,update,delete}`, `--row-id ID`,
+  `--new-balance N`.
+- `--adapter email`: `--recipient EMAIL` (repeatable), `--subject TEXT`,
+  `--body TEXT`.
+- `--adapter payment`: `--source-account ID`, `--beneficiary ID`,
+  `--amount-minor-units N`, `--currency CODE`, `--reference TEXT`,
+  `--fee-minor-units N`, `--fund-source-account N` (pre-funds the account
+  before the effect, for one-shot local testing).
+
+**Important limitation:** the `email` and `payment` adapters hold state in
+memory only. A fresh CLI process starts them from empty (zero balance,
+empty outbox) — there is no cross-process persistence for these two
+reference adapters (only `sqlite` persists naturally, via its own database
+file). Use `chitragupta demo --all` to see a full single-process
+walkthrough of all three, or drive the Python API directly for real
+multi-step usage against the in-memory adapters.
+
+## `doctor`
+
+Checks workspace initialization, key availability (counts and ids only —
+never key material), grant store reachability, audit chain integrity,
+clock timezone-awareness, and adapter registration. Exits non-zero if any
+check fails.
+
+## `demo --all`
+
+Runs all 15 required scenarios deterministically, self-contained (its own
+in-memory engine, its own signing keys, its own temp-file SQLite adapter)
+— does not touch `--workspace`. See the README for exact output from a
+real run.
