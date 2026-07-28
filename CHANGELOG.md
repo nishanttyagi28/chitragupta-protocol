@@ -3,6 +3,24 @@
 All notable changes to this project are documented in this file. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] - extreme-v2 in progress
+
+### Added
+
+- **Effect Intelligence Engine** (`karmasakshi.intelligence`): a
+  deterministic, versioned risk-scoring engine over `EffectManifest` +
+  `IntelligencePolicy` + `AssessmentFacts`, producing a structured,
+  audit-recorded `EffectAssessment` (score, risk level, named signals,
+  recommendation, required approvals/witness quorum/verification
+  strength). No LLM in the loop; pure, reproducible arithmetic. Integrated
+  into the engine (`KarmaSakshiEngine.assess()`), the CLI
+  (`karmasakshi assess`), the API (`POST /manifests/{id}/assess`, `GET
+  /manifests/{id}/assessment`), and the Action Passport. **Advisory only
+  in this release** -- see [docs/effect-intelligence.md](docs/effect-intelligence.md)
+  for exactly what is and is not enforced. See
+  [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for
+  the full build ledger and remaining phases of this program.
+
 ## [0.1.0] - 2026-07-27
 
 Initial feature-complete reference implementation of protocol schema

@@ -35,6 +35,32 @@ certification.**
    worked" state.** Defended by fail-closed error propagation — no
    `except: pass` anywhere in the commit path (invariants #10, #23).
 
+## New trusted component: the Effect Intelligence Engine
+
+`karmasakshi.intelligence` (see [docs/effect-intelligence.md](effect-intelligence.md))
+adds a deterministic risk-scoring engine over `EffectManifest` +
+`IntelligencePolicy` + `AssessmentFacts`. It contains no LLM and makes no
+security decision by itself -- it is pure, versioned arithmetic, and its
+output (`EffectAssessment`) is recorded in the same hash-chained audit
+journal as every other engine step.
+
+**It does not currently change the security model.** `authorize()` and
+`commit()` do not read `EffectAssessment.recommendation`; a `BLOCK`
+recommendation is informational only in this protocol version. Do not
+treat calling `assess()` (or seeing `recommendation: block` in a passport)
+as evidence that a manifest was actually blocked -- check the lifecycle
+state and the presence/absence of a valid `ExecutionGrant` instead. Wiring
+a `BLOCK` recommendation (or an unmet approval/witness-quorum requirement)
+into a structural authorization gate is planned for a later phase (signed
+policy bundles binding `policy_hash` into the grant, plus M-of-N
+authorization) and is **not implemented today**.
+
+`IntelligencePolicy` itself is an unsigned, in-process value: whoever
+constructs the `EffectIntelligenceEngine` a caller uses controls the
+thresholds, with no cryptographic binding yet to prevent a compromised
+caller from picking permissive thresholds and calling the result
+authoritative advice.
+
 ## Explicitly out of scope
 
 - **Compromise of the machine running the engine.** If an attacker has
@@ -70,6 +96,9 @@ certification.**
   supported (`Keyring.add_key`/`.remove_key`), but there is no automated
   revocation-and-reissue workflow for grants signed by a key discovered to
   be compromised after the fact.
+- **Enforcement of Effect Intelligence Engine recommendations.** See "New
+  trusted component" above -- `assess()` scores and records, it does not
+  gate.
 
 ## Trust boundaries (see also docs/architecture.md)
 

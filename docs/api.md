@@ -45,6 +45,8 @@ without authentication — see `karmasakshi.api.auth.require_auth` and
 | POST | `/manifests/prepare` | Prepare + seal a manifest via a reference adapter |
 | GET | `/manifests` | List all sealed manifests + lifecycle state |
 | GET | `/manifests/{id}` | Inspect one manifest + its seal + grant ids |
+| POST | `/manifests/{id}/assess` | Run the Effect Intelligence Engine, record `EffectAssessment` (advisory only -- see docs/effect-intelligence.md) |
+| GET | `/manifests/{id}/assessment` | Fetch the most recent assessment recorded for a manifest |
 | POST | `/manifests/{id}/approve` | Issue an `ExecutionGrant` (invariant #30 still enforced) |
 | POST | `/manifests/{id}/deny` | Audit-log a denial; never issues a grant |
 | POST | `/grants/{id}/revoke` | Revoke a grant |

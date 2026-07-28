@@ -361,3 +361,111 @@ def test_demo_all_runs_and_passes(workspace_args):
 def test_demo_without_all_flag_is_noop(workspace_args):
     result = _run(workspace_args + ["demo"])
     assert "--all" in result.output
+
+
+def _prepare_payment_via_cli(workspace_args, idempotency_key="idem-cli-assess-1"):
+    prepare_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "prepare",
+            "--adapter",
+            "payment",
+            "--source-account",
+            "acct-src",
+            "--beneficiary",
+            "acct-dst",
+            "--amount-minor-units",
+            "500000",
+            "--reference",
+            "ref-1",
+            "--actor-id",
+            "agent-1",
+            "--actor-type",
+            "agent",
+            "--principal-id",
+            "user-1",
+            "--principal-type",
+            "human",
+            "--idempotency-key",
+            idempotency_key,
+        ]
+    )
+    return json.loads(prepare_result.output)["manifest_id"]
+
+
+def test_assess_reports_score_and_records_audit_event(workspace_args):
+    _run(workspace_args + ["init"])
+    manifest_id = _prepare_payment_via_cli(workspace_args)
+
+    result = _run(workspace_args + ["--json", "assess", manifest_id])
+    data = json.loads(result.output)
+    assert 0 <= data["score"] <= 100
+    assert data["recommendation"] in {"allow", "review", "block"}
+
+    audit_result = _run(workspace_args + ["--json", "audit", "show", manifest_id])
+    events = json.loads(audit_result.output)["events"]
+    assert any(e["event_type"] == "effect.assessed" for e in events)
+
+
+def test_assess_policy_violation_forces_block(workspace_args):
+    _run(workspace_args + ["init"])
+    manifest_id = _prepare_payment_via_cli(workspace_args, idempotency_key="idem-cli-assess-2")
+
+    result = _run(
+        workspace_args + ["--json", "assess", manifest_id, "--policy-violation", "sanctions_match"]
+    )
+    data = json.loads(result.output)
+    assert data["recommendation"] == "block"
+
+
+def test_assess_tri_state_flags(workspace_args):
+    _run(workspace_args + ["init"])
+    manifest_id = _prepare_payment_via_cli(workspace_args, idempotency_key="idem-cli-assess-3")
+
+    result = _run(
+        workspace_args
+        + [
+            "--json",
+            "assess",
+            manifest_id,
+            "--provider-idempotent",
+            "yes",
+            "--compensation-feasible",
+            "yes",
+        ]
+    )
+    data = json.loads(result.output)
+    assert "provider_idempotency_unknown" not in data["explanation"]
+
+
+def test_assess_invalid_tri_state_value_rejected(workspace_args):
+    _run(workspace_args + ["init"])
+    manifest_id = _prepare_payment_via_cli(workspace_args, idempotency_key="idem-cli-assess-4")
+
+    result = runner.invoke(
+        app, workspace_args + ["assess", manifest_id, "--provider-idempotent", "maybe"]
+    )
+    assert result.exit_code != 0
+
+
+def test_assess_from_audit_history_derives_recurrence(workspace_args):
+    _run(workspace_args + ["init"])
+    manifest_id_1 = _prepare_payment_via_cli(workspace_args, idempotency_key="idem-cli-assess-5a")
+    _run(workspace_args + ["assess", manifest_id_1])
+
+    manifest_id_2 = _prepare_payment_via_cli(workspace_args, idempotency_key="idem-cli-assess-5b")
+    result = _run(workspace_args + ["--json", "assess", manifest_id_2, "--from-audit-history"])
+    data = json.loads(result.output)
+    assert "novel_effect_pattern_no_history" not in data["explanation"]
+
+
+def test_passport_includes_assessment_section(workspace_args):
+    _run(workspace_args + ["init"])
+    _run(workspace_args + ["key", "generate", "issuer-1"])
+    manifest_id = _prepare_payment_via_cli(workspace_args, idempotency_key="idem-cli-assess-6")
+    _run(workspace_args + ["assess", manifest_id])
+    _run(workspace_args + ["seal", manifest_id, "--key-id", "issuer-1"])
+
+    result = _run(workspace_args + ["passport", manifest_id])
+    assert "Effect Intelligence Assessment" in result.output

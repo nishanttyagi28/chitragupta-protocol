@@ -422,3 +422,81 @@ def test_store_failed_attempt_releases_without_consuming_a_use():
     assert store.get_use_count("g1") == 0
     # the released slot is available again
     assert store.reserve("g1", max_uses=1) is True
+
+
+# --- assess() (Effect Intelligence Engine integration) -----------------------
+
+
+def test_assess_records_an_audit_event(engine_factory, manifest_factory):
+    from karmasakshi.intelligence import AssessmentFacts, Recommendation
+
+    engine = engine_factory()
+    manifest = manifest_factory()
+
+    assessment = engine.assess(manifest, AssessmentFacts(historical_recurrence_count=1))
+
+    events = engine.context.audit.events_for_manifest(manifest.manifest_id)
+    assessed_events = [e for e in events if e.event_type == "effect.assessed"]
+    assert len(assessed_events) == 1
+    event = assessed_events[0]
+    assert event.decision == assessment.recommendation.value
+    assert event.manifest_hash == manifest.canonical_hash()
+    assert event.metadata["assessment_id"] == assessment.assessment_id
+    assert event.metadata["score"] == str(assessment.score)
+    assert Recommendation(event.decision) == assessment.recommendation
+    # verify_chain() must still pass -- assess() participates in the same
+    # hash-chained journal as every other engine step.
+    engine.context.audit.verify_chain()
+
+
+def test_assess_does_not_transition_lifecycle_state(engine_factory, manifest_factory):
+    from karmasakshi.state_machine.states import LifecycleState
+
+    engine = engine_factory()
+    manifest = manifest_factory()
+
+    assert engine.get_lifecycle_state(manifest.manifest_id) == LifecycleState.PROPOSED
+    engine.assess(manifest)
+    assert engine.get_lifecycle_state(manifest.manifest_id) == LifecycleState.PROPOSED
+
+
+def test_assess_can_be_called_multiple_times_with_different_facts(engine_factory, manifest_factory):
+    from karmasakshi.intelligence import AssessmentFacts
+
+    engine = engine_factory()
+    manifest = manifest_factory()
+
+    first = engine.assess(manifest, AssessmentFacts())
+    second = engine.assess(manifest, AssessmentFacts(cross_tenant=True))
+
+    assert first.assessment_id != second.assessment_id
+    events = engine.context.audit.events_for_manifest(manifest.manifest_id)
+    assert len([e for e in events if e.event_type == "effect.assessed"]) == 2
+
+
+def test_assess_uses_context_configured_policy(
+    engine_factory, manifest_factory, keyring, fixed_clock
+):
+    from karmasakshi.audit.journal import AuditJournal
+    from karmasakshi.engine.context import EngineContext
+    from karmasakshi.engine.core import KarmaSakshiEngine
+    from karmasakshi.intelligence import EffectIntelligenceEngine, IntelligencePolicy
+    from karmasakshi.stores.memory import InMemoryGrantStore
+
+    strict_policy = IntelligencePolicy(restricted_effect_types=("payment.transfer",))
+    ctx = EngineContext(
+        keyring=keyring,
+        grant_store=InMemoryGrantStore(),
+        audit=AuditJournal(clock=fixed_clock),
+        clock=fixed_clock,
+        intelligence=EffectIntelligenceEngine(policy=strict_policy),
+    )
+    engine = KarmaSakshiEngine(ctx)
+    manifest = manifest_factory(effect_type="payment.transfer")
+
+    assessment = engine.assess(manifest)
+
+    from karmasakshi.intelligence import Recommendation
+
+    assert assessment.recommendation == Recommendation.BLOCK
+    assert assessment.policy_id == strict_policy.policy_id

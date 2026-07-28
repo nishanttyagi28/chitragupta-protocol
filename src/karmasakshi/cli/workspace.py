@@ -31,6 +31,7 @@ from karmasakshi.engine.context import EngineContext
 from karmasakshi.engine.core import KarmaSakshiEngine
 from karmasakshi.errors import KeyLoadError
 from karmasakshi.grants.model import ExecutionGrant
+from karmasakshi.intelligence.model import EffectAssessment
 from karmasakshi.state_machine.states import LifecycleState
 from karmasakshi.stores.sqlite import SQLiteGrantStore
 
@@ -125,6 +126,27 @@ class Workspace:
     def load_unsealed_manifest(self, manifest_id: str) -> EffectManifest:
         path = self.manifests_dir / f"{manifest_id}.unsealed.json"
         return EffectManifest.model_validate_json(path.read_text(encoding="utf-8"))
+
+    def load_manifest_any(self, manifest_id: str) -> EffectManifest:
+        """Load a manifest by id, preferring the sealed copy (if ``seal`` has
+        already run) and falling back to the unsealed one -- ``assess()``
+        does not require a manifest to be sealed first."""
+        if (self.manifests_dir / f"{manifest_id}.json").exists():
+            return self.load_sealed_manifest(manifest_id).manifest
+        return self.load_unsealed_manifest(manifest_id)
+
+    # --- assessments ----------------------------------------------------------
+
+    def save_assessment(self, assessment: EffectAssessment) -> Path:
+        path = self.manifests_dir / f"{assessment.manifest_id}.assessment.json"
+        path.write_text(assessment.model_dump_json(indent=2), encoding="utf-8")
+        return path
+
+    def load_assessment(self, manifest_id: str) -> EffectAssessment | None:
+        path = self.manifests_dir / f"{manifest_id}.assessment.json"
+        if not path.exists():
+            return None
+        return EffectAssessment.model_validate_json(path.read_text(encoding="utf-8"))
 
     # --- grants -------------------------------------------------------------
 

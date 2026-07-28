@@ -14,6 +14,7 @@ from karmasakshi.domain.seal import SealedManifest
 from karmasakshi.errors import KarmaSakshiError
 from karmasakshi.grants.model import ExecutionGrant
 from karmasakshi.grants.verifier import verify_grant_signature
+from karmasakshi.intelligence.model import EffectAssessment
 from karmasakshi.passports.model import ActionPassport, PassportVerificationStatus
 from karmasakshi.stores.base import GrantStore
 
@@ -29,6 +30,7 @@ def build_passport(
     commit_result: CommitResult | None = None,
     outcome_proof: OutcomeProof | None = None,
     compensation_result: CompensationResult | None = None,
+    assessment: EffectAssessment | None = None,
     clock: Clock = SYSTEM_CLOCK,
 ) -> ActionPassport:
     manifest = sealed.manifest
@@ -96,6 +98,18 @@ def build_passport(
         compensation_reason=(
             compensation_result.reason if compensation_result is not None else None
         ),
+        assessment_id=assessment.assessment_id if assessment is not None else None,
+        assessment_score=assessment.score if assessment is not None else None,
+        assessment_risk_level=assessment.risk_level.value if assessment is not None else None,
+        assessment_recommendation=(
+            assessment.recommendation.value if assessment is not None else None
+        ),
+        assessment_policy_id=assessment.policy_id if assessment is not None else None,
+        assessment_policy_hash=assessment.policy_hash if assessment is not None else None,
+        assessment_required_human_approvals=(
+            assessment.required_human_approvals if assessment is not None else None
+        ),
+        assessment_explanation=assessment.explanation if assessment is not None else None,
         lifecycle_state=lifecycle_state,
         verification=PassportVerificationStatus(
             seal_verified=seal_verified,

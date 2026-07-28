@@ -76,7 +76,19 @@ def make_manifest(
     manifest_id: str | None = None,
     state_fingerprint: StateFingerprint | None = None,
     parent_manifest_id: str | None = None,
+    risk: RiskClassification = RiskClassification.HIGH,
+    reversibility: ReversibilityClassification = ReversibilityClassification.COMPENSATABLE,
+    blast_radius: BlastRadiusClassification = BlastRadiusClassification.SINGLE_RESOURCE,
+    estimated_cost: MonetaryAmount | bool | None = False,
+    preconditions: tuple = (),
 ) -> EffectManifest:
+    # `estimated_cost=False` (the default sentinel) means "derive from
+    # amount_minor_units/currency"; pass `estimated_cost=None` explicitly to
+    # omit it, or a MonetaryAmount to set it directly.
+    if estimated_cost is False:
+        cost = MonetaryAmount(currency=currency, minor_units=amount_minor_units)
+    else:
+        cost = estimated_cost  # type: ignore[assignment]
     return EffectManifest(
         manifest_id=manifest_id or "11111111-1111-4111-8111-111111111111",
         effect_type=effect_type,
@@ -88,10 +100,11 @@ def make_manifest(
         if parameters is not None
         else {"amount": amount_minor_units, "currency": currency},
         state_fingerprint=state_fingerprint,
-        risk=RiskClassification.HIGH,
-        reversibility=ReversibilityClassification.COMPENSATABLE,
-        blast_radius=BlastRadiusClassification.SINGLE_RESOURCE,
-        estimated_cost=MonetaryAmount(currency=currency, minor_units=amount_minor_units),
+        preconditions=preconditions,
+        risk=risk,
+        reversibility=reversibility,
+        blast_radius=blast_radius,
+        estimated_cost=cost,
         idempotency_key=idempotency_key,
         created_at=now,
         expires_at=now + timedelta(seconds=ttl_seconds),

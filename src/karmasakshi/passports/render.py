@@ -30,6 +30,22 @@ def render_passport_markdown(passport: ActionPassport) -> str:
         f"- Risk: {p.risk.value} / Reversibility: {p.reversibility.value}",
         f"- Manifest hash: `{p.manifest_hash}`",
         "",
+        "## Effect Intelligence Assessment",
+        "",
+        *(
+            [
+                f"- Assessment ID: `{p.assessment_id}`",
+                f"- Score: {p.assessment_score}/100 ({p.assessment_risk_level})",
+                f"- Recommendation: **{p.assessment_recommendation}** (advisory only -- "
+                "not yet enforced by authorize()/commit(), see docs/effect-intelligence.md)",
+                f"- Policy: `{p.assessment_policy_id}` (`{p.assessment_policy_hash}`)",
+                f"- Required human approvals: {p.assessment_required_human_approvals}",
+                f"- Explanation: {p.assessment_explanation}",
+            ]
+            if p.assessment_id is not None
+            else ["- No assessment was recorded for this manifest."]
+        ),
+        "",
         "## Authorization",
         "",
         f"- Grant ID: `{p.grant_id or 'none'}`",
