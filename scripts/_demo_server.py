@@ -44,9 +44,7 @@ def _wait_for_health(base_url: str, timeout: float = 30.0) -> None:
 
 
 @contextmanager
-def demo_server(
-    ttl_seconds: int = 3600, rate_limit_per_minute: int = 10_000
-) -> Iterator[str]:
+def demo_server(ttl_seconds: int = 3600, rate_limit_per_minute: int = 10_000) -> Iterator[str]:
     """Start the public demo app in a subprocess; yield its base URL."""
     port = _free_port()
     env = dict(os.environ)

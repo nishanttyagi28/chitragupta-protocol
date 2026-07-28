@@ -21,9 +21,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _demo_server import demo_server  # noqa: E402
-
-from playwright.sync_api import Page, sync_playwright  # noqa: E402
+from _demo_server import demo_server
+from playwright.sync_api import Page, sync_playwright
 
 OUT_DIR = Path(__file__).parent.parent / "docs" / "assets" / "screenshots"
 VIEWPORT = {"width": 1280, "height": 900}

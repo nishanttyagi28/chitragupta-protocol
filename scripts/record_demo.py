@@ -27,9 +27,8 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _demo_server import demo_server  # noqa: E402
-
-from playwright.sync_api import Page, sync_playwright  # noqa: E402
+from _demo_server import demo_server
+from playwright.sync_api import Page, sync_playwright
 
 OUT_DIR = Path(__file__).parent.parent / "docs" / "assets" / "demo"
 VIDEO_SIZE = {"width": 1280, "height": 720}
@@ -134,7 +133,11 @@ def record(base_url: str, video_dir: Path) -> Path:
         page.wait_for_timeout(11000)
 
         # 4. Human approves the sealed effect
-        _caption(page, "A human approves the exact sealed effect", "AUTHORIZE — the agent cannot approve its own action.")
+        _caption(
+            page,
+            "A human approves the exact sealed effect",
+            "AUTHORIZE — the agent cannot approve its own action.",
+        )
         page.wait_for_timeout(3500)
         page.click("text=Approve exact effect")
         page.wait_for_load_state("networkidle")
@@ -150,15 +153,27 @@ def record(base_url: str, video_dir: Path) -> Path:
         # 7. Action Passport appears
         page.click("text=View Action Passport")
         page.wait_for_load_state("networkidle")
-        _caption(page, "An Action Passport proves what actually happened", "PROVE — a factual record, not a security certification.")
+        _caption(
+            page,
+            "An Action Passport proves what actually happened",
+            "PROVE — a factual record, not a security certification.",
+        )
         page.wait_for_timeout(11000)
 
         # 8 & 9. Agent tampers with the amount/recipient -> blocked
-        _caption(page, "Now: an agent tampers with the recipient after approval", "Same grant, different manifest — what happens?")
+        _caption(
+            page,
+            "Now: an agent tampers with the recipient after approval",
+            "Same grant, different manifest — what happens?",
+        )
         page.wait_for_timeout(5500)
         _run_scenario(page, base_url, "tampering")
         page.wait_for_load_state("networkidle")
-        _caption(page, "Blocked: the manifest hash no longer matches", "The grant is bound to the exact approved effect, not just a tool name.")
+        _caption(
+            page,
+            "Blocked: the manifest hash no longer matches",
+            "The grant is bound to the exact approved effect, not just a tool name.",
+        )
         page.wait_for_timeout(12000)
 
         # 10. Closing comparison with AgentEval
@@ -193,9 +208,20 @@ def transcode(webm_path: Path) -> None:
     mp4_path = OUT_DIR / "demo.mp4"
     subprocess.run(
         [
-            ffmpeg, "-y", "-i", str(webm_path),
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-            "-crf", "23", "-preset", "medium",
+            ffmpeg,
+            "-y",
+            "-i",
+            str(webm_path),
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
             str(mp4_path),
         ],
         check=True,
@@ -212,17 +238,35 @@ def transcode(webm_path: Path) -> None:
     filters = "fps=6,scale=640:-1:flags=lanczos"
     subprocess.run(
         [
-            ffmpeg, "-y", "-ss", clip_start, "-t", clip_duration, "-i", str(mp4_path),
-            "-vf", f"{filters},palettegen", str(palette_path),
+            ffmpeg,
+            "-y",
+            "-ss",
+            clip_start,
+            "-t",
+            clip_duration,
+            "-i",
+            str(mp4_path),
+            "-vf",
+            f"{filters},palettegen",
+            str(palette_path),
         ],
         check=True,
         capture_output=True,
     )
     subprocess.run(
         [
-            ffmpeg, "-y", "-ss", clip_start, "-t", clip_duration, "-i", str(mp4_path),
-            "-i", str(palette_path),
-            "-lavfi", f"{filters}[x];[x][1:v]paletteuse",
+            ffmpeg,
+            "-y",
+            "-ss",
+            clip_start,
+            "-t",
+            clip_duration,
+            "-i",
+            str(mp4_path),
+            "-i",
+            str(palette_path),
+            "-lavfi",
+            f"{filters}[x];[x][1:v]paletteuse",
             str(gif_path),
         ],
         check=True,
