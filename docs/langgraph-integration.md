@@ -1,19 +1,19 @@
 # LangGraph Integration
 
-`chitragupta.integrations.langgraph` (optional: `pip install
-chitragupta-protocol[langgraph]`) demonstrates pausing a LangGraph run for
+`karmasakshi.integrations.langgraph` (optional: `pip install
+karmasakshi-protocol[langgraph]`) demonstrates pausing a LangGraph run for
 human authorization and resuming through the real engine. The core engine
 has zero import-time dependency on LangGraph — importing
-`chitragupta.integrations.langgraph` without the extra installed raises a
-clear `ImportError` naming it, and nothing in `chitragupta.engine` imports
+`karmasakshi.integrations.langgraph` without the extra installed raises a
+clear `ImportError` naming it, and nothing in `karmasakshi.engine` imports
 this module.
 
 ## The graph
 
 ```python
-from chitragupta.integrations.langgraph import build_chitragupta_graph
+from karmasakshi.integrations.langgraph import build_karmasakshi_graph
 
-app = build_chitragupta_graph(engine=engine, adapter=adapter, signing_key=signing_key)
+app = build_karmasakshi_graph(engine=engine, adapter=adapter, signing_key=signing_key)
 ```
 
 Four nodes: `prepare -> seal -> authorize -> commit`. `authorize` calls
@@ -44,8 +44,8 @@ records `status="denied"` and never calls `engine.authorize()` at all.
 
 ## Why the signing key never reaches the agent or the checkpoint
 
-`build_chitragupta_graph()` captures `signing_key` in the *builder's*
-closure — it is never placed into `ChitraguptaGraphState`, so it can never
+`build_karmasakshi_graph()` captures `signing_key` in the *builder's*
+closure — it is never placed into `KarmaSakshiGraphState`, so it can never
 be serialized into a LangGraph checkpoint (which persists whatever's in
 state) and is never visible to whatever code produced the agent's
 `request`. This is verified directly:
@@ -84,7 +84,7 @@ authorization rule.
 Demonstrated: pause-for-approval, resume, deny, agent-cannot-self-authorize,
 expired-grant-fails-at-commit, no-secrets-in-checkpoint. Not built: a
 production-grade human-approval UI (the FastAPI console in
-`chitragupta.web` is a separate, standalone control plane, not wired to
+`karmasakshi.web` is a separate, standalone control plane, not wired to
 this LangGraph integration), or persistence of LangGraph checkpoints
 beyond the default in-memory `MemorySaver` (a real deployment would supply
 its own `BaseCheckpointSaver`, e.g. backed by Postgres — LangGraph's

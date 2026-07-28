@@ -46,7 +46,7 @@ irreversible effect).
 
 ## Why the engine tracks state in memory, not the database
 
-`LifecycleRecord` lives in `ChitraguptaEngine._records`, keyed by
+`LifecycleRecord` lives in `KarmaSakshiEngine._records`, keyed by
 `manifest_id`. The audit journal is the durable source of truth for *what
 happened*; the in-memory record exists purely to make the *next*
 transition attempt fail fast and consistently within one engine instance's

@@ -16,18 +16,18 @@ claims were read.
 AgentEval:
   Did the agent behave correctly during development and CI?
 
-Chitragupta Protocol:
+KarmaSakshi Protocol:
   Did the exact approved real-world effect match the actual outcome?
 ```
 
 AgentEval-style tooling evaluates agent behavior against test cases,
-typically offline or in CI, before or after the fact. Chitragupta Protocol
+typically offline or in CI, before or after the fact. KarmaSakshi Protocol
 operates at runtime, on individual consequential actions: it stages an
 exact effect, seals it, requires a non-agent principal to authorize that
 exact sealed effect, executes it, and independently verifies the outcome.
 These are complementary rather than competing — a production failure
-caught by Chitragupta Protocol's verification step can be exported
-(`chitragupta.integrations.agenteval`) as a regression fixture for
+caught by KarmaSakshi Protocol's verification step can be exported
+(`karmasakshi.integrations.agenteval`) as a regression fixture for
 AgentEval-style offline evaluation to catch going forward. See
 [docs/agenteval-integration.md](agenteval-integration.md) for the honest
 caveat that the exact AgentEval fixture schema was not confirmed, so this
@@ -36,7 +36,7 @@ export is a neutral, versioned format rather than a claimed-compatible one.
 ## Not another agent permission layer
 
 Most of the products below (and most agent frameworks' built-in
-permissioning) answer one of three different questions. Chitragupta
+permissioning) answer one of three different questions. KarmaSakshi
 Protocol answers a fourth, distinct question:
 
 - **IAM** answers: *who is this agent, and what identity does it hold?*
@@ -44,12 +44,12 @@ Protocol answers a fourth, distinct question:
   service credentials, and under what scope, may this agent use?*
 - **Policy gates / agent gateways** answer: *is this tool call allowed
   right now, against current policy?*
-- **Chitragupta Protocol** answers: *did the exact real-world effect a
+- **KarmaSakshi Protocol** answers: *did the exact real-world effect a
   human approved become the exact real-world outcome that actually
   happened — provably?*
 
 These questions are not mutually exclusive, and a real deployment likely
-needs answers to all four. Chitragupta Protocol does not attempt to be an
+needs answers to all four. KarmaSakshi Protocol does not attempt to be an
 identity provider, a credential vault, or a general-purpose policy engine
 — it assumes something upstream has already decided the agent may attempt
 an action, and picks up from there: resolving that attempt into one exact,
@@ -74,7 +74,7 @@ Reviewed 2026-07-28. Official documentation sources:
   it below is **"no public documentation found"**, not a claim about
   what it does or doesn't do.
 
-| Dimension | Grantex | AgentLattice | Xybern | OpenLeash | Meandr | Chitragupta Protocol |
+| Dimension | Grantex | AgentLattice | Xybern | OpenLeash | Meandr | KarmaSakshi Protocol |
 |---|---|---|---|---|---|---|
 | **Primary responsibility** | Delegated authorization / identity for agents ("OAuth for agents") | IAM for AI agents (identity + policy gate + audit) | Enterprise agent-action enforcement layer ("Charter"-based interception) | Local-first authorization sidecar for risky agent actions | no public documentation found | Verified effect commit protocol: seal one exact effect, prove its real outcome |
 | **Tool/scope authorization** | Yes — scoped, time-limited, revocable delegation tokens (DIDs + JWT) | Yes — policy-as-code `gate()` calls, fail-closed, narrowing-only scope | Yes — every agent action intercepted and evaluated against a "Charter" | Yes — `POST /v1/authorize`, YAML policies, ALLOW/DENY/escalate | no public documentation found | Yes — `ExecutionGrant` (scoped, expiring, revocable, single-use-by-default); a **supporting control**, not the primary claim (see below) |
@@ -84,7 +84,7 @@ Reviewed 2026-07-28. Official documentation sources:
 | **Exactly-once effect reservation** (atomic reserve before execution, consume only on success) | Not stated | Not stated | Not stated | Not stated | no public documentation found | **Yes** — atomic reserve/release/commit across memory, SQLite, and Redis backends |
 | **Ambiguous-outcome crash recovery** (explicit recovery path for a crash between the external effect succeeding and the local record finalizing, without blind retry) | Not stated | Not stated | Not stated | Not stated | no public documentation found | **Yes** — `engine.recover_ambiguous_commit()`; documented in [docs/crash-recovery.md](crash-recovery.md) |
 | **Independent post-execution state verification** (re-observing the real external system, not trusting the call's return value) | Not stated | Not stated | Not stated | Not stated (proof token verifies the authorization decision, not the executed outcome) | no public documentation found | **Yes** — `adapter.verify()` re-queries the adapter's own external system of record |
-| **Intent-vs-outcome mismatch proof** (detecting and recording when a provider reports success but real state differs) | Not stated | Not stated | Not stated | Not stated | no public documentation found | **Yes** — `OutcomeProof.matched_expected`; demonstrated live in the [public sandbox](../README.md#try-it-live) and `chitragupta demo --all` scenario 12 |
+| **Intent-vs-outcome mismatch proof** (detecting and recording when a provider reports success but real state differs) | Not stated | Not stated | Not stated | Not stated | no public documentation found | **Yes** — `OutcomeProof.matched_expected`; demonstrated live in the [public sandbox](../README.md#try-it-live) and `karmasakshi demo --all` scenario 12 |
 | **Action Passport equivalent** (a document proving the full proposed → approved → committed → verified chain for one specific effect) | Partial — "Grantex passports" are W3C Verifiable Credentials proving the *delegation/identity chain*; not stated to prove an executed outcome | Partial — hash-chained, independently-verifiable *decision* audit trail; not stated to include outcome verification | Partial — "Provenance Vault" signed record per *decision*; not stated to include independent outcome verification | Partial — signed proof token (PASETO v4.public) proving the *authorization decision* was made; not stated to include independent outcome verification | no public documentation found | **Yes** — `ActionPassport` independently re-verifies seal, grant, and audit chain at generation time and includes the verified-outcome section; see [docs/action-passports.md](action-passports.md) |
 
 **How to read the "partial" cells honestly:** four of these five products
@@ -93,7 +93,7 @@ a signed record of *the authorization decision* (who was allowed to do
 what, and when), not an independently re-verified record of *what the
 external system actually ended up in*. That distinction — proof of a
 decision versus proof of a real-world outcome — is the specific gap
-Chitragupta Protocol's Action Passport and `VERIFY` step target. This is a
+KarmaSakshi Protocol's Action Passport and `VERIFY` step target. This is a
 description of documented scope, not a claim that the other products are
 deficient at what they set out to do.
 
@@ -102,12 +102,12 @@ deficient at what they set out to do.
 Many agent frameworks implement authorization as "may this agent call
 this named tool" (optionally with a JSON-schema-validated argument shape).
 That is a real and useful control, but it authorizes the *capability*, not
-the *exact resolved effect*. Chitragupta Protocol's manifest/grant binding
+the *exact resolved effect*. KarmaSakshi Protocol's manifest/grant binding
 is a stricter, narrower claim: a grant is valid for one specific,
 canonically-hashed effect (target, amount, parameters, preconditions),
 not for "any call matching this tool's schema." The two approaches are not
 mutually exclusive — a tool-permission layer can sit in front of
-Chitragupta Protocol's `prepare()` step to decide which tools an agent may
+KarmaSakshi Protocol's `prepare()` step to decide which tools an agent may
 even attempt to resolve into a manifest.
 
 ## Questions worth asking when evaluating any of these against each other
@@ -124,5 +124,5 @@ even attempt to resolve into a manifest.
 5. Does the audit/proof artifact cover the executed outcome, or only the
    authorization decision?
 
-Chitragupta Protocol's answers to all five are implemented and tested —
+KarmaSakshi Protocol's answers to all five are implemented and tested —
 see [docs/security-model.md](security-model.md) for exactly where.

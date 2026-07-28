@@ -5,9 +5,9 @@ services:
       - "8000:8000"
     environment:
       # Unauthenticated local-only mode -- see docs/deployment.md.
-      # Remove this and set CHITRAGUPTA_API_TOKEN before exposing this
+      # Remove this and set KARMASAKSHI_API_TOKEN before exposing this
       # beyond your own machine.
-      CHITRAGUPTA_API_DEV_MODE: "1"
+      KARMASAKSHI_API_DEV_MODE: "1"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
       interval: 15s
@@ -26,9 +26,9 @@ services:
     ports:
       - "8001:8000"
     environment:
-      CHITRAGUPTA_PUBLIC_DEMO: "1"
-      CHITRAGUPTA_DEMO_TTL_SECONDS: "900"
-      CHITRAGUPTA_DEMO_RATE_LIMIT_PER_MINUTE: "30"
+      KARMASAKSHI_PUBLIC_DEMO: "1"
+      KARMASAKSHI_DEMO_TTL_SECONDS: "900"
+      KARMASAKSHI_DEMO_RATE_LIMIT_PER_MINUTE: "30"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
       interval: 15s

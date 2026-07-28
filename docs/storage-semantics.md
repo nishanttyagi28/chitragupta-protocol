@@ -1,6 +1,6 @@
 # Storage Semantics
 
-`chitragupta.stores` defines one protocol (`GrantStore`) with three
+`karmasakshi.stores` defines one protocol (`GrantStore`) with three
 implementations. All three implement the same atomic
 reserve → release/commit contract; they differ only in durability and
 distribution scope.
@@ -56,7 +56,7 @@ instance. Atomicity comes from two server-side Lua scripts (`reserve`,
 other client, which is what makes this safe across machines, unlike the
 SQLite backend.
 
-`redis` is an optional dependency (`pip install chitragupta-protocol[redis]`).
+`redis` is an optional dependency (`pip install karmasakshi-protocol[redis]`).
 The test suite (`tests/unit/test_stores_redis.py`) is collected
 unconditionally but every test is **skipped with an explicit reason** if
 no Redis instance is reachable at `localhost:6379` (or `REDIS_URL`) —

@@ -7,7 +7,7 @@ the process below reflects that — expect it to evolve.
 
 ```bash
 git clone <your fork>
-cd chitragupta-protocol
+cd karmasakshi-protocol
 python -m venv .venv
 .venv/Scripts/activate   # or source .venv/bin/activate on macOS/Linux
 pip install -e ".[all]"
@@ -22,7 +22,7 @@ ruff format --check .
 ruff check .
 mypy src
 pytest
-pytest --cov=chitragupta --cov-report=term-missing
+pytest --cov=karmasakshi --cov-report=term-missing
 ```
 
 All four must pass. If you're touching a security-relevant module

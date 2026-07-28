@@ -1,6 +1,6 @@
 # Writing an Effect Adapter
 
-An adapter implements `chitragupta.adapters.base.EffectAdapter` (sync) or
+An adapter implements `karmasakshi.adapters.base.EffectAdapter` (sync) or
 `AsyncEffectAdapter` (async — same method names, coroutines). The engine
 calls these five methods and makes every authorization decision itself;
 **adapters never decide authorization**.

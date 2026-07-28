@@ -1,13 +1,13 @@
 # FastAPI Control Plane
 
-Optional (`pip install chitragupta-protocol[api]`). `chitragupta.api.create_app()`
-builds a FastAPI app; `chitragupta.web.console` adds a server-rendered
+Optional (`pip install karmasakshi-protocol[api]`). `karmasakshi.api.create_app()`
+builds a FastAPI app; `karmasakshi.web.console` adds a server-rendered
 local console at `/console/`.
 
 ## Running it
 
 ```python
-from chitragupta.api import create_app
+from karmasakshi.api import create_app
 import uvicorn
 
 app = create_app()  # local dev: wires up the 3 reference adapters automatically
@@ -23,15 +23,15 @@ development and demos.
 **Fail closed by default.** Every route except `/health` and `/ready`
 requires either:
 
-- `CHITRAGUPTA_API_DEV_MODE=1` set explicitly (unauthenticated local dev —
+- `KARMASAKSHI_API_DEV_MODE=1` set explicitly (unauthenticated local dev —
   the OpenAPI description and the console's base template both label this
   visibly), **or**
-- `CHITRAGUPTA_API_TOKEN=<token>` set, and every request carrying
+- `KARMASAKSHI_API_TOKEN=<token>` set, and every request carrying
   `Authorization: Bearer <token>`.
 
-If dev mode is off and `CHITRAGUPTA_API_TOKEN` is unset, the server
+If dev mode is off and `KARMASAKSHI_API_TOKEN` is unset, the server
 returns `500` on every authenticated route rather than silently serving
-without authentication — see `chitragupta.api.auth.require_auth` and
+without authentication — see `karmasakshi.api.auth.require_auth` and
 `tests/integration/test_api.py::TestAuthEnforcement`.
 
 ## Endpoints
@@ -56,7 +56,7 @@ without authentication — see `chitragupta.api.auth.require_auth` and
 | GET | `/kill-switch` | Current status |
 | POST | `/kill-switch/engage` / `/disengage` | Emergency stop for `/execute` |
 
-Full request/response schemas: `chitragupta.api.schemas`, or the live
+Full request/response schemas: `karmasakshi.api.schemas`, or the live
 OpenAPI JSON at `/openapi.json` (interactive docs at `/docs`).
 
 ## Local console

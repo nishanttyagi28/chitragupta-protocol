@@ -25,7 +25,7 @@ calling the adapter. If found, it finalizes the new grant's reservation
 against the *existing* outcome and returns immediately — the adapter is
 never called a second time. This is exercised by
 `test_idempotent_retry_does_not_recommit` and demonstrated live in
-`chitragupta demo --all`.
+`karmasakshi demo --all`.
 
 This path only helps if the *first* attempt's `grant_store.commit()` call
 actually completed. If the crash happened between the adapter's effect

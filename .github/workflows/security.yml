@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install bandit
-      - run: bandit -r src/chitragupta -c pyproject.toml
+      - run: bandit -r src/karmasakshi -c pyproject.toml
 
   pip-audit:
     name: Dependency audit (pip-audit)

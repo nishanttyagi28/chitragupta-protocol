@@ -1,9 +1,9 @@
 """Shared helper: start/stop a local uvicorn instance of the public demo for
 ``scripts/capture_screenshots.py`` and ``scripts/record_demo.py``.
 
-Runs the exact same ``chitragupta.api.app:create_app`` factory used by the
+Runs the exact same ``karmasakshi.api.app:create_app`` factory used by the
 Dockerfile and ``render.yaml`` public deployment, with
-``CHITRAGUPTA_PUBLIC_DEMO=1`` -- these scripts drive the real application,
+``KARMASAKSHI_PUBLIC_DEMO=1`` -- these scripts drive the real application,
 not a mock or a hand-built animation.
 """
 
@@ -48,15 +48,15 @@ def demo_server(ttl_seconds: int = 3600, rate_limit_per_minute: int = 10_000) ->
     """Start the public demo app in a subprocess; yield its base URL."""
     port = _free_port()
     env = dict(os.environ)
-    env["CHITRAGUPTA_PUBLIC_DEMO"] = "1"
-    env["CHITRAGUPTA_DEMO_TTL_SECONDS"] = str(ttl_seconds)
-    env["CHITRAGUPTA_DEMO_RATE_LIMIT_PER_MINUTE"] = str(rate_limit_per_minute)
+    env["KARMASAKSHI_PUBLIC_DEMO"] = "1"
+    env["KARMASAKSHI_DEMO_TTL_SECONDS"] = str(ttl_seconds)
+    env["KARMASAKSHI_DEMO_RATE_LIMIT_PER_MINUTE"] = str(rate_limit_per_minute)
     proc = subprocess.Popen(
         [
             sys.executable,
             "-m",
             "uvicorn",
-            "chitragupta.api.app:create_app",
+            "karmasakshi.api.app:create_app",
             "--factory",
             "--host",
             HOST,

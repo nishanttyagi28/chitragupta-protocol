@@ -1,6 +1,6 @@
 # Action Passports
 
-`chitragupta.passports.build_passport(...)` assembles a complete, factual
+`karmasakshi.passports.build_passport(...)` assembles a complete, factual
 record of one effect's lifecycle — the "PROVE" step. It deliberately
 excludes chain-of-thought or any free-form model reasoning: only
 structured facts.
@@ -31,7 +31,7 @@ the problem (see `test_passport_detects_tampered_manifest`).
 ## Generating one
 
 ```python
-from chitragupta.passports import build_passport, render_passport_markdown
+from karmasakshi.passports import build_passport, render_passport_markdown
 
 passport = build_passport(
     sealed=sealed_manifest,
@@ -62,5 +62,5 @@ shows `grant_id=None`, `commit_attempted=False`.
 
 ## Where you can get one
 
-- CLI: `chitragupta passport <manifest-id> [--format json|markdown|html] [--grant-id ...] [-o file]`
+- CLI: `karmasakshi passport <manifest-id> [--format json|markdown|html] [--grant-id ...] [-o file]`
 - API: `GET /passports/{manifest_id}?fmt=json|markdown|html`

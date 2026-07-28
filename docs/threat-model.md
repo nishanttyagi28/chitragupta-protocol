@@ -1,6 +1,6 @@
 # Threat Model
 
-**This document describes what Chitragupta Protocol is designed to
+**This document describes what KarmaSakshi Protocol is designed to
 resist and, equally importantly, what it is not. It is not a security
 certification.**
 

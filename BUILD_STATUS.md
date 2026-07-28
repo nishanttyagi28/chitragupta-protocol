@@ -1,4 +1,4 @@
-# Build Status — Chitragupta Protocol v0.1
+# Build Status — KarmaSakshi Protocol v0.1
 
 _Last updated: 2026-07-27 (final verification pass complete)_
 
@@ -11,12 +11,12 @@ file for the full command-by-command record.
 ## Repository state at session start
 
 - Empty git repository, no commits, single branch `master`.
-- Working branch created: `feature/chitragupta-protocol-v0.1`.
+- Working branch created: `feature/karmasakshi-protocol-v0.1`.
 - Python available: 3.14.6 (default `python`), 3.12 (via `py -3.12`). Dev venv will target **3.12** for
   best wheel availability (cryptography, pydantic-core) — package metadata will still declare
   `requires-python = ">=3.10,<3.14"`.
-- PyPI name check: `https://pypi.org/pypi/chitragupta-protocol/json` → 404 (name available).
-  Distribution name: **chitragupta-protocol**. Import name `chitragupta`, CLI `chitragupta` (unchanged
+- PyPI name check: `https://pypi.org/pypi/karmasakshi-protocol/json` → 404 (name available).
+  Distribution name: **karmasakshi-protocol**. Import name `karmasakshi`, CLI `karmasakshi` (unchanged
   per instructions regardless of PyPI name).
 
 ## Plan (phases, committed independently)
@@ -102,16 +102,16 @@ not assumed.
 | `ruff check .` | PASS (all checks passed) |
 | `mypy src` | PASS (0 errors, 76 source files) |
 | `pytest` | PASS (272 passed, 6 skipped) |
-| `pytest --cov=chitragupta --cov-report=term-missing` | PASS, 90% overall coverage |
+| `pytest --cov=karmasakshi --cov-report=term-missing` | PASS, 90% overall coverage |
 | `python -m build` | PASS (sdist + wheel built); re-run twice, byte-identical SHA-256 hashes both times |
 | `python -m twine check dist/*` | PASS (both artifacts) |
 | `pip-audit` | PASS -- 0 known vulnerabilities (15 found and fixed during this phase, see Phase 15 note) |
-| `bandit -r src/chitragupta` | PASS -- 0 issues (12 findings reviewed and suppressed with `# nosec` + comment justifying each: fixed-table-name SQL f-strings, an env-var-name constant, and 5 type-narrowing `assert`s guaranteed safe by preceding logic) |
-| `chitragupta doctor` (fresh workspace) | PASS -- all 6 checks OK |
-| `chitragupta demo --all` | PASS -- 15/15 scenarios, both from the dev venv and from a clean wheel-only install |
-| Clean venv + wheel install: `python -c "import chitragupta; print(chitragupta.__version__)"` | `0.1.0` |
-| Clean venv + wheel install: `chitragupta version` | `0.1.0` |
-| Clean venv + wheel install: `chitragupta --help` | PASS, all subcommands listed |
+| `bandit -r src/karmasakshi` | PASS -- 0 issues (12 findings reviewed and suppressed with `# nosec` + comment justifying each: fixed-table-name SQL f-strings, an env-var-name constant, and 5 type-narrowing `assert`s guaranteed safe by preceding logic) |
+| `karmasakshi doctor` (fresh workspace) | PASS -- all 6 checks OK |
+| `karmasakshi demo --all` | PASS -- 15/15 scenarios, both from the dev venv and from a clean wheel-only install |
+| Clean venv + wheel install: `python -c "import karmasakshi; print(karmasakshi.__version__)"` | `0.1.0` |
+| Clean venv + wheel install: `karmasakshi version` | `0.1.0` |
+| Clean venv + wheel install: `karmasakshi --help` | PASS, all subcommands listed |
 
 **Skipped, with reason (not fabricated as passing):**
 - Redis-specific tests (`tests/unit/test_stores_redis.py`, 6 tests) and any
@@ -142,7 +142,7 @@ backend option and the passport/CLI-facing layer on top of the same
 - Redis backend: implemented with a Lua script for atomic consumption, but integration tests only
   run if a local Redis is reachable (`REDIS_URL` env or localhost:6379 probe). If unavailable, tests
   are `skip`ped with an explicit reason — never silently omitted from the suite.
-- LangGraph is an optional extra (`chitragupta[langgraph]`); core has zero import-time dependency on it.
+- LangGraph is an optional extra (`karmasakshi[langgraph]`); core has zero import-time dependency on it.
 - FastAPI local console uses server-rendered Jinja2 templates, no JS build pipeline.
 - Docker/Compose verification only runs if Docker is available locally; otherwise marked skipped.
 - No production security audit or certification claim anywhere in docs.

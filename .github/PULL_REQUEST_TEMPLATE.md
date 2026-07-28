@@ -7,7 +7,7 @@
 - [ ] `ruff format --check .` and `ruff check .` pass
 - [ ] `mypy src` passes
 - [ ] `pytest` passes
-- [ ] Coverage did not regress for touched modules (`pytest --cov=chitragupta --cov-report=term-missing`)
+- [ ] Coverage did not regress for touched modules (`pytest --cov=karmasakshi --cov-report=term-missing`)
 - [ ] If this touches a security-relevant module (`domain`, `crypto`,
       `grants`, `engine`, `delegation`, `stores`, `audit`), tests were
       added/updated in the matching category (unit / property / adversarial)

@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for Chitragupta Protocol
+about: Suggest an idea for KarmaSakshi Protocol
 title: "[Feature] "
 labels: enhancement
 ---
