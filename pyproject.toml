@@ -68,7 +68,7 @@ dev = [
     "bandit>=1.7,<2",
     "pip-audit>=2.7,<3",
     "build>=1.2,<2",
-    "twine>=5.1,<6",
+    "twine>=5.1,<8",
     "httpx>=0.27,<1.0",
     "freezegun>=1.5,<2",
 ]
