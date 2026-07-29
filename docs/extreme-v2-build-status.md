@@ -630,9 +630,9 @@ claims).
 
 - last merged phase on main: Phase 11 (`739a64f`, PR #26)
 - current branch: `cursor/phase12-authority-budgets-ffca`
-- open PR: (pending push)
-- latest local green: **641 passed, 6 skipped**; coverage **90.19%**;
-  ruff/mypy/bandit/build/twine clean; pip-audit pytest CVE (dev-only)
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/27
+- latest local green commit: `85e6d7e`
+- test counts: **641 passed, 6 skipped**; coverage **90.15%**
 - known blockers: Redis-only skips; InMemoryBudgetLedger single-process only
 - exact next command after Phase 12 merge: begin Phase 13 from updated `main`
 - exact next phase: 13 — Durable lifecycle storage
