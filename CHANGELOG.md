@@ -72,6 +72,14 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   /policy/separation-bundles`, the same two optional fields on
   `/approve` and `/approve-with-quorum`). See
   [docs/separation-of-duties.md](docs/separation-of-duties.md).
+- **Signed causal effect graphs** (`karmasakshi.causal`): signed links
+  bind exact parent and child manifest hashes into deterministic DAGs.
+  Graph construction rejects missing endpoints, duplicate links,
+  self-links, cycles, excessive depth and excessive size. Action
+  Passports carry verified graph ancestry; the API exposes create and
+  inspect endpoints. Graphs are proof metadata in schema 1.x and do not
+  implicitly authorize or order execution. See
+  [docs/causal-effect-graphs.md](docs/causal-effect-graphs.md).
 
 ## [0.1.0] - 2026-07-27
 
