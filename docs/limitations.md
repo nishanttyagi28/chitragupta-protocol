@@ -62,6 +62,9 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   invocations (only the `sqlite` adapter does, via its own database file).
   `karmasakshi demo --all` is the way to see a full single-process
   walkthrough of all three.
+- **Transactional outbox is single-node** (extreme-v2 Phase 15).
+  `outbox.db` records commit intent; pending is not verified
+  completion. See [docs/transactional-outbox.md](transactional-outbox.md).
 - **No rate limiting, DoS protection, or resource-exhaustion defense**
   anywhere in the CLI, API, or engine.
 - **No formal verification.** The documented invariants

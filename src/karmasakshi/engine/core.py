@@ -74,6 +74,8 @@ from karmasakshi.grants.model import ExecutionGrant, ScopeConstraints
 from karmasakshi.grants.verifier import verify_grant
 from karmasakshi.intelligence.facts import AssessmentFacts
 from karmasakshi.intelligence.model import EffectAssessment
+from karmasakshi.outbox.memory import OutboxConflictError
+from karmasakshi.outbox.model import OutboxEntry
 from karmasakshi.policy.bundle import SealedPolicyBundle
 from karmasakshi.policy.sealing import verify_policy_bundle
 from karmasakshi.protocol.sealing import seal_manifest, verify_seal
@@ -1350,10 +1352,45 @@ class KarmaSakshiEngine:
             release_budget()
             raise
 
+        outbox_pending = False
+        if self._ctx.outbox_store is not None:
+            try:
+                self._ctx.outbox_store.record_pending(
+                    OutboxEntry(
+                        idempotency_key=manifest.idempotency_key,
+                        grant_id=grant_id,
+                        manifest_id=manifest_id,
+                        manifest_hash=manifest_hash,
+                        status="pending",
+                        created_at=self._ctx.clock.now(),
+                    )
+                )
+                outbox_pending = True
+            except (OutboxConflictError, StoreUnavailableError) as exc:
+                self._ctx.grant_store.release(grant_id)
+                release_budget()
+                deny(
+                    "outbox.record_failed",
+                    f"blocked_{type(exc).__name__}",
+                    exc,
+                )
+
+        def abandon_outbox() -> None:
+            if outbox_pending and self._ctx.outbox_store is not None:
+                self._ctx.outbox_store.mark_abandoned(manifest.idempotency_key)
+
+        def confirm_outbox(outcome_ref: str) -> None:
+            if self._ctx.outbox_store is not None:
+                # Confirm even if we did not just record (idempotent replay path).
+                existing = self._ctx.outbox_store.get(manifest.idempotency_key)
+                if (existing is not None and existing.status == "pending") or outbox_pending:
+                    self._ctx.outbox_store.mark_confirmed(manifest.idempotency_key, outcome_ref)
+
         existing_outcome = self._ctx.grant_store.get_idempotent_outcome(manifest.idempotency_key)
         if existing_outcome is not None:
             # Already committed effect: finalize grant use, do not consume budget again.
             release_budget()
+            confirm_outbox(existing_outcome)
             self._ctx.grant_store.commit(grant_id, manifest.idempotency_key, existing_outcome)
             self._transition(
                 manifest_id,
@@ -1376,6 +1413,7 @@ class KarmaSakshiEngine:
         except Exception as exc:
             self._ctx.grant_store.release(grant_id)
             release_budget()
+            abandon_outbox()
             self._transition(
                 manifest_id,
                 LifecycleState.FAILED,
@@ -1390,6 +1428,7 @@ class KarmaSakshiEngine:
         if not precondition_result.satisfied:
             self._ctx.grant_store.release(grant_id)
             release_budget()
+            abandon_outbox()
             self._transition(
                 manifest_id,
                 LifecycleState.FAILED,
@@ -1408,6 +1447,7 @@ class KarmaSakshiEngine:
         except Exception as exc:
             self._ctx.grant_store.release(grant_id)
             release_budget()
+            # Leave outbox PENDING — outcome may be ambiguous; recovery must re-observe.
             self._transition(
                 manifest_id,
                 LifecycleState.FAILED,
@@ -1415,13 +1455,14 @@ class KarmaSakshiEngine:
                 manifest_hash=manifest_hash,
                 grant_id=grant_id,
                 actor_id=actor_id,
-                metadata={"error": str(exc)[:200]},
+                metadata={"error": str(exc)[:200], "outbox": "pending_ambiguous"},
             )
             raise
 
         if not commit_result.success:
             self._ctx.grant_store.release(grant_id)
             release_budget()
+            abandon_outbox()
             self._transition(
                 manifest_id,
                 LifecycleState.FAILED,
@@ -1436,9 +1477,9 @@ class KarmaSakshiEngine:
         if budget_id is not None and budget_amount is not None:
             assert self._ctx.budget_ledger is not None  # nosec B101 - reserved above
             self._ctx.budget_ledger.commit(budget_id, budget_amount)
-        self._ctx.grant_store.commit(
-            grant_id, manifest.idempotency_key, commit_result.provider_reference or "committed"
-        )
+        outcome_ref = commit_result.provider_reference or "committed"
+        confirm_outbox(outcome_ref)
+        self._ctx.grant_store.commit(grant_id, manifest.idempotency_key, outcome_ref)
         self._transition(
             manifest_id,
             LifecycleState.COMMITTED,
@@ -1447,7 +1488,7 @@ class KarmaSakshiEngine:
             grant_id=grant_id,
             actor_id=actor_id,
             metadata={
-                "provider_reference": (commit_result.provider_reference or "")[:200],
+                "provider_reference": outcome_ref[:200],
                 **(
                     {
                         "authority_budget_id": budget_id,
@@ -1496,7 +1537,17 @@ class KarmaSakshiEngine:
         if proof.matched_expected:
             outcome_ref = proof.observed_after_state_digest or "recovered-externally"
             self._ctx.grant_store.record_idempotent_outcome(manifest.idempotency_key, outcome_ref)
+            if self._ctx.outbox_store is not None:
+                pending = self._ctx.outbox_store.get(manifest.idempotency_key)
+                if pending is not None and pending.status == "pending":
+                    self._ctx.outbox_store.mark_confirmed(manifest.idempotency_key, outcome_ref)
         return proof
+
+    def list_pending_outbox(self) -> list[OutboxEntry]:
+        """Return pending commit intents when an outbox store is configured."""
+        if self._ctx.outbox_store is None:
+            return []
+        return self._ctx.outbox_store.list_pending()
 
     # --- VERIFY -----------------------------------------------------------
 

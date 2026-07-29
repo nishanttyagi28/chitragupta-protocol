@@ -31,6 +31,7 @@ from karmasakshi.engine.core import KarmaSakshiEngine
 from karmasakshi.envelope.model import DecisionEnvelope
 from karmasakshi.grants.model import ExecutionGrant
 from karmasakshi.intelligence.model import EffectAssessment
+from karmasakshi.outbox.sqlite import SQLiteOutboxStore
 from karmasakshi.policy.bundle import SealedPolicyBundle
 from karmasakshi.stores.lifecycle_sqlite import SQLiteLifecycleStore
 from karmasakshi.stores.sqlite import SQLiteGrantStore
@@ -81,6 +82,7 @@ def build_default_state(data_dir: Path | None = None) -> ApiState:
             grant_store=SQLiteGrantStore(data_dir / "grants.db"),
             audit=AuditJournal(backend=SQLiteAuditBackend(data_dir / "audit.db")),
             lifecycle_store=SQLiteLifecycleStore(data_dir / "lifecycle.db"),
+            outbox_store=SQLiteOutboxStore(data_dir / "outbox.db"),
         )
     )
 

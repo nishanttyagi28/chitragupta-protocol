@@ -239,7 +239,7 @@ def fake_adapter(fake_adapter_state, fixed_clock) -> FakeAdapter:
 
 @pytest.fixture
 def engine_factory(keyring, fixed_clock):
-    def _factory(*, grant_store=None, budget_ledger=None, lifecycle_store=None):
+    def _factory(*, grant_store=None, budget_ledger=None, lifecycle_store=None, outbox_store=None):
         ctx = EngineContext(
             keyring=keyring,
             grant_store=grant_store or InMemoryGrantStore(),
@@ -247,6 +247,7 @@ def engine_factory(keyring, fixed_clock):
             clock=fixed_clock,
             budget_ledger=budget_ledger,
             lifecycle_store=lifecycle_store,
+            outbox_store=outbox_store,
         )
         return KarmaSakshiEngine(ctx)
 

@@ -36,6 +36,7 @@ from karmasakshi.envelope.model import DecisionEnvelope
 from karmasakshi.errors import KeyLoadError
 from karmasakshi.grants.model import ExecutionGrant
 from karmasakshi.intelligence.model import EffectAssessment
+from karmasakshi.outbox.sqlite import SQLiteOutboxStore
 from karmasakshi.policy.bundle import PolicyBundle, SealedPolicyBundle
 from karmasakshi.state_machine.states import LifecycleState
 from karmasakshi.stores.lifecycle_sqlite import SQLiteLifecycleStore
@@ -319,6 +320,9 @@ class Workspace:
     def open_lifecycle_store(self) -> SQLiteLifecycleStore:
         return SQLiteLifecycleStore(self.root / "lifecycle.db")
 
+    def open_outbox_store(self) -> SQLiteOutboxStore:
+        return SQLiteOutboxStore(self.root / "outbox.db")
+
     def open_audit(self) -> AuditJournal:
         return AuditJournal(backend=SQLiteAuditBackend(self.root / "audit.db"))
 
@@ -328,6 +332,7 @@ class Workspace:
             grant_store=self.open_grant_store(),
             audit=self.open_audit(),
             lifecycle_store=self.open_lifecycle_store(),
+            outbox_store=self.open_outbox_store(),
         )
         return KarmaSakshiEngine(ctx)
 
