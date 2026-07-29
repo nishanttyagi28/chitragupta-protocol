@@ -886,3 +886,293 @@ def test_authorize_with_quorum_grant_commits_without_re_presenting_approvals(
     # alone (plus its cryptographic approval_set_hash) is sufficient.
     result = engine.commit(sealed, grant, fake_adapter, context=None)
     assert result.success
+
+
+# --- separation of duties (extreme-v2 Phase 4) --------------------------------
+
+
+def _sealed_separation_bundle(signing_key, now, *, forbidden_role_pairs=None, bundle_id="sod-1"):
+    from karmasakshi.config.clock import FixedClock
+    from karmasakshi.domain.common import Principal
+    from karmasakshi.duty import SeparationOfDutyPolicy, build_separation_of_duty_policy_bundle
+    from karmasakshi.policy import seal_policy_bundle
+
+    policy = (
+        SeparationOfDutyPolicy(forbidden_role_pairs=forbidden_role_pairs)
+        if forbidden_role_pairs is not None
+        else SeparationOfDutyPolicy()
+    )
+    bundle = build_separation_of_duty_policy_bundle(
+        policy,
+        bundle_id=bundle_id,
+        bundle_version="1.0",
+        issuer=Principal(principal_id="policy-admin", principal_type=PrincipalType.HUMAN),
+        created_at=now,
+        effective_from=now,
+    )
+    return seal_policy_bundle(bundle, signing_key, clock=FixedClock(now))
+
+
+def test_authorize_blocked_when_issuer_is_also_proposer(
+    engine_factory, manifest_factory, agent_principal, issuer_signing_key, now, fake_adapter
+):
+    """Under the default separation matrix, proposer and approver may
+    never be the same principal. Here the manifest's actor (proposer) and
+    the grant issuer (the single-issuer "approver") are the same
+    principal, so authorization must be blocked."""
+    from karmasakshi.errors import SeparationOfDutyViolationError
+
+    engine = engine_factory()
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    sod_bundle = _sealed_separation_bundle(issuer_signing_key, now)
+
+    with pytest.raises(SeparationOfDutyViolationError):
+        _authorize(
+            engine,
+            sealed,
+            issuer=manifest.actor,  # same principal as the proposer
+            subject=agent_principal,
+            issuer_signing_key=issuer_signing_key,
+            now=now,
+            separation_policy_bundle=sod_bundle,
+        )
+
+
+def test_authorize_succeeds_when_roles_are_properly_separated(
+    engine_factory,
+    manifest_factory,
+    service_principal,
+    agent_principal,
+    issuer_signing_key,
+    now,
+    fake_adapter,
+):
+    engine = engine_factory()
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    sod_bundle = _sealed_separation_bundle(issuer_signing_key, now)
+
+    grant = _authorize(
+        engine,
+        sealed,
+        issuer=service_principal,  # distinct from proposer (manifest.actor) and subject
+        subject=agent_principal,
+        issuer_signing_key=issuer_signing_key,
+        now=now,
+        separation_policy_bundle=sod_bundle,
+    )
+    result = engine.commit(sealed, grant, fake_adapter, context=None)
+    assert result.success
+
+
+def test_authorize_blocked_when_additional_role_assignment_conflicts(
+    engine_factory,
+    manifest_factory,
+    service_principal,
+    agent_principal,
+    issuer_signing_key,
+    now,
+    fake_adapter,
+):
+    """Even with a cleanly separated proposer/approver/executor, an
+    explicitly supplied additional role (sealer) held by the same
+    principal as the approver must still be blocked."""
+    from karmasakshi.duty import ProtocolRole, RoleAssignment
+    from karmasakshi.errors import SeparationOfDutyViolationError
+
+    engine = engine_factory()
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    sod_bundle = _sealed_separation_bundle(issuer_signing_key, now)
+    role_assignment = RoleAssignment.of(
+        sealed.seal.manifest_hash, ProtocolRole.SEALER, service_principal.principal_id
+    )
+
+    with pytest.raises(SeparationOfDutyViolationError):
+        _authorize(
+            engine,
+            sealed,
+            issuer=service_principal,
+            subject=agent_principal,
+            issuer_signing_key=issuer_signing_key,
+            now=now,
+            separation_policy_bundle=sod_bundle,
+            role_assignment=role_assignment,
+        )
+
+
+def test_authorize_without_separation_bundle_is_unaffected_by_role_conflicts(
+    engine_factory,
+    manifest_factory,
+    service_principal,
+    agent_principal,
+    issuer_signing_key,
+    now,
+    fake_adapter,
+):
+    """No separation_policy_bundle given at all -- Phase 4 is fully
+    additive/opt-in, exactly like Phase 2 and Phase 3. The proposer here
+    (a service principal, so it is legal to also be the issuer under
+    invariant #30) is the same principal as the approver -- a conflict
+    the default matrix would block if a bundle were bound."""
+    engine = engine_factory()
+    manifest = manifest_factory(actor=service_principal)
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    grant = _authorize(
+        engine,
+        sealed,
+        issuer=service_principal,  # same principal as the proposer (manifest.actor)
+        subject=agent_principal,
+        issuer_signing_key=issuer_signing_key,
+        now=now,
+    )
+    assert grant is not None
+
+
+def test_authorize_with_quorum_blocked_when_an_approver_is_also_the_proposer(
+    manifest_factory, agent_principal, issuer_signing_key, fixed_clock, now, fake_adapter
+):
+    from karmasakshi.duty import ProtocolRole, RoleAssignment
+    from karmasakshi.errors import SeparationOfDutyViolationError
+    from karmasakshi.grants.model import ScopeConstraints
+
+    proposer_key = other_signing_key_factory("proposer-as-approver")
+    bob_key = other_signing_key_factory("bob")
+    engine = _quorum_engine(fixed_clock, issuer_signing_key, proposer_key, bob_key)
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    approval_bundle = _sealed_approval_bundle(issuer_signing_key, now, required_approvals=2)
+    sod_bundle = _sealed_separation_bundle(issuer_signing_key, now, bundle_id="sod-quorum-1")
+    # The proposer itself signs an approval statement -- Phase 3's own
+    # forbid_proposer_as_approver would already catch this at quorum
+    # evaluation time, so use a distinct principal for the approval
+    # statement but assert the *same* principal_id as the manifest actor
+    # via an explicit extra role instead, to isolate Phase 4's check.
+    statements = (
+        _approval(proposer_key, "approver-1", sealed, approval_bundle, now),
+        _approval(bob_key, "bob", sealed, approval_bundle, now),
+    )
+    from karmasakshi.domain.common import Principal
+
+    with pytest.raises(SeparationOfDutyViolationError):
+        engine.authorize_with_quorum(
+            sealed,
+            statements=statements,
+            approval_policy_bundle=approval_bundle,
+            proposer=manifest.actor,
+            subject=agent_principal,
+            grant_issuer=Principal(
+                principal_id="quorum-service", principal_type=PrincipalType.SERVICE
+            ),
+            audience=("payment.simulator",),
+            allowed_effect_types=(manifest.effect_type,),
+            scope=ScopeConstraints(),
+            not_before=now,
+            expires_at=now + timedelta(minutes=5),
+            signing_key=issuer_signing_key,
+            separation_policy_bundle=sod_bundle,
+            role_assignment=RoleAssignment(
+                manifest_hash=sealed.seal.manifest_hash,
+                assignments=((ProtocolRole.PROPOSER.value, "approver-1"),),
+            ),
+        )
+
+
+def test_authorize_with_quorum_succeeds_when_no_role_conflicts(
+    manifest_factory, agent_principal, issuer_signing_key, fixed_clock, now, fake_adapter
+):
+    from karmasakshi.domain.common import Principal
+    from karmasakshi.grants.model import ScopeConstraints
+
+    alice_key = other_signing_key_factory("alice")
+    bob_key = other_signing_key_factory("bob")
+    engine = _quorum_engine(fixed_clock, issuer_signing_key, alice_key, bob_key)
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    approval_bundle = _sealed_approval_bundle(issuer_signing_key, now, required_approvals=2)
+    sod_bundle = _sealed_separation_bundle(issuer_signing_key, now, bundle_id="sod-quorum-2")
+    statements = (
+        _approval(alice_key, "alice", sealed, approval_bundle, now),
+        _approval(bob_key, "bob", sealed, approval_bundle, now),
+    )
+    grant = engine.authorize_with_quorum(
+        sealed,
+        statements=statements,
+        approval_policy_bundle=approval_bundle,
+        proposer=manifest.actor,
+        subject=agent_principal,
+        grant_issuer=Principal(principal_id="quorum-service", principal_type=PrincipalType.SERVICE),
+        audience=("payment.simulator",),
+        allowed_effect_types=(manifest.effect_type,),
+        scope=ScopeConstraints(),
+        not_before=now,
+        expires_at=now + timedelta(minutes=5),
+        signing_key=issuer_signing_key,
+        separation_policy_bundle=sod_bundle,
+    )
+    result = engine.commit(sealed, grant, fake_adapter, context=None)
+    assert result.success
+
+
+def test_separation_policy_bundle_with_wrong_policy_type_is_rejected(
+    engine_factory,
+    manifest_factory,
+    service_principal,
+    agent_principal,
+    issuer_signing_key,
+    now,
+    fake_adapter,
+):
+    """A caller passing an intelligence (or approval) policy bundle where
+    a separation-of-duty bundle is expected must fail closed, exactly
+    like the existing approval_policy_bundle type check in Phase 3."""
+    from karmasakshi.errors import PolicyBundleTypeMismatchError
+
+    engine = engine_factory()
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    wrong_bundle = _sealed_bundle(issuer_signing_key, now)  # intelligence.v1, not separation.v1
+
+    with pytest.raises(PolicyBundleTypeMismatchError):
+        _authorize(
+            engine,
+            sealed,
+            issuer=service_principal,
+            subject=agent_principal,
+            issuer_signing_key=issuer_signing_key,
+            now=now,
+            separation_policy_bundle=wrong_bundle,
+        )
+
+
+def test_grant_issued_records_role_participation_in_audit_metadata(
+    engine_factory,
+    manifest_factory,
+    service_principal,
+    agent_principal,
+    issuer_signing_key,
+    now,
+    fake_adapter,
+):
+    engine = engine_factory()
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    grant = _authorize(
+        engine,
+        sealed,
+        issuer=service_principal,
+        subject=agent_principal,
+        issuer_signing_key=issuer_signing_key,
+        now=now,
+    )
+    events = [
+        e
+        for e in engine.context.audit.events_for_manifest(sealed.manifest.manifest_id)
+        if e.event_type == "grant.issued" and e.grant_id == grant.grant_id
+    ]
+    assert len(events) == 1
+    metadata = events[0].metadata
+    assert metadata["role:proposer"] == manifest.actor.principal_id
+    assert metadata["role:executor"] == agent_principal.principal_id
+    assert metadata["role:approver"] == service_principal.principal_id

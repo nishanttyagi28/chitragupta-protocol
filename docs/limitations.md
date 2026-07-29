@@ -49,7 +49,7 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   walkthrough of all three.
 - **No rate limiting, DoS protection, or resource-exhaustion defense**
   anywhere in the CLI, API, or engine.
-- **No formal verification.** The 30 documented invariants
+- **No formal verification.** The 38 documented invariants
   ([docs/security-model.md](security-model.md)) are backed by unit tests,
   property-based tests (Hypothesis), and adversarial-input tests — not by
   a theorem prover or model checker. Passing tests demonstrate the stated
@@ -87,6 +87,15 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   approver (the CLI does not have this limitation). See
   [docs/policy-bundles.md](policy-bundles.md) and
   [docs/multi-party-authorization.md](multi-party-authorization.md).
+- **Separation-of-duty role facts beyond proposer/executor/approver are
+  entirely caller-supplied** (`karmasakshi.duty.RoleAssignment`), with no
+  cryptographic proof that a principal asserted as, say, `sealer`
+  actually performed that action -- the same trust level already
+  extended to `issuer`/`subject`/`proposer` elsewhere in this protocol.
+  There is also no persisted field on `ExecutionGrant` recording that a
+  separation check happened (unlike `policy_bundle_hash`/
+  `approval_set_hash`); only the audit trail records it. See
+  [docs/separation-of-duties.md](separation-of-duties.md).
 - **The public sandbox demo (`KARMASAKSHI_PUBLIC_DEMO=1`) is a single
   shared, in-memory session**, not multi-tenant: every visitor to a given
   deployment sees and can affect the same sandbox state until it

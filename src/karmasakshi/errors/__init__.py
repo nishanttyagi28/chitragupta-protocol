@@ -226,6 +226,28 @@ class QuorumNotMetError(ApprovalError):
     ``QuorumResult`` for exactly why."""
 
 
+# --- Separation of duties (extreme-v2 Phase 4) --------------------------------------
+
+
+class SeparationOfDutyError(KarmaSakshiError):
+    """Base class for separation-of-duty errors."""
+
+
+class SeparationOfDutyViolationError(SeparationOfDutyError):
+    """A ``RoleAssignment`` was found to violate a bound
+    ``SeparationOfDutyPolicy``'s forbidden role-pair matrix -- the same
+    principal was recorded as holding two roles that policy forbids from
+    ever coinciding for one manifest (e.g. sealer and approver). See the
+    accompanying ``SeparationOfDutyResult`` for exactly which role pairs
+    and principals were involved."""
+
+
+class RoleAssignmentError(SeparationOfDutyError):
+    """A ``RoleAssignment`` failed structural validation, or a caller
+    presented a role assignment bound to a different manifest hash than
+    the one being authorized."""
+
+
 # --- Adapters --------------------------------------------------------------------
 
 

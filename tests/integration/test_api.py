@@ -274,6 +274,90 @@ def test_approval_policy_bundle_rejects_agent_issuer(dev_client):
     assert resp.status_code == 422
 
 
+def _create_separation_policy_bundle(client, bundle_id="separation-policy-1", **overrides):
+    body = {
+        "bundle_id": bundle_id,
+        "issuer": {"principal_id": "policy-admin", "principal_type": "human"},
+        **overrides,
+    }
+    return client.post("/policy/separation-bundles", json=body)
+
+
+def test_separation_policy_bundle_create_and_verify(dev_client):
+    created = _create_separation_policy_bundle(dev_client)
+    assert created.status_code == 200
+    body = created.json()
+    assert body["bundle"]["policy_type"] == "separation.v1"
+
+    verified = dev_client.post(f"/policy/bundles/{body['bundle']['bundle_id']}/verify")
+    assert verified.status_code == 200
+    assert verified.json()["verified"] is True
+
+
+def test_separation_policy_bundle_rejects_agent_issuer(dev_client):
+    resp = _create_separation_policy_bundle(
+        dev_client,
+        bundle_id="bad-separation-policy",
+        issuer={"principal_id": "agent-1", "principal_type": "agent"},
+    )
+    assert resp.status_code == 422
+
+
+def test_approve_with_separation_bundle_succeeds_when_roles_are_separated(dev_client):
+    _create_separation_policy_bundle(dev_client, bundle_id="sod-1")
+    prep = _prepare_payment(dev_client, idempotency_key="idem-api-sod-1")
+    manifest_id = prep.json()["manifest_id"]
+
+    approve = dev_client.post(
+        f"/manifests/{manifest_id}/approve",
+        json={
+            "issuer": {"principal_id": "approver-1", "principal_type": "human"},
+            "subject": {"principal_id": "agent-1", "principal_type": "agent"},
+            "separation_policy_bundle_id": "sod-1",
+        },
+    )
+    assert approve.status_code == 200
+
+    passport = dev_client.get(f"/passports/{manifest_id}").json()
+    assert passport["role_participation"]["approver"] == "approver-1"
+    assert passport["role_participation"]["proposer"] == "agent-1"
+
+
+def test_approve_with_separation_bundle_blocks_role_conflict(dev_client):
+    """The manifest's actor (proposer) is a human principal here, so it is
+    legal (invariant #30) to also be the issuer -- letting us construct a
+    genuine proposer==approver conflict for the default forbidden matrix
+    without the request being rejected for an unrelated reason first."""
+    _create_separation_policy_bundle(dev_client, bundle_id="sod-2")
+    prep = dev_client.post(
+        "/manifests/prepare",
+        json={
+            "adapter": "payment",
+            "actor": {"principal_id": "same-principal", "principal_type": "human"},
+            "principal": {"principal_id": "user-1", "principal_type": "human"},
+            "idempotency_key": "idem-api-sod-2",
+            "fields": {
+                "source_account": "acct-src",
+                "beneficiary": "merchant-A",
+                "amount_minor_units": 500,
+                "currency": "INR",
+                "reference": "idem-api-sod-2",
+            },
+        },
+    )
+    manifest_id = prep.json()["manifest_id"]
+
+    approve = dev_client.post(
+        f"/manifests/{manifest_id}/approve",
+        json={
+            "issuer": {"principal_id": "same-principal", "principal_type": "human"},
+            "subject": {"principal_id": "agent-1", "principal_type": "agent"},
+            "separation_policy_bundle_id": "sod-2",
+        },
+    )
+    assert approve.status_code == 403
+
+
 def test_assess_endpoint_records_and_is_retrievable(dev_client):
     prep = _prepare_payment(dev_client, idempotency_key="idem-api-assess-1")
     manifest_id = prep.json()["manifest_id"]

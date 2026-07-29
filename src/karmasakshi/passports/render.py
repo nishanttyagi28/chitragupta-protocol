@@ -56,6 +56,17 @@ def render_passport_markdown(passport: ActionPassport) -> str:
         f"- Approval set (quorum): `{p.authorization_approval_set_hash or 'none (single-issuer authorize())'}`",  # noqa: E501
         f"- Revoked: {_bool_str(p.was_revoked)}",
         "",
+        "## Role Participation (Separation of Duties)",
+        "",
+        *(
+            [
+                f"- {role}: `{principal_ids}`"
+                for role, principal_ids in sorted(p.role_participation.items())
+            ]
+            if p.role_participation
+            else ["- No role assignment was recorded for this manifest."]
+        ),
+        "",
         "## Execution",
         "",
         f"- Commit attempted: {_bool_str(p.commit_attempted)}",

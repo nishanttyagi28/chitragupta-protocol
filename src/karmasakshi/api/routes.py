@@ -24,6 +24,7 @@ from karmasakshi.api.schemas import (
     PrepareRequestIn,
     QuorumEvaluateIn,
     QuorumGrantIn,
+    SeparationOfDutyPolicyBundleCreateIn,
 )
 from karmasakshi.api.state import ApiState
 from karmasakshi.approval import (
@@ -34,6 +35,8 @@ from karmasakshi.approval import (
     sign_approval_statement,
 )
 from karmasakshi.domain.common import Principal
+from karmasakshi.duty import SeparationOfDutyPolicy, build_separation_of_duty_policy_bundle
+from karmasakshi.duty.roles import RoleAssignment
 from karmasakshi.errors import KarmaSakshiError
 from karmasakshi.grants.model import ScopeConstraints
 from karmasakshi.intelligence import AssessmentFacts, IntelligencePolicy, derive_facts_from_audit
@@ -48,6 +51,20 @@ _ADAPTER_KEY = {"sqlite": "sqlite.row", "email": "email.sandbox", "payment": "pa
 
 def _state(request: Request) -> ApiState:
     return request.app.state.karmasakshi  # type: ignore[no-any-return]
+
+
+def _parse_role_assignment(manifest_hash: str, roles: list[str]) -> RoleAssignment | None:
+    """Parse ``"role_name:principal_id"`` entries into a
+    :class:`RoleAssignment`, or ``None`` if ``roles`` is empty."""
+    if not roles:
+        return None
+    assignments: list[tuple[str, str]] = []
+    for entry in roles:
+        role, sep, principal_id = entry.partition(":")
+        if not sep:
+            raise HTTPException(422, f"role entry must be 'role_name:principal_id', got {entry!r}")
+        assignments.append((role, principal_id))
+    return RoleAssignment(manifest_hash=manifest_hash, assignments=tuple(assignments))
 
 
 @router.get("/health")
@@ -185,6 +202,14 @@ def approve_manifest(manifest_id: str, body: ApproveIn, request: Request) -> dic
         policy_bundle = state.policy_bundles.get(body.policy_bundle_id)
         if policy_bundle is None:
             raise HTTPException(404, f"policy bundle {body.policy_bundle_id!r} not found")
+    separation_policy_bundle = None
+    if body.separation_policy_bundle_id is not None:
+        separation_policy_bundle = state.policy_bundles.get(body.separation_policy_bundle_id)
+        if separation_policy_bundle is None:
+            raise HTTPException(
+                404, f"separation policy bundle {body.separation_policy_bundle_id!r} not found"
+            )
+    role_assignment = _parse_role_assignment(sealed.seal.manifest_hash, body.roles)
     now = datetime.now(timezone.utc)
     try:
         grant = state.engine.authorize(
@@ -201,6 +226,8 @@ def approve_manifest(manifest_id: str, body: ApproveIn, request: Request) -> dic
             signing_key=state.signing_key,
             max_uses=body.max_uses,
             policy_bundle=policy_bundle,
+            separation_policy_bundle=separation_policy_bundle,
+            role_assignment=role_assignment,
         )
     except KarmaSakshiError as exc:
         raise HTTPException(403, str(exc)) from exc
@@ -362,6 +389,47 @@ def create_approval_policy_bundle(
     return sealed.model_dump(mode="json")
 
 
+@router.post("/policy/separation-bundles", dependencies=[Depends(require_auth)])
+def create_separation_policy_bundle(
+    body: SeparationOfDutyPolicyBundleCreateIn, request: Request
+) -> dict[str, Any]:
+    """Build, sign, and store a separation-of-duty policy bundle
+    (``policy_type == "separation.v1"``, extreme-v2 Phase 4). Shares
+    storage with ``/policy/bundles`` -- see docs/separation-of-duties.md.
+    """
+    state = _state(request)
+    now = datetime.now(timezone.utc)
+    pairs: list[tuple[str, str]] = []
+    for entry in body.forbidden_role_pairs:
+        role_a, sep, role_b = entry.partition(":")
+        if not sep:
+            raise HTTPException(
+                422, f"forbidden_role_pairs entry must be 'role_a:role_b', got {entry!r}"
+            )
+        pairs.append((role_a, role_b))
+    policy = (
+        SeparationOfDutyPolicy(forbidden_role_pairs=tuple(pairs))
+        if pairs
+        else SeparationOfDutyPolicy()
+    )
+    try:
+        bundle = build_separation_of_duty_policy_bundle(
+            policy,
+            bundle_id=body.bundle_id,
+            bundle_version=body.bundle_version,
+            issuer=Principal(**body.issuer.model_dump()),
+            created_at=now,
+            effective_from=now,
+            effective_until=now + timedelta(seconds=body.effective_seconds),
+            tenant_id=body.tenant_id,
+        )
+        sealed = seal_policy_bundle(bundle, state.signing_key)
+    except (KarmaSakshiError, ValueError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+    state.policy_bundles[body.bundle_id] = sealed
+    return sealed.model_dump(mode="json")
+
+
 @router.post("/manifests/{manifest_id}/approvals", dependencies=[Depends(require_auth)])
 def submit_approval(
     manifest_id: str, body: ApprovalStatementIn, request: Request
@@ -461,6 +529,14 @@ def approve_with_quorum(manifest_id: str, body: QuorumGrantIn, request: Request)
         policy_bundle = state.policy_bundles.get(body.policy_bundle_id)
         if policy_bundle is None:
             raise HTTPException(404, f"policy bundle {body.policy_bundle_id!r} not found")
+    separation_policy_bundle = None
+    if body.separation_policy_bundle_id is not None:
+        separation_policy_bundle = state.policy_bundles.get(body.separation_policy_bundle_id)
+        if separation_policy_bundle is None:
+            raise HTTPException(
+                404, f"separation policy bundle {body.separation_policy_bundle_id!r} not found"
+            )
+    role_assignment = _parse_role_assignment(sealed.seal.manifest_hash, body.roles)
     statements = tuple(state.approval_statements.get(manifest_id, []))
     now = datetime.now(timezone.utc)
     try:
@@ -481,6 +557,8 @@ def approve_with_quorum(manifest_id: str, body: QuorumGrantIn, request: Request)
             signing_key=state.signing_key,
             max_uses=body.max_uses,
             policy_bundle=policy_bundle,
+            separation_policy_bundle=separation_policy_bundle,
+            role_assignment=role_assignment,
         )
     except KarmaSakshiError as exc:
         raise HTTPException(403, str(exc)) from exc

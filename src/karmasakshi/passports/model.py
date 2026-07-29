@@ -52,6 +52,13 @@ class ActionPassport(BaseModel):
     authorization_approval_set_hash: str | None = None
     was_revoked: bool = False
 
+    # Separation of Duties (extreme-v2 Phase 4): which principal(s) held
+    # which protocol role for this manifest, e.g. {"proposer": "user:a",
+    # "approver": "user:b,user:c"} -- see docs/separation-of-duties.md.
+    # None if no role assignment was recorded (e.g. authorize() was
+    # called before Phase 4, or without a role_assignment).
+    role_participation: dict[str, str] | None = None
+
     # What was executed
     commit_attempted: bool = False
     commit_success: bool | None = None

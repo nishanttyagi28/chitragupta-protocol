@@ -892,3 +892,152 @@ def test_dissent_blocks_quorum_via_cli(workspace_args, tmp_path):
         ],
     )
     assert result.exit_code != 0
+
+
+# --- separation of duties (extreme-v2 Phase 4) --------------------------------
+
+
+def test_separation_of_duty_workflow_end_to_end(workspace_args, tmp_path):
+    _run(workspace_args + ["init"])
+    _run(workspace_args + ["key", "generate", "issuer-1"])
+    db_path = str(tmp_path / "sod-ledger.db")
+
+    _run(
+        workspace_args
+        + ["policy", "create-separation", "sod-policy", "--issuer-id", "policy-admin"]
+    )
+    _run(workspace_args + ["policy", "sign", "sod-policy", "--key-id", "issuer-1"])
+
+    prepare_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "prepare",
+            "--adapter",
+            "sqlite",
+            "--sqlite-db-path",
+            db_path,
+            "--row-operation",
+            "insert",
+            "--row-id",
+            "acct-sod-1",
+            "--new-balance",
+            "1000",
+            "--actor-id",
+            "agent-1",
+            "--principal-id",
+            "user-1",
+            "--idempotency-key",
+            "idem-cli-sod-1",
+        ]
+    )
+    manifest_id = json.loads(prepare_result.output)["manifest_id"]
+    _run(workspace_args + ["seal", manifest_id, "--key-id", "issuer-1"])
+
+    grant_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "grant",
+            "issue",
+            manifest_id,
+            "--issuer-id",
+            "approver-1",
+            "--subject-id",
+            "agent-1",
+            "--key-id",
+            "issuer-1",
+            "--audience",
+            "sqlite.row",
+            "--separation-policy-bundle-id",
+            "sod-policy",
+        ]
+    )
+    grant_id = json.loads(grant_result.output)["grant_id"]
+
+    execute_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "execute",
+            manifest_id,
+            "--grant-id",
+            grant_id,
+            "--adapter",
+            "sqlite",
+            "--sqlite-db-path",
+            db_path,
+        ]
+    )
+    assert json.loads(execute_result.output)["success"] is True
+
+    passport_result = _run(workspace_args + ["passport", manifest_id, "--format", "json"])
+    passport_data = json.loads(passport_result.output)
+    assert passport_data["role_participation"]["approver"] == "approver-1"
+    assert passport_data["role_participation"]["proposer"] == "agent-1"
+
+
+def test_separation_of_duty_blocks_role_conflict_via_cli(workspace_args, tmp_path):
+    """The issuer here is the same principal_id as the manifest's actor --
+    a proposer==approver conflict the default forbidden matrix must
+    catch, blocking `grant issue` with a non-zero exit code."""
+    _run(workspace_args + ["init"])
+    _run(workspace_args + ["key", "generate", "issuer-1"])
+    db_path = str(tmp_path / "sod-ledger-2.db")
+
+    _run(
+        workspace_args
+        + ["policy", "create-separation", "sod-policy-2", "--issuer-id", "policy-admin"]
+    )
+    _run(workspace_args + ["policy", "sign", "sod-policy-2", "--key-id", "issuer-1"])
+
+    prepare_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "prepare",
+            "--adapter",
+            "sqlite",
+            "--sqlite-db-path",
+            db_path,
+            "--row-operation",
+            "insert",
+            "--row-id",
+            "acct-sod-2",
+            "--new-balance",
+            "1000",
+            "--actor-id",
+            "same-principal",
+            "--actor-type",
+            "human",
+            "--principal-id",
+            "user-1",
+            "--idempotency-key",
+            "idem-cli-sod-2",
+        ]
+    )
+    manifest_id = json.loads(prepare_result.output)["manifest_id"]
+    _run(workspace_args + ["seal", manifest_id, "--key-id", "issuer-1"])
+
+    result = runner.invoke(
+        app,
+        workspace_args
+        + [
+            "grant",
+            "issue",
+            manifest_id,
+            "--issuer-id",
+            "same-principal",
+            "--issuer-type",
+            "human",
+            "--subject-id",
+            "agent-1",
+            "--key-id",
+            "issuer-1",
+            "--audience",
+            "sqlite.row",
+            "--separation-policy-bundle-id",
+            "sod-policy-2",
+        ],
+    )
+    assert result.exit_code != 0

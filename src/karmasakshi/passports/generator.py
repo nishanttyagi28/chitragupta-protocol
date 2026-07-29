@@ -11,12 +11,33 @@ from karmasakshi.audit.journal import AuditJournal
 from karmasakshi.config.clock import SYSTEM_CLOCK, Clock
 from karmasakshi.crypto.keyring import Keyring
 from karmasakshi.domain.seal import SealedManifest
+from karmasakshi.duty.roles import RoleAssignment
 from karmasakshi.errors import KarmaSakshiError
 from karmasakshi.grants.model import ExecutionGrant
 from karmasakshi.grants.verifier import verify_grant_signature
 from karmasakshi.intelligence.model import EffectAssessment
 from karmasakshi.passports.model import ActionPassport, PassportVerificationStatus
 from karmasakshi.stores.base import GrantStore
+
+_ROLE_METADATA_PREFIX = "role:"
+
+
+def _role_participation_from_audit(audit: AuditJournal, manifest_id: str) -> dict[str, str] | None:
+    """Reconstruct role participation from the audit trail: the most
+    recent ``grant.issued`` event for this manifest carries ``role:<role>``
+    metadata keys (see ``engine.core._role_participation_metadata``), the
+    audited record of the role assignment the engine actually enforced
+    (or, if no separation-of-duty policy was bound, still recorded) at
+    authorization time."""
+    for event in reversed(audit.events_for_manifest(manifest_id)):
+        if event.event_type == "grant.issued":
+            roles = {
+                key[len(_ROLE_METADATA_PREFIX) :]: value
+                for key, value in event.metadata.items()
+                if key.startswith(_ROLE_METADATA_PREFIX)
+            }
+            return roles or None
+    return None
 
 
 def build_passport(
@@ -31,6 +52,7 @@ def build_passport(
     outcome_proof: OutcomeProof | None = None,
     compensation_result: CompensationResult | None = None,
     assessment: EffectAssessment | None = None,
+    role_assignment: RoleAssignment | None = None,
     clock: Clock = SYSTEM_CLOCK,
 ) -> ActionPassport:
     manifest = sealed.manifest
@@ -80,6 +102,11 @@ def build_passport(
         authorization_policy_bundle_hash=grant.policy_bundle_hash if grant is not None else None,
         authorization_approval_set_hash=grant.approval_set_hash if grant is not None else None,
         was_revoked=was_revoked,
+        role_participation=(
+            role_assignment.as_role_participation()
+            if role_assignment is not None
+            else _role_participation_from_audit(audit, manifest.manifest_id)
+        ),
         commit_attempted=commit_result is not None,
         commit_success=commit_result.success if commit_result is not None else None,
         provider_reference=commit_result.provider_reference if commit_result is not None else None,

@@ -28,6 +28,12 @@ from karmasakshi.delegation.attenuation import assert_grant_narrower_or_equal
 from karmasakshi.domain.common import Principal
 from karmasakshi.domain.manifest import EffectManifest
 from karmasakshi.domain.seal import SealedManifest
+from karmasakshi.duty.enforcement import check_separation_of_duty
+from karmasakshi.duty.policy import (
+    POLICY_TYPE_SEPARATION,
+    separation_of_duty_policy_from_bundle_payload,
+)
+from karmasakshi.duty.roles import RoleAssignment, base_role_assignment
 from karmasakshi.engine.context import EngineContext
 from karmasakshi.errors import (
     AdapterMismatchError,
@@ -38,6 +44,7 @@ from karmasakshi.errors import (
     KarmaSakshiError,
     PolicyBundleMismatchError,
     QuorumNotMetError,
+    SeparationOfDutyViolationError,
     StaleManifestError,
 )
 from karmasakshi.grants.issuer import issue_grant
@@ -50,6 +57,15 @@ from karmasakshi.policy.sealing import verify_policy_bundle
 from karmasakshi.protocol.sealing import seal_manifest, verify_seal
 from karmasakshi.state_machine.record import LifecycleRecord
 from karmasakshi.state_machine.states import LifecycleState, is_revocable
+
+
+def _role_participation_metadata(role_assignment: RoleAssignment) -> dict[str, str]:
+    """Flatten a :class:`RoleAssignment` into ``dict[str, str]`` audit
+    metadata, one ``role:<role>`` key per role actually present."""
+    return {
+        f"role:{role}": principal_ids
+        for role, principal_ids in role_assignment.as_role_participation().items()
+    }
 
 
 class KarmaSakshiEngine:
@@ -232,6 +248,8 @@ class KarmaSakshiEngine:
         max_uses: int = 1,
         parent_grant_id: str | None = None,
         policy_bundle: SealedPolicyBundle | None = None,
+        separation_policy_bundle: SealedPolicyBundle | None = None,
+        role_assignment: RoleAssignment | None = None,
     ) -> ExecutionGrant:
         """Issue an :class:`ExecutionGrant` bound to ``sealed``.
 
@@ -244,8 +262,21 @@ class KarmaSakshiEngine:
         signature already covers the old bundle's hash, and
         :meth:`commit` requires the *same* bundle (by hash) to be
         re-presented and re-verified before the effect executes.
+
+        If ``separation_policy_bundle`` is given (extreme-v2 Phase 4:
+        Separation of Duties, ``policy_type == "separation.v1"``), the
+        engine builds the base role facts it already knows about this
+        call (``proposer`` = ``sealed.manifest.actor``, ``executor`` =
+        ``subject``, ``approver`` = ``issuer``), merges in any additional
+        roles from ``role_assignment`` (e.g. ``sealer``, ``witness``),
+        and checks the combined assignment against the bundle's
+        forbidden role-pair matrix via
+        ``duty.enforcement.check_separation_of_duty``. A violation blocks
+        grant issuance entirely (:class:`SeparationOfDutyViolationError`)
+        -- see docs/separation-of-duties.md.
         """
         verify_seal(sealed, self._ctx.keyring)
+        manifest_hash = sealed.seal.manifest_hash
         if policy_bundle is not None:
             try:
                 verify_policy_bundle(policy_bundle, self._ctx.keyring, now=self._ctx.clock.now())
@@ -254,12 +285,28 @@ class KarmaSakshiEngine:
                     event_type="policy_bundle.verification_failed",
                     decision="blocked",
                     manifest_id=sealed.manifest.manifest_id,
-                    manifest_hash=sealed.seal.manifest_hash,
+                    manifest_hash=manifest_hash,
                     actor_id=issuer.principal_id,
                     metadata={"bundle_id": policy_bundle.bundle.bundle_id},
                 )
                 raise
         policy_bundle_hash = policy_bundle.seal.bundle_hash if policy_bundle is not None else None
+
+        combined_roles = base_role_assignment(
+            manifest_hash,
+            proposer_id=sealed.manifest.actor.principal_id,
+            executor_id=subject.principal_id,
+            approver_ids=(issuer.principal_id,),
+        ).merge(role_assignment)
+        if separation_policy_bundle is not None:
+            self._enforce_separation_of_duty(
+                separation_policy_bundle,
+                combined_roles,
+                manifest_id=sealed.manifest.manifest_id,
+                manifest_hash=manifest_hash,
+                actor_id=issuer.principal_id,
+            )
+
         try:
             grant = issue_grant(
                 grant_id=grant_id or str(uuid.uuid4()),
@@ -272,7 +319,7 @@ class KarmaSakshiEngine:
                 expires_at=expires_at,
                 nonce=nonce or uuid.uuid4().hex,
                 signing_key=signing_key,
-                manifest_hash=sealed.seal.manifest_hash,
+                manifest_hash=manifest_hash,
                 policy_bundle_hash=policy_bundle_hash,
                 max_uses=max_uses,
                 parent_grant_id=parent_grant_id,
@@ -283,7 +330,7 @@ class KarmaSakshiEngine:
                 event_type="grant.issue_denied",
                 decision="blocked",
                 manifest_id=sealed.manifest.manifest_id,
-                manifest_hash=sealed.seal.manifest_hash,
+                manifest_hash=manifest_hash,
                 actor_id=issuer.principal_id,
             )
             raise
@@ -291,15 +338,71 @@ class KarmaSakshiEngine:
             sealed.manifest.manifest_id,
             LifecycleState.AUTHORIZED,
             event_type="grant.issued",
-            manifest_hash=sealed.seal.manifest_hash,
+            manifest_hash=manifest_hash,
             grant_id=grant.grant_id,
             actor_id=issuer.principal_id,
             metadata={
                 "subject": subject.principal_id,
                 **({"policy_bundle_hash": policy_bundle_hash} if policy_bundle_hash else {}),
+                **_role_participation_metadata(combined_roles),
             },
         )
         return grant
+
+    # --- SEPARATION OF DUTIES (extreme-v2 Phase 4) --------------------------
+
+    def _enforce_separation_of_duty(
+        self,
+        separation_policy_bundle: SealedPolicyBundle,
+        combined_roles: RoleAssignment,
+        *,
+        manifest_id: str,
+        manifest_hash: str,
+        actor_id: str,
+    ) -> None:
+        """Verify ``separation_policy_bundle`` and block on any violation.
+
+        Shared by :meth:`authorize` and :meth:`authorize_with_quorum` --
+        the evaluation logic lives once here rather than being
+        duplicated, per docs/extreme-v2-build-status.md's Phase 4 scope.
+        """
+        try:
+            verify_policy_bundle(
+                separation_policy_bundle,
+                self._ctx.keyring,
+                now=self._ctx.clock.now(),
+                expected_policy_type=POLICY_TYPE_SEPARATION,
+            )
+        except KarmaSakshiError:
+            self._ctx.audit.record(
+                event_type="separation_policy_bundle.verification_failed",
+                decision="blocked",
+                manifest_id=manifest_id,
+                manifest_hash=manifest_hash,
+                actor_id=actor_id,
+                metadata={"bundle_id": separation_policy_bundle.bundle.bundle_id},
+            )
+            raise
+
+        separation_policy = separation_of_duty_policy_from_bundle_payload(
+            separation_policy_bundle.bundle.payload
+        )
+        result = check_separation_of_duty(combined_roles, separation_policy)
+        self._ctx.audit.record(
+            event_type="separation_of_duty.evaluated",
+            decision="satisfied" if result.satisfied else "violated",
+            manifest_id=manifest_id,
+            manifest_hash=manifest_hash,
+            actor_id=actor_id,
+            metadata={
+                "reason": result.reason[:200],
+                **_role_participation_metadata(combined_roles),
+            },
+        )
+        if not result.satisfied:
+            raise SeparationOfDutyViolationError(
+                f"separation of duty violated for manifest {manifest_hash}: {result.reason}"
+            )
 
     # --- AUTHORIZE WITH QUORUM (extreme-v2 Phase 3) --------------------------
 
@@ -323,6 +426,8 @@ class KarmaSakshiEngine:
         max_uses: int = 1,
         parent_grant_id: str | None = None,
         policy_bundle: SealedPolicyBundle | None = None,
+        separation_policy_bundle: SealedPolicyBundle | None = None,
+        role_assignment: RoleAssignment | None = None,
     ) -> ExecutionGrant:
         """Issue an :class:`ExecutionGrant` only if ``statements`` satisfy
         the quorum rules bound in ``approval_policy_bundle``.
@@ -348,6 +453,13 @@ class KarmaSakshiEngine:
         validated once here, not a mutable, re-editable policy an
         attacker could swap later -- see docs/multi-party-authorization.md
         for the full rationale.
+
+        If ``separation_policy_bundle`` is given (extreme-v2 Phase 4), the
+        base role assignment is built from ``proposer``, ``subject``
+        (executor), and every principal that satisfied quorum (approver
+        -- there may be more than one), merged with any additional roles
+        in ``role_assignment``, and checked the same way as in
+        :meth:`authorize` -- see docs/separation-of-duties.md.
         """
         verify_seal(sealed, self._ctx.keyring)
         manifest_hash = sealed.seal.manifest_hash
@@ -397,6 +509,21 @@ class KarmaSakshiEngine:
         if not quorum.satisfied:
             raise QuorumNotMetError(
                 f"approval quorum not met for manifest {manifest_hash}: {quorum.reason}"
+            )
+
+        combined_roles = base_role_assignment(
+            manifest_hash,
+            proposer_id=proposer.principal_id,
+            executor_id=subject.principal_id,
+            approver_ids=quorum.approving_principal_ids,
+        ).merge(role_assignment)
+        if separation_policy_bundle is not None:
+            self._enforce_separation_of_duty(
+                separation_policy_bundle,
+                combined_roles,
+                manifest_id=sealed.manifest.manifest_id,
+                manifest_hash=manifest_hash,
+                actor_id=grant_issuer.principal_id,
             )
 
         if policy_bundle is not None:
@@ -453,6 +580,7 @@ class KarmaSakshiEngine:
                 "subject": subject.principal_id,
                 "approval_set_hash": quorum.approval_set_hash,
                 **({"policy_bundle_hash": policy_bundle_hash} if policy_bundle_hash else {}),
+                **_role_participation_metadata(combined_roles),
             },
         )
         return grant
