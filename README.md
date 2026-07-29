@@ -133,6 +133,13 @@ Reproduce it yourself: `python scripts/record_demo.py` (requires
 Playwright + ffmpeg — see the script's docstring). Same for the
 screenshots below: `python scripts/capture_screenshots.py`.
 
+The current protocol also supports signed, deterministic causal effect
+graphs. Use `karmasakshi graph create` and `karmasakshi graph verify`, or
+the `/causal-graphs` API, to bind separately authorized effects into an
+independently verifiable DAG. Graph membership is evidence, not implicit
+execution authority; see
+[docs/causal-effect-graphs.md](docs/causal-effect-graphs.md).
+
 **Public live sandbox:** a `render.yaml` blueprint for a one-click Render.com
 deployment of this exact sandbox is included in the repo (see
 [Deployment](#deployment) below), but no live public URL exists yet — the
