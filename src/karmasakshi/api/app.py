@@ -12,7 +12,9 @@ from karmasakshi.api.routes import router
 from karmasakshi.api.state import ApiState, build_default_state
 from karmasakshi.gateway.api import GatewayApiState
 from karmasakshi.gateway.api import router as gateway_router
+from karmasakshi.gateway.refunds import router as gateway_refunds_router
 from karmasakshi.gateway.store import GatewayStore, default_gateway_db_path
+from karmasakshi.tenant.control_plane import MultiTenantControlPlane
 
 
 class PublicDemoMisconfiguredError(RuntimeError):
@@ -59,9 +61,11 @@ def create_app(
     resolved_data_dir = data_dir or Path.cwd() / ".karmasakshi-api"
     resolved_data_dir.mkdir(parents=True, exist_ok=True)
     app.state.karmasakshi_gateway = gateway_state or GatewayApiState(
-        store=GatewayStore(default_gateway_db_path(resolved_data_dir))
+        store=GatewayStore(default_gateway_db_path(resolved_data_dir)),
+        control_plane=MultiTenantControlPlane(data_root=resolved_data_dir / "tenants"),
     )
     app.include_router(gateway_router)
+    app.include_router(gateway_refunds_router)
 
     try:
         from karmasakshi.web.console import console_router

@@ -201,8 +201,17 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   renewal), and org-scoped user management -- every org-scoped endpoint
   independently re-checks the session's user actually belongs to the
   `org_id` in the URL, returning `403` rather than reading across the
-  organization boundary. Not yet wired to the refund vertical slice or
-  Control Center UI. See [docs/gateway.md](docs/gateway.md).
+  organization boundary. See [docs/gateway.md](docs/gateway.md).
+- **Gateway refund vertical slice** (`karmasakshi.gateway.refunds`):
+  the named first commercial use case, end to end through HTTP --
+  signed organization policy activation, propose → assess → approve →
+  commit → verify → passport → evidence-pack, honest ambiguous-outcome
+  recovery, and compensation as a separate authorized effect. Each
+  organization gets an isolated protocol engine/adapters/audit journal
+  by reusing Phase 19's `MultiTenantControlPlane`. The
+  approving/activating identity is always the authenticated Gateway
+  session user, never a client-supplied identity claim. See
+  [docs/gateway.md](docs/gateway.md).
 
 
 ## [0.1.0] - 2026-07-27

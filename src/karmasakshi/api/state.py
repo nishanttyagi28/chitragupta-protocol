@@ -63,6 +63,12 @@ class ApiState:
     decision_envelopes: dict[str, DecisionEnvelope] = field(default_factory=dict)
     compensation_passports: dict[str, CompensationPassport] = field(default_factory=dict)
     kill_switch_engaged: bool = False
+    #: Gateway refund vertical slice (Milestone A): which entry of
+    #: `policy_bundles` is currently "active" for this organization, bound
+    #: into new refund grants at approval time unless a caller explicitly
+    #: overrides it. `None` means no organization policy has been
+    #: activated yet -- refunds are still approvable, just unbound.
+    active_policy_bundle_id: str | None = None
 
     def register_grant(self, manifest_id: str, grant: ExecutionGrant) -> None:
         self.grants[grant.grant_id] = grant

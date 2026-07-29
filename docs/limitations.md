@@ -190,8 +190,15 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   and non-durable -- a process restart invalidates every session; a
   horizontally scaled Gateway would need a shared session backend
   (Milestone B). No session revocation, password reset, or user-removal
-  endpoint exists yet. Not yet wired into the refund vertical slice or
-  Control Center UI. See [docs/gateway.md](gateway.md).
+  endpoint exists yet. See [docs/gateway.md](gateway.md).
+- **The Gateway refund journey (`karmasakshi.gateway.refunds`) is
+  payment-simulator-only and single-approver** -- no real payment
+  provider; "agent"/"adapter registration" are not yet their own durable
+  registries (an agent is just a `principal_id` string in the propose
+  call); `approve`/`compensate` accept one authenticated session user's
+  decision, not a configurable multi-approver quorum (Milestone B). No
+  Control Center UI yet -- HTTP API only. See
+  [docs/gateway.md](gateway.md).
 
 ## What "feature-complete" means here
 
