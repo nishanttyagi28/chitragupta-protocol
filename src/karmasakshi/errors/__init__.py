@@ -232,6 +232,33 @@ class CompensationPassportIntegrityError(CompensationError):
     to treat a mutated Action Passport as a compensation record."""
 
 
+# --- Saga orchestration (extreme-v2 Phase 8) ---------------------------------
+
+
+class SagaError(KarmaSakshiError):
+    """Base class for durable saga orchestration errors."""
+
+
+class SagaPlanError(SagaError):
+    """Saga plan construction or identity check failed."""
+
+
+class SagaOrderingError(SagaError):
+    """Causal graph could not yield a deterministic saga step order."""
+
+
+class SagaIllegalTransitionError(SagaError):
+    """Requested saga run/step transition is illegal for the current status."""
+
+
+class SagaAmbiguousStepError(SagaError):
+    """A saga step outcome is ambiguous; blind re-commit is refused."""
+
+
+class SagaGraphMismatchError(SagaError):
+    """Presented causal graph does not match the saga plan binding."""
+
+
 # --- Policy bundles ----------------------------------------------------------------
 
 

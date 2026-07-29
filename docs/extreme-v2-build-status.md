@@ -45,7 +45,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 5. Causal effect graphs | **Implemented (proof metadata)** | Signed deterministic DAG, bounded validation, API and passport ancestry; no implicit execution authority |
 | 6. Atomic plan authorization / decision envelopes | **Implemented** | See below |
 | 7. Compensation manifests | **Implemented** | Separate Compensation Passports; see below |
-| 8. Saga orchestration | Not started | |
+| 8. Saga orchestration | **Implemented** | Multi-grant topo orchestration; see below |
 | 9. Independent witness quorum | Not started | |
 | 10. Evidence quality and provenance | Not started | |
 | 11. Deep delegation revocation | Not started | v0.1's one-hop revocation propagation (documented limitation) is unchanged |

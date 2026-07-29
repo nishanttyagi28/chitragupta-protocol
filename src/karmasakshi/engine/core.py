@@ -25,6 +25,7 @@ from karmasakshi.approval.policy import POLICY_TYPE_APPROVAL, approval_policy_fr
 from karmasakshi.approval.quorum import evaluate_quorum
 from karmasakshi.causal.graph import CausalEffectGraph
 from karmasakshi.compensation.manifest import assert_compensation_binds_original
+from karmasakshi.compensation.status import CompensationStatus
 from karmasakshi.crypto.keys import SigningKey
 from karmasakshi.delegation.attenuation import assert_grant_narrower_or_equal
 from karmasakshi.domain.common import Principal
@@ -52,6 +53,9 @@ from karmasakshi.errors import (
     KarmaSakshiError,
     PolicyBundleMismatchError,
     QuorumNotMetError,
+    SagaAmbiguousStepError,
+    SagaGraphMismatchError,
+    SagaIllegalTransitionError,
     SeparationOfDutyViolationError,
     StaleManifestError,
 )
@@ -63,6 +67,24 @@ from karmasakshi.intelligence.model import EffectAssessment
 from karmasakshi.policy.bundle import SealedPolicyBundle
 from karmasakshi.policy.sealing import verify_policy_bundle
 from karmasakshi.protocol.sealing import seal_manifest, verify_seal
+from karmasakshi.saga.machine import (
+    assert_can_commit_step,
+    assert_can_recover_step,
+    mark_compensation_result,
+    mark_step_ambiguous,
+    mark_step_authorized,
+    mark_step_committed,
+    mark_step_failed,
+    mark_step_verified,
+    next_compensation_manifest_hash,
+)
+from karmasakshi.saga.model import (
+    SagaRun,
+    SagaRunStatus,
+    SagaStepStatus,
+    build_saga_plan,
+    build_saga_run,
+)
 from karmasakshi.state_machine.record import LifecycleRecord
 from karmasakshi.state_machine.states import LifecycleState, is_revocable
 
@@ -84,6 +106,7 @@ class KarmaSakshiEngine:
     def __init__(self, context: EngineContext) -> None:
         self._ctx = context
         self._records: dict[str, LifecycleRecord] = {}
+        self._saga_runs: dict[str, SagaRun] = {}
 
     @property
     def context(self) -> EngineContext:
@@ -1697,6 +1720,293 @@ class KarmaSakshiEngine:
             to_state=record.state.value,
         )
         return False
+
+    # --- SAGA ORCHESTRATION (Phase 8) ----------------------------------------
+
+    def get_saga(self, run_id: str) -> SagaRun:
+        run = self._saga_runs.get(run_id)
+        if run is None:
+            raise SagaIllegalTransitionError(f"unknown saga run {run_id!r}")
+        return run
+
+    def begin_saga(
+        self,
+        graph: CausalEffectGraph,
+        *,
+        saga_id: str | None = None,
+        run_id: str | None = None,
+        actor_id: str | None = None,
+    ) -> SagaRun:
+        """Create a deterministic saga run over a verified causal graph.
+
+        Does not issue grants or execute effects. Each step still requires
+        its own sealed manifest + grant (typically via :meth:`authorize_plan`).
+        """
+        graph.verify(self._ctx.keyring)
+        plan = build_saga_plan(graph, saga_id=saga_id, clock=self._ctx.clock)
+        if plan.causal_graph_hash != graph.canonical_hash():
+            raise SagaGraphMismatchError("saga plan graph hash mismatch")
+        run = build_saga_run(plan, run_id=run_id)
+        run = run.model_copy(update={"status": SagaRunStatus.RUNNING})
+        self._saga_runs[run.run_id] = run
+        self._ctx.audit.record(
+            event_type="saga.begun",
+            decision="started",
+            actor_id=actor_id,
+            metadata={
+                "run_id": run.run_id,
+                "saga_id": plan.saga_id,
+                "plan_hash": plan.canonical_hash(),
+                "causal_graph_hash": plan.causal_graph_hash,
+                "steps": str(len(plan.step_manifest_hashes)),
+            },
+        )
+        return run
+
+    def authorize_saga_step(
+        self,
+        run_id: str,
+        sealed: SealedManifest,
+        graph: CausalEffectGraph,
+        *,
+        issuer: Principal,
+        subject: Principal,
+        audience: tuple[str, ...],
+        allowed_effect_types: tuple[str, ...],
+        scope: ScopeConstraints,
+        not_before: datetime,
+        expires_at: datetime,
+        signing_key: SigningKey,
+        grant_id: str | None = None,
+        nonce: str | None = None,
+        max_uses: int = 1,
+        policy_bundle: SealedPolicyBundle | None = None,
+        separation_policy_bundle: SealedPolicyBundle | None = None,
+        role_assignment: RoleAssignment | None = None,
+    ) -> ExecutionGrant:
+        run = self.get_saga(run_id)
+        if graph.canonical_hash() != run.plan.causal_graph_hash:
+            raise SagaGraphMismatchError(
+                "presented causal graph does not match the saga plan binding"
+            )
+        manifest_hash = sealed.seal.manifest_hash
+        grant = self.authorize_plan(
+            sealed,
+            graph,
+            issuer=issuer,
+            subject=subject,
+            audience=audience,
+            allowed_effect_types=allowed_effect_types,
+            scope=scope,
+            not_before=not_before,
+            expires_at=expires_at,
+            signing_key=signing_key,
+            grant_id=grant_id,
+            nonce=nonce,
+            max_uses=max_uses,
+            policy_bundle=policy_bundle,
+            separation_policy_bundle=separation_policy_bundle,
+            role_assignment=role_assignment,
+        )
+        updated = mark_step_authorized(run, manifest_hash, grant.grant_id)
+        self._saga_runs[run_id] = updated
+        self._ctx.audit.record(
+            event_type="saga.step_authorized",
+            decision="allowed",
+            grant_id=grant.grant_id,
+            manifest_hash=manifest_hash,
+            actor_id=issuer.principal_id,
+            metadata={"run_id": run_id, "cursor": str(updated.cursor)},
+        )
+        return grant
+
+    def commit_saga_step(
+        self,
+        run_id: str,
+        sealed: SealedManifest,
+        grant: ExecutionGrant,
+        adapter: EffectAdapter,
+        context: Any,
+        *,
+        causal_graph: CausalEffectGraph,
+        policy_bundle: SealedPolicyBundle | None = None,
+        ambiguous: bool = False,
+    ) -> CommitResult:
+        """Commit the current saga cursor step (at-most-once).
+
+        If ``ambiguous=True``, records AMBIGUOUS without calling the adapter
+        (caller detected an indeterminate prior attempt). Otherwise calls
+        :meth:`commit`. Blind re-commit of AMBIGUOUS steps is refused.
+        """
+        run = self.get_saga(run_id)
+        if causal_graph.canonical_hash() != run.plan.causal_graph_hash:
+            raise SagaGraphMismatchError(
+                "presented causal graph does not match the saga plan binding"
+            )
+        manifest_hash = sealed.seal.manifest_hash
+        assert_can_commit_step(run, manifest_hash)
+        if sealed.seal.manifest_hash not in set(run.plan.step_manifest_hashes):
+            raise SagaIllegalTransitionError("manifest is not a node of this saga plan")
+        if ambiguous:
+            updated = mark_step_ambiguous(run, manifest_hash, detail="caller reported ambiguous")
+            self._saga_runs[run_id] = updated
+            self._ctx.audit.record(
+                event_type="saga.step_ambiguous",
+                decision="awaiting_recovery",
+                manifest_hash=manifest_hash,
+                grant_id=grant.grant_id,
+                metadata={"run_id": run_id},
+            )
+            raise SagaAmbiguousStepError(
+                f"saga step {manifest_hash} marked AMBIGUOUS; recover before continuing"
+            )
+        try:
+            result = self.commit(
+                sealed,
+                grant,
+                adapter,
+                context,
+                policy_bundle=policy_bundle,
+                causal_graph=causal_graph,
+            )
+        except Exception as exc:
+            # Fail closed for security denials; treat unexpected adapter
+            # failures as step failure that starts compensation of prior steps.
+            if isinstance(exc, KarmaSakshiError) and not isinstance(exc, StaleManifestError):
+                raise
+            updated = mark_step_failed(run, manifest_hash, detail=str(exc))
+            self._saga_runs[run_id] = updated
+            self._ctx.audit.record(
+                event_type="saga.step_failed",
+                decision=(
+                    "compensating" if updated.status == SagaRunStatus.COMPENSATING else "aborted"
+                ),
+                manifest_hash=manifest_hash,
+                metadata={"run_id": run_id, "error": type(exc).__name__},
+            )
+            raise
+        if not result.success:
+            updated = mark_step_failed(run, manifest_hash, detail=result.detail)
+        else:
+            updated = mark_step_committed(
+                run,
+                manifest_hash,
+                success=True,
+                provider_reference=result.provider_reference,
+                detail=result.detail,
+            )
+        self._saga_runs[run_id] = updated
+        self._ctx.audit.record(
+            event_type="saga.step_committed",
+            decision="success" if result.success else "failed",
+            manifest_hash=manifest_hash,
+            grant_id=grant.grant_id,
+            metadata={
+                "run_id": run_id,
+                "provider_reference": result.provider_reference or "",
+                "saga_status": updated.status.value,
+            },
+        )
+        return result
+
+    def verify_saga_step(
+        self,
+        run_id: str,
+        sealed: SealedManifest,
+        commit_result: CommitResult,
+        adapter: EffectAdapter,
+        context: Any,
+    ) -> OutcomeProof:
+        run = self.get_saga(run_id)
+        proof = self.verify(sealed.manifest, commit_result, adapter, context)
+        if proof.matched_expected:
+            updated = mark_step_verified(run, sealed.seal.manifest_hash)
+            self._saga_runs[run_id] = updated
+            self._ctx.audit.record(
+                event_type="saga.step_verified",
+                decision="matched",
+                manifest_hash=sealed.seal.manifest_hash,
+                metadata={"run_id": run_id, "saga_status": updated.status.value},
+            )
+        return proof
+
+    def recover_saga_step(
+        self,
+        run_id: str,
+        sealed: SealedManifest,
+        adapter: EffectAdapter,
+        context: Any,
+    ) -> OutcomeProof:
+        run = self.get_saga(run_id)
+        manifest_hash = sealed.seal.manifest_hash
+        assert_can_recover_step(run, manifest_hash)
+        proof = self.recover_ambiguous_commit(sealed.manifest, adapter, context)
+        if proof.matched_expected:
+            updated = mark_step_committed(
+                run.model_copy(
+                    update={
+                        "status": SagaRunStatus.RUNNING,
+                        "steps": tuple(
+                            s.model_copy(
+                                update={
+                                    "status": SagaStepStatus.AUTHORIZED,
+                                    "ambiguous": False,
+                                }
+                            )
+                            if s.manifest_hash == manifest_hash
+                            else s
+                            for s in run.steps
+                        ),
+                    }
+                ),
+                manifest_hash,
+                success=True,
+                provider_reference=proof.observed_after_state_digest,
+                detail=proof.detail,
+            )
+        else:
+            updated = mark_step_failed(run, manifest_hash, detail=proof.detail)
+        self._saga_runs[run_id] = updated
+        self._ctx.audit.record(
+            event_type="saga.step_recovered",
+            decision="evidence_found" if proof.matched_expected else "no_evidence",
+            manifest_hash=manifest_hash,
+            metadata={"run_id": run_id, "saga_status": updated.status.value},
+        )
+        return proof
+
+    def record_saga_compensation(
+        self,
+        run_id: str,
+        original_manifest_hash: str,
+        status: CompensationStatus,
+        *,
+        detail: str | None = None,
+    ) -> SagaRun:
+        """Record a Phase 7 compensation outcome for the current reverse cursor."""
+        run = self.get_saga(run_id)
+        expected = next_compensation_manifest_hash(run)
+        if expected != original_manifest_hash:
+            raise SagaIllegalTransitionError(
+                f"compensation cursor expects {expected}, got {original_manifest_hash}"
+            )
+        updated = mark_compensation_result(run, original_manifest_hash, status, detail=detail)
+        self._saga_runs[run_id] = updated
+        self._ctx.audit.record(
+            event_type="saga.compensation_recorded",
+            decision=status.value,
+            manifest_hash=original_manifest_hash,
+            metadata={
+                "run_id": run_id,
+                "saga_status": updated.status.value,
+                "step_status": next(
+                    s.status.value
+                    for s in updated.steps
+                    if s.manifest_hash == original_manifest_hash
+                ),
+            },
+        )
+        return updated
 
 
 __all__ = ["KarmaSakshiEngine"]
