@@ -76,6 +76,8 @@ from karmasakshi.grants.model import ExecutionGrant, ScopeConstraints
 from karmasakshi.grants.verifier import verify_grant
 from karmasakshi.intelligence.facts import AssessmentFacts
 from karmasakshi.intelligence.model import EffectAssessment
+from karmasakshi.observability.model import ObservabilityEvent, ObservabilityEventType
+from karmasakshi.observability.sinks import emit_safely
 from karmasakshi.outbox.memory import OutboxConflictError
 from karmasakshi.outbox.model import OutboxEntry
 from karmasakshi.policy.bundle import SealedPolicyBundle
@@ -415,6 +417,45 @@ class KarmaSakshiEngine:
             },
         )
         return assessment
+
+    # --- OBSERVE (Phase 24) ------------------------------------------------
+
+    def observe(
+        self,
+        event_type: ObservabilityEventType,
+        manifest_id: str,
+        *,
+        manifest_hash: str | None = None,
+        grant_id: str | None = None,
+        decision: str | None = None,
+        detail: str | None = None,
+    ) -> ObservabilityEvent:
+        """Emit a best-effort observability event for external log/metrics
+        consumption (extreme-v2 Phase 24).
+
+        This is advisory only: unlike :meth:`assess`, it is never recorded
+        in the tamper-evident audit journal, it never gates any lifecycle
+        transition, and a failing sink never raises here (see
+        ``karmasakshi.observability.sinks.emit_safely``). Like
+        :meth:`assess`, callers (CLI/API) invoke this explicitly at
+        meaningful lifecycle points rather than it being automatically
+        wired into :meth:`authorize`/:meth:`commit` -- see
+        docs/observability.md.
+        """
+        lifecycle_state = self.get_lifecycle_state(manifest_id).value
+        event = ObservabilityEvent(
+            event_type=event_type,
+            emitted_at=self._ctx.clock.now(),
+            manifest_id=manifest_id,
+            manifest_hash=manifest_hash,
+            grant_id=grant_id,
+            lifecycle_state=lifecycle_state,
+            decision=decision,
+            tenant_id=self._ctx.tenant_id,
+            detail=detail,
+        )
+        emit_safely(self._ctx.observability_sink, event)
+        return event
 
     # --- SEAL -------------------------------------------------------------
 

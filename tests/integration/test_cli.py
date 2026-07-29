@@ -8,6 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from karmasakshi.cli.app import app
+from karmasakshi.portable import EvidencePack
 
 runner = CliRunner()
 
@@ -1039,5 +1040,139 @@ def test_separation_of_duty_blocks_role_conflict_via_cli(workspace_args, tmp_pat
             "--separation-policy-bundle-id",
             "sod-policy-2",
         ],
+    )
+    assert result.exit_code != 0
+
+
+# --- Portable Evidence Packs (extreme-v2 Phase 24) ----------------------------
+
+
+def _prepare_seal_grant_execute_via_sqlite_cli(
+    workspace_args, tmp_path, *, row_id, idempotency_key
+):
+    db_path = str(tmp_path / f"evpack-{row_id}.db")
+    prepare_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "prepare",
+            "--adapter",
+            "sqlite",
+            "--sqlite-db-path",
+            db_path,
+            "--row-operation",
+            "insert",
+            "--row-id",
+            row_id,
+            "--new-balance",
+            "1000",
+            "--actor-id",
+            "agent-1",
+            "--actor-type",
+            "agent",
+            "--principal-id",
+            "user-1",
+            "--principal-type",
+            "human",
+            "--idempotency-key",
+            idempotency_key,
+        ]
+    )
+    manifest_id = json.loads(prepare_result.output)["manifest_id"]
+    _run(workspace_args + ["seal", manifest_id, "--key-id", "issuer-1"])
+    grant_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "grant",
+            "issue",
+            manifest_id,
+            "--issuer-id",
+            "approver-1",
+            "--issuer-type",
+            "human",
+            "--subject-id",
+            "agent-1",
+            "--subject-type",
+            "agent",
+            "--key-id",
+            "issuer-1",
+            "--audience",
+            "sqlite.row",
+        ]
+    )
+    grant_id = json.loads(grant_result.output)["grant_id"]
+    _run(
+        workspace_args
+        + [
+            "--json",
+            "execute",
+            manifest_id,
+            "--grant-id",
+            grant_id,
+            "--adapter",
+            "sqlite",
+            "--sqlite-db-path",
+            db_path,
+        ]
+    )
+    return manifest_id, grant_id
+
+
+def test_evidence_pack_build_and_verify_round_trip(workspace_args, tmp_path):
+    _run(workspace_args + ["init"])
+    _run(workspace_args + ["key", "generate", "issuer-1"])
+    manifest_id, grant_id = _prepare_seal_grant_execute_via_sqlite_cli(
+        workspace_args, tmp_path, row_id="acct-evpack-1", idempotency_key="idem-cli-evpack-1"
+    )
+
+    pack_path = tmp_path / "pack.json"
+    _run(
+        workspace_args
+        + [
+            "evidence-pack",
+            "build",
+            manifest_id,
+            "--grant-id",
+            grant_id,
+            "-o",
+            str(pack_path),
+        ]
+    )
+    pack = EvidencePack.model_validate_json(pack_path.read_text(encoding="utf-8"))
+    assert pack.manifest_id == manifest_id
+    assert len(pack.audit_events) > 0
+
+    verify_result = _run(workspace_args + ["--json", "evidence-pack", "verify", str(pack_path)])
+    data = json.loads(verify_result.output)
+    assert data["all_verified"] is True
+    assert data["reasons"] == []
+
+
+def test_evidence_pack_verify_detects_tampering(workspace_args, tmp_path):
+    _run(workspace_args + ["init"])
+    _run(workspace_args + ["key", "generate", "issuer-1"])
+    manifest_id, _grant_id = _prepare_seal_grant_execute_via_sqlite_cli(
+        workspace_args, tmp_path, row_id="acct-evpack-2", idempotency_key="idem-cli-evpack-2"
+    )
+
+    pack_path = tmp_path / "pack.json"
+    _run(workspace_args + ["evidence-pack", "build", manifest_id, "-o", str(pack_path)])
+
+    data = json.loads(pack_path.read_text(encoding="utf-8"))
+    data["pack_hash"] = "sha256:" + ("0" * 64)
+    pack_path.write_text(json.dumps(data), encoding="utf-8")
+
+    verify_result = runner.invoke(
+        app, workspace_args + ["--json", "evidence-pack", "verify", str(pack_path)]
+    )
+    assert verify_result.exit_code == 2
+    verified = json.loads(verify_result.output)
+    assert verified["all_verified"] is False
+
+
+def test_evidence_pack_verify_missing_file_fails_cleanly(workspace_args, tmp_path):
+    result = runner.invoke(
+        app, workspace_args + ["evidence-pack", "verify", str(tmp_path / "nope.json")]
     )
     assert result.exit_code != 0

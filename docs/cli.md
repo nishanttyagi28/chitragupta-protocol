@@ -77,7 +77,10 @@ karmasakshi audit list
 karmasakshi audit show <manifest_id>
 karmasakshi audit verify
 
-karmasakshi passport <manifest_id> [--format json|markdown|html] [--grant-id ID] [-o FILE]
+karmasakshi passport <manifest_id> [--format json|markdown|html] [--version v1|v2] [--grant-id ID] [-o FILE]
+
+karmasakshi evidence-pack build <manifest_id> [--grant-id ID] [-o FILE]
+karmasakshi evidence-pack verify <pack_file>
 
 karmasakshi demo --all
 karmasakshi doctor
@@ -155,6 +158,17 @@ auto-derived proposer/executor/approver(s) plus any `--role
 role_name:principal_id` entries, failing closed
 (`SeparationOfDutyViolationError`, non-zero exit) if any principal holds
 two forbidden roles.
+
+## `evidence-pack build` / `evidence-pack verify`
+
+Portable Evidence Packs (see [docs/portable-evidence.md](portable-evidence.md)):
+`evidence-pack build` assembles a self-contained, offline-verifiable
+bundle (Action Passport V2 + sealed manifest + grant + audit slice +
+public keys) for one manifest, from the same workspace state `passport`
+reads. `evidence-pack verify <pack_file>` reads **only** that file — no
+workspace, keys, or stores are consulted — and independently re-checks
+every embedded signature and hash, exiting non-zero if anything fails to
+verify.
 
 ## `doctor`
 

@@ -20,12 +20,15 @@ versioned, experimental protocol.** This is not a certified, audited, or
 "production proven" system — see [Limitations](#limitations) and
 [docs/threat-model.md](docs/threat-model.md).
 
-**In progress:** extreme-v2 Phases 1–15 have landed on top of v0.1 —
+**In progress:** extreme-v2 Phases 1–24 have landed on top of v0.1 —
 including independent witness quorum, evidence quality / provenance,
-deep delegation revocation, atomic authority budgets, durable lifecycle storage, audit backend abstraction, and a
-transactional outbox. See the build ledger at
+deep delegation revocation, atomic authority budgets, durable lifecycle
+storage, audit backend abstraction, a transactional outbox, a trusted
+adapter registry, a multi-tenant control plane, resource/DoS protection,
+bounded lifecycle model checking, Action Passport V2, and portable
+Evidence Packs. See the build ledger at
 [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for
-exactly what's implemented vs. planned.
+exactly what's implemented vs. planned (Phase 25 remains open).
 
 ## At a glance: allowed tool call vs. verified effect
 
@@ -330,7 +333,9 @@ the [live sandbox](#try-it-live) or run `karmasakshi demo --all`.
 
 ## Core security invariants
 
-42 invariants are implemented and tested. The **primary differentiators**
+74 invariants are implemented and tested (see
+[docs/security-model.md](docs/security-model.md) for the current count as
+work continues). The **primary differentiators**
 — the specific claims that distinguish KarmaSakshi Protocol from a
 tool-permission layer, IAM system, or credential broker — are:
 
@@ -371,7 +376,7 @@ exist to bound *who may approve what, for how long* — they are necessary,
 but the manifest-sealing/TOCTOU/exactly-once/verification chain above is
 what actually proves the effect happened as approved.
 
-Full list of all 42 invariants, each mapped to its enforcing code and the
+Full list of all invariants, each mapped to its enforcing code and the
 test that verifies it: [docs/security-model.md](docs/security-model.md).
 
 ## Exactly-once execution and TOCTOU protection
@@ -554,7 +559,7 @@ means precisely: [docs/action-passports.md](docs/action-passports.md).
 - [docs/delegation.md](docs/delegation.md) — attenuation rules with worked examples
 - [docs/state-machine.md](docs/state-machine.md) — full transition table
 - [docs/threat-model.md](docs/threat-model.md) — what is and isn't defended against
-- [docs/security-model.md](docs/security-model.md) — the 42 invariants
+- [docs/security-model.md](docs/security-model.md) — the enforced invariants (see file for current count)
 - [docs/storage-semantics.md](docs/storage-semantics.md) — memory/SQLite/Redis backends
 - [docs/crash-recovery.md](docs/crash-recovery.md) — ambiguous-outcome recovery
 - [docs/adapter-authoring.md](docs/adapter-authoring.md) — writing a new adapter
@@ -569,6 +574,8 @@ means precisely: [docs/action-passports.md](docs/action-passports.md).
 - [docs/multi-party-authorization.md](docs/multi-party-authorization.md) — M-of-N approval quorum
 - [docs/separation-of-duties.md](docs/separation-of-duties.md) — signed forbidden-role-pair matrix
 - [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) — build ledger for work beyond v0.1.0
+- [docs/portable-evidence.md](docs/portable-evidence.md) — self-contained, offline-verifiable Evidence Packs
+- [docs/observability.md](docs/observability.md) — neutral, advisory lifecycle events
 - [docs/limitations.md](docs/limitations.md)
 - [docs/comparison.md](docs/comparison.md)
 
@@ -596,11 +603,16 @@ not hidden.
 From a real run on this branch (`pytest --cov=karmasakshi --cov-report=term-missing`):
 
 ```text
-296 passed, 6 skipped (Redis integration tests -- no local Redis in this
+768 passed, 8 skipped (Redis integration tests -- no local Redis in this
                         environment; the CI Redis service job does run them)
-91% overall line+branch coverage
-100%: protocol/, grants/verifier.py, state_machine/, delegation/
+90.37% overall line+branch coverage (--cov-fail-under=90)
+100%: protocol/, grants/verifier.py, state_machine/, delegation/,
+      portable/builder.py, portable/verify.py, passports/v2.py
 ```
+
+These are Phase 24 numbers; see
+[docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for the
+exact count recorded at each subsequent merged phase.
 
 CI (`.github/workflows/ci.yml`) runs the full suite across Python
 3.10-3.13, plus lint (`ruff`), strict type checking (`mypy`), security
