@@ -1,4 +1,4 @@
-# Security Model: the 45 Invariants
+# Security Model: the 49 Invariants
 
 Each invariant below is implemented in a specific, named location and
 verified by at least one named test. This list exists so a reviewer can
@@ -52,6 +52,10 @@ under a minute per row.
 | 43 | A compensation effect must cryptographically bind the original sealed manifest hash; a grant for compensating A cannot authorize compensating B | `build_compensation_manifest` / `assert_compensation_binds_original`; `authorize_compensation` / `commit_compensation` | `test_binding_rejects_wrong_original`, `test_authorize_compensation_rejects_unbound_manifest`, `tests/adversarial/test_compensation_gaming.py` |
 | 44 | Compensation outcomes live in a separate Compensation Passport; building it never mutates an Action Passport | `build_compensation_passport`; Action Passport only carries optional pointer fields | `test_authorized_compensation_path_and_separate_passport`, `test_building_compensation_passport_does_not_alter_action_passport` |
 | 45 | Compensation status distinguishes refused / attempted / verified; adapter success alone is never `verified` | `derive_compensation_status` | `test_derive_status_triad` |
+| 46 | A saga cannot commit a manifest hash that is not a verified node of the bound causal graph / plan | `begin_saga` + `commit_saga_step` | `test_engine_begin_and_wrong_step_rejected`, `test_swapped_graph_at_commit_is_rejected` |
+| 47 | Saga step execution is at-most-once: an `AMBIGUOUS` step cannot be blindly re-committed; recovery must re-observe first | `commit_saga_step` / `recover_saga_step` | `test_blind_retry_of_ambiguous_step_blocked`, `test_recover_saga_step_with_and_without_evidence` |
+| 48 | Saga compensation only targets previously committed/verified forward steps, in reverse order, via Phase 7 status recording | `start_compensation` / `record_saga_compensation` | `test_compensation_starts_reverse_of_verified_only`, `test_recover_helpers_and_engine_record_compensation` |
+| 49 | Saga plan identity and step order are deterministic (canonical hash / topo tie-break independent of input order) | `topo_manifest_hashes` / `SagaPlan.canonical_hash` | `test_topo_order_deterministic_and_parent_before_child` |
 
 ## What this table does not claim
 

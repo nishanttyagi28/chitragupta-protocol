@@ -98,6 +98,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   on the original effect after grant verification. Legacy
   `engine.compensate()` / `karmasakshi compensate` remain. See
   [docs/compensation-manifests.md](docs/compensation-manifests.md).
+- **Durable saga orchestration** (`karmasakshi.saga`): deterministic
+  topo-ordered multi-grant runs over a verified causal graph; at-most-once
+  steps; AMBIGUOUS blocks blind retry; reverse Phase 7 compensation
+  recording (invariants #46–#49). Not exactly-once; not multi-node
+  single-grant. See [docs/saga-orchestration.md](docs/saga-orchestration.md).
 
 ## [0.1.0] - 2026-07-27
 
