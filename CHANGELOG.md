@@ -90,6 +90,14 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (invariants #39–#42). Flexible “authorize envelope first, substitute
   later” execution wiring is deferred. See
   [docs/decision-envelopes.md](docs/decision-envelopes.md).
+- **Compensation manifests and Compensation Passports**
+  (`karmasakshi.compensation`): compensation is a separately authorized
+  effect that binds `original_manifest_hash`, consumes its own grant, and
+  emits a Compensation Passport that never mutates the Action Passport
+  (invariants #43–#45). `commit_compensation` calls `adapter.compensate`
+  on the original effect after grant verification. Legacy
+  `engine.compensate()` / `karmasakshi compensate` remain. See
+  [docs/compensation-manifests.md](docs/compensation-manifests.md).
 
 ## [0.1.0] - 2026-07-27
 

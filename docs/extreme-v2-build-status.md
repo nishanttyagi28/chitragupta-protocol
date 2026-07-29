@@ -44,7 +44,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 4. Separation of duties (explicit roles) | **Implemented** | See below |
 | 5. Causal effect graphs | **Implemented (proof metadata)** | Signed deterministic DAG, bounded validation, API and passport ancestry; no implicit execution authority |
 | 6. Atomic plan authorization / decision envelopes | **Implemented** | See below |
-| 7. Compensation manifests | Not started | Compensation remains the v0.1 `CompensationResult` model (best-effort, honestly reported) |
+| 7. Compensation manifests | **Implemented** | Separate Compensation Passports; see below |
 | 8. Saga orchestration | Not started | |
 | 9. Independent witness quorum | Not started | |
 | 10. Evidence quality and provenance | Not started | |
@@ -611,7 +611,8 @@ Local gates after follow-up: **559 passed, 6 skipped**; coverage
 ### Commit SHAs / PR
 
 - `57371d7` — Phase 6: Atomic plan authorization / constrained decision envelopes
-- follow-up SHA recorded after commit on `cursor/phase6-decision-envelopes-ffca`
+- `93bdaf9` — Phase 6 coverage follow-up (90.55% local; CLI/API/unit +
+  constraint JSON round-trip fix)
 - PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/20
 
 ### Session baseline (this agent, before Phase 6)
@@ -621,25 +622,45 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 7: Compensation manifests and separate Compensation Passports.**
-Model compensation as a separately authorized effect that never mutates
-the original Action Passport; bind compensation manifests with their own
-seals/grants; distinguish compensation attempted vs verified.
+**Phase 8: Durable saga orchestration.** Multi-step compensation-aware
+orchestration over sealed causal graphs / plans, with honest ambiguous-
+outcome handling per step.
 
 ## Resumable checkpoint
 
-- last merged phase on main at session start: Phase 5 (`eb94aab`)
-- current branch: `cursor/phase6-decision-envelopes-ffca`
-- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/20
-- latest local green commit on this branch: pending coverage follow-up push
-- test counts: **559 passed, 6 skipped**; coverage **90.55%**
-- known blockers: Redis-only skips (no local Redis); pip-audit pytest CVE
-  (dev-only); Docker not required for this phase; merge blocked until PR
-  #20 CI Coverage is green
-- exact next command after merge: begin Phase 7 from updated `main`
-  (Phase 7 WIP may already be in `git stash` as `phase7-wip`)
-- exact next phase: 7 — Compensation manifests and separate Compensation
-  Passports
+- last merged phase on main: Phase 6 (`72a681d`, PR #20)
+- current branch: `cursor/phase7-compensation-passports-ffca`
+- open PR: (pending create for Phase 7)
+- latest local green commit on Phase 7 branch: pending
+- test counts (Phase 7 local pre-PR): **571 passed, 6 skipped**
+- known blockers: Redis-only skips; pip-audit pytest CVE (dev-only)
+- exact next command after Phase 7 merge: begin Phase 8 from updated `main`
+- exact next phase: 8 — Durable saga orchestration
+
+## Phase 7: Compensation manifests / Compensation Passports
+
+**Status: implemented on branch (pending merge).**
+
+### What landed
+
+- `karmasakshi.compensation`: status triad, `build_compensation_manifest`
+  (binds `original_manifest_hash`), `CompensationPassport` builder that
+  never mutates Action Passports
+- Engine: `prepare_compensation`, `authorize_compensation`,
+  `commit_compensation` (grant-gated; calls `adapter.compensate` on the
+  original). Legacy `compensate()` retained.
+- CLI: `karmasakshi compensation prepare|authorize|execute|passport`
+- API: `/manifests/{id}/compensation/...` prepare/authorize/execute/passport
+- Invariants **#43–#45**
+- Docs: `docs/compensation-manifests.md`
+
+### Design decisions
+
+- Authorized compensation consumes a grant bound to the *compensation*
+  sealed hash, then executes via `adapter.compensate(original, ...)`,
+  not `adapter.commit` on the compensation manifest.
+- Action Passport pointer fields only; Compensation Passport is the
+  authoritative compensation record.
 
 ## Preserved Phase 5 design notes
 

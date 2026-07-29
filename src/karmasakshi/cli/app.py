@@ -12,6 +12,7 @@ from karmasakshi.cli.approve_cmd import approvals_app, approve
 from karmasakshi.cli.assess_cmd import assess
 from karmasakshi.cli.audit_cmd import audit_app
 from karmasakshi.cli.common import console, emit
+from karmasakshi.cli.compensation_cmd import compensation_app
 from karmasakshi.cli.demo_cmd import demo
 from karmasakshi.cli.doctor_cmd import doctor
 from karmasakshi.cli.envelope_cmd import envelope_app
@@ -35,6 +36,7 @@ app.add_typer(audit_app, name="audit")
 app.add_typer(grant_app, name="grant")
 app.add_typer(graph_app, name="graph")
 app.add_typer(envelope_app, name="envelope")
+app.add_typer(compensation_app, name="compensation")
 app.add_typer(key_app, name="key")
 app.add_typer(policy_app, name="policy")
 app.add_typer(approvals_app, name="approvals")

@@ -20,6 +20,7 @@ from karmasakshi.approval.model import ApprovalStatement
 from karmasakshi.audit.journal import AuditJournal
 from karmasakshi.audit.sqlite_backend import SQLiteAuditBackend
 from karmasakshi.causal.graph import CausalEffectGraph
+from karmasakshi.compensation.passport import CompensationPassport
 from karmasakshi.crypto.keyring import Keyring
 from karmasakshi.crypto.keys import SigningKey, generate_signing_key
 from karmasakshi.domain.common import Principal
@@ -51,6 +52,7 @@ class ApiState:
     approval_statements: dict[str, list[ApprovalStatement]] = field(default_factory=dict)
     causal_graphs: dict[str, CausalEffectGraph] = field(default_factory=dict)
     decision_envelopes: dict[str, DecisionEnvelope] = field(default_factory=dict)
+    compensation_passports: dict[str, CompensationPassport] = field(default_factory=dict)
     kill_switch_engaged: bool = False
 
     def register_grant(self, manifest_id: str, grant: ExecutionGrant) -> None:

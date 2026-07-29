@@ -24,6 +24,7 @@ from karmasakshi.approval.model import ApprovalStatement
 from karmasakshi.approval.policy import POLICY_TYPE_APPROVAL, approval_policy_from_bundle_payload
 from karmasakshi.approval.quorum import evaluate_quorum
 from karmasakshi.causal.graph import CausalEffectGraph
+from karmasakshi.compensation.manifest import assert_compensation_binds_original
 from karmasakshi.crypto.keys import SigningKey
 from karmasakshi.delegation.attenuation import assert_grant_narrower_or_equal
 from karmasakshi.domain.common import Principal
@@ -42,6 +43,7 @@ from karmasakshi.envelope.sealing import verify_decision_envelope
 from karmasakshi.errors import (
     AdapterMismatchError,
     AtomicPlanError,
+    CompensationBindingError,
     DecisionEnvelopeMismatchError,
     GrantAudienceError,
     GrantExhaustedError,
@@ -184,6 +186,35 @@ class KarmaSakshiEngine:
             metadata={"adapter_id": adapter.adapter_id, "effect_type": manifest.effect_type},
         )
         return manifest
+
+    def prepare_compensation(
+        self,
+        compensation_manifest: EffectManifest,
+        *,
+        original_sealed: SealedManifest,
+    ) -> EffectManifest:
+        """Register a pre-built compensation manifest as PREPARED.
+
+        Unlike :meth:`prepare`, this does not call ``adapter.prepare`` — the
+        compensation manifest is constructed by
+        ``compensation.build_compensation_manifest`` and must already bind
+        the original sealed hash.
+        """
+        verify_seal(original_sealed, self._ctx.keyring)
+        assert_compensation_binds_original(compensation_manifest, original_sealed)
+        self._transition(
+            compensation_manifest.manifest_id,
+            LifecycleState.PREPARED,
+            event_type="compensation.manifest.prepared",
+            manifest_hash=compensation_manifest.canonical_hash(),
+            actor_id=compensation_manifest.actor.principal_id,
+            metadata={
+                "original_manifest_id": original_sealed.manifest.manifest_id,
+                "original_manifest_hash": original_sealed.seal.manifest_hash,
+                "effect_type": compensation_manifest.effect_type,
+            },
+        )
+        return compensation_manifest
 
     # --- ASSESS -------------------------------------------------------------
 
@@ -1289,6 +1320,311 @@ class KarmaSakshiEngine:
 
     # --- COMPENSATE ---------------------------------------------------------
 
+    def authorize_compensation(
+        self,
+        original_sealed: SealedManifest,
+        compensation_sealed: SealedManifest,
+        *,
+        issuer: Principal,
+        subject: Principal,
+        audience: tuple[str, ...],
+        allowed_effect_types: tuple[str, ...],
+        scope: ScopeConstraints,
+        not_before: datetime,
+        expires_at: datetime,
+        signing_key: SigningKey,
+        grant_id: str | None = None,
+        nonce: str | None = None,
+        max_uses: int = 1,
+        policy_bundle: SealedPolicyBundle | None = None,
+        separation_policy_bundle: SealedPolicyBundle | None = None,
+        role_assignment: RoleAssignment | None = None,
+    ) -> ExecutionGrant:
+        """Authorize a compensation effect that is bound to ``original_sealed``.
+
+        The compensation sealed manifest must bind ``original_manifest_hash``
+        (see ``compensation.build_compensation_manifest``). Issues a normal
+        grant against the *compensation* manifest hash — never reuses the
+        original effect's grant.
+        """
+        verify_seal(original_sealed, self._ctx.keyring)
+        verify_seal(compensation_sealed, self._ctx.keyring)
+        try:
+            assert_compensation_binds_original(compensation_sealed, original_sealed)
+        except KarmaSakshiError:
+            self._ctx.audit.record(
+                event_type="compensation.binding_failed",
+                decision="blocked",
+                manifest_id=compensation_sealed.manifest.manifest_id,
+                manifest_hash=compensation_sealed.seal.manifest_hash,
+                actor_id=issuer.principal_id,
+                metadata={"original_manifest_id": original_sealed.manifest.manifest_id},
+            )
+            raise
+        return self.authorize(
+            compensation_sealed,
+            issuer=issuer,
+            subject=subject,
+            audience=audience,
+            allowed_effect_types=allowed_effect_types,
+            scope=scope,
+            not_before=not_before,
+            expires_at=expires_at,
+            signing_key=signing_key,
+            grant_id=grant_id,
+            nonce=nonce,
+            max_uses=max_uses,
+            policy_bundle=policy_bundle,
+            separation_policy_bundle=separation_policy_bundle,
+            role_assignment=role_assignment,
+        )
+
+    def commit_compensation(
+        self,
+        original_sealed: SealedManifest,
+        compensation_sealed: SealedManifest,
+        grant: ExecutionGrant,
+        adapter: EffectAdapter,
+        context: Any,
+        *,
+        original_commit: CommitResult,
+        policy_bundle: SealedPolicyBundle | None = None,
+    ) -> CommitResult:
+        """Commit an authorized compensation effect via ``adapter.compensate``.
+
+        The compensation sealed manifest + grant prove separate authorization.
+        Execution calls ``adapter.compensate`` on the *original* effect (never
+        ``adapter.commit`` on the compensation manifest), because reference
+        adapters reverse effects through ``compensate``, not a second forward
+        commit. Does not mutate any Action Passport artifact.
+
+        Returns a :class:`CommitResult` whose ``success`` mirrors
+        ``CompensationResult.succeeded`` (attempted-but-failed is
+        ``success=False``; refused compensation is also ``success=False``
+        with detail explaining refusal).
+        """
+        verify_seal(original_sealed, self._ctx.keyring)
+        try:
+            assert_compensation_binds_original(compensation_sealed, original_sealed)
+        except CompensationBindingError:
+            self._ctx.audit.record(
+                event_type="compensation.binding_failed_at_commit",
+                decision="blocked",
+                manifest_id=compensation_sealed.manifest.manifest_id,
+                manifest_hash=compensation_sealed.seal.manifest_hash,
+                grant_id=grant.grant_id,
+                actor_id=compensation_sealed.manifest.actor.principal_id,
+            )
+            raise
+
+        # Reuse the full grant/seal gate of commit() against the compensation
+        # sealed artifact, but stop before adapter.commit by verifying then
+        # consuming the grant around adapter.compensate instead.
+        compensation = compensation_sealed.manifest
+        compensation_id = compensation.manifest_id
+        compensation_hash = compensation_sealed.seal.manifest_hash
+        grant_id = grant.grant_id
+        actor_id = compensation.actor.principal_id
+
+        def deny(event_type: str, decision: str, exc: Exception) -> NoReturn:
+            self._ctx.audit.record(
+                event_type=event_type,
+                decision=decision,
+                manifest_id=compensation_id,
+                manifest_hash=compensation_hash,
+                grant_id=grant_id,
+                actor_id=actor_id,
+            )
+            raise exc
+
+        try:
+            verify_seal(compensation_sealed, self._ctx.keyring)
+            verify_grant(
+                grant,
+                self._ctx.keyring,
+                now=self._ctx.clock.now(),
+                leeway=timedelta(seconds=self._ctx.clock_skew.leeway_seconds),
+            )
+        except KarmaSakshiError as exc:
+            deny("compensation.verification_failed", f"blocked_{type(exc).__name__}", exc)
+
+        if grant.manifest_hash != compensation_hash:
+            deny(
+                "compensation.grant_manifest_mismatch",
+                "blocked_manifest_mismatch",
+                GrantManifestMismatchError(
+                    f"grant {grant_id} is bound to a different compensation manifest"
+                ),
+            )
+        if grant.policy_bundle_hash is not None:
+            if policy_bundle is None:
+                deny(
+                    "policy_bundle.missing_at_commit",
+                    "blocked_policy_bundle_missing",
+                    PolicyBundleMismatchError(
+                        f"grant {grant_id} requires policy bundle "
+                        f"{grant.policy_bundle_hash} at compensation commit"
+                    ),
+                )
+            else:
+                try:
+                    verify_policy_bundle(
+                        policy_bundle, self._ctx.keyring, now=self._ctx.clock.now()
+                    )
+                except KarmaSakshiError as exc:
+                    deny(
+                        "policy_bundle.verification_failed",
+                        f"blocked_{type(exc).__name__}",
+                        exc,
+                    )
+                if policy_bundle.seal.bundle_hash != grant.policy_bundle_hash:
+                    deny(
+                        "policy_bundle.mismatch",
+                        "blocked_policy_bundle_mismatch",
+                        PolicyBundleMismatchError(
+                            f"grant {grant_id} is bound to policy bundle "
+                            f"{grant.policy_bundle_hash}, but a different bundle was presented"
+                        ),
+                    )
+        if adapter.adapter_id not in grant.audience:
+            deny(
+                "grant.audience_mismatch",
+                "blocked_adapter_not_in_audience",
+                GrantAudienceError(
+                    f"adapter {adapter.adapter_id!r} is not in grant audience {grant.audience!r}"
+                ),
+            )
+        if (
+            original_sealed.manifest.adapter.adapter_id != adapter.adapter_id
+            or original_sealed.manifest.adapter.adapter_version != adapter.adapter_version
+        ):
+            deny(
+                "adapter.identity_mismatch",
+                "blocked_adapter_identity_mismatch",
+                AdapterMismatchError(
+                    "compensation adapter identity does not match the original effect's adapter"
+                ),
+            )
+        if compensation.effect_type not in grant.allowed_effect_types:
+            deny(
+                "grant.effect_type_mismatch",
+                "blocked_effect_type_not_permitted",
+                GrantAudienceError(
+                    f"effect_type {compensation.effect_type!r} not in grant's allowed_effect_types"
+                ),
+            )
+        if self._ctx.grant_store.is_revoked(grant_id):
+            deny(
+                "grant.revoked",
+                "blocked_revoked",
+                GrantRevokedError(f"grant {grant_id} is revoked"),
+            )
+        if not self._ctx.grant_store.reserve(grant_id, grant.max_uses):
+            deny(
+                "grant.reservation_failed",
+                "blocked_exhausted_or_inflight",
+                GrantExhaustedError(f"grant {grant_id} has no available uses"),
+            )
+
+        original_state = self.get_lifecycle_state(original_sealed.manifest.manifest_id)
+        if original_state == LifecycleState.VERIFIED:
+            try:
+                self._transition(
+                    original_sealed.manifest.manifest_id,
+                    LifecycleState.COMPENSATING,
+                    event_type="effect.compensating_authorized",
+                    manifest_hash=original_sealed.seal.manifest_hash,
+                    grant_id=grant_id,
+                    actor_id=actor_id,
+                    metadata={
+                        "compensation_manifest_id": compensation_id,
+                        "compensation_manifest_hash": compensation_hash,
+                    },
+                )
+            except Exception:
+                self._ctx.grant_store.release(grant_id)
+                raise
+
+        try:
+            self._transition(
+                compensation_id,
+                LifecycleState.COMMITTING,
+                event_type="compensation.committing",
+                manifest_hash=compensation_hash,
+                grant_id=grant_id,
+                actor_id=actor_id,
+            )
+            compensation_result = adapter.compensate(
+                original_sealed.manifest, original_commit, context
+            )
+            outcome_ref = (
+                f"compensation:{compensation_id}:"
+                f"{'ok' if compensation_result.succeeded else 'fail'}"
+            )
+            self._ctx.grant_store.commit(grant_id, compensation.idempotency_key, outcome_ref)
+        except Exception as exc:
+            self._ctx.grant_store.release(grant_id)
+            self._transition(
+                compensation_id,
+                LifecycleState.FAILED,
+                event_type="compensation.commit_error",
+                manifest_hash=compensation_hash,
+                grant_id=grant_id,
+                actor_id=actor_id,
+                metadata={"error": type(exc).__name__},
+            )
+            raise
+
+        self._transition(
+            compensation_id,
+            LifecycleState.COMMITTED if compensation_result.succeeded else LifecycleState.FAILED,
+            event_type="compensation.commit_result",
+            manifest_hash=compensation_hash,
+            grant_id=grant_id,
+            actor_id=actor_id,
+            metadata={
+                "attempted": str(compensation_result.attempted),
+                "succeeded": str(compensation_result.succeeded),
+                "reason": (compensation_result.reason or "")[:200],
+            },
+        )
+        if compensation_result.succeeded:
+            self._transition(
+                original_sealed.manifest.manifest_id,
+                LifecycleState.COMPENSATED,
+                event_type="effect.compensation_committed",
+                manifest_hash=original_sealed.seal.manifest_hash,
+                grant_id=grant_id,
+                actor_id=actor_id,
+                metadata={
+                    "compensation_manifest_id": compensation_id,
+                    "provider_reference": outcome_ref,
+                },
+            )
+        elif original_state == LifecycleState.VERIFIED:
+            # Authorized attempt that did not succeed: leave original in
+            # COMPENSATING/FAILED honestly rather than claiming COMPENSATED.
+            self._transition(
+                original_sealed.manifest.manifest_id,
+                LifecycleState.FAILED,
+                event_type="effect.compensation_failed",
+                manifest_hash=original_sealed.seal.manifest_hash,
+                grant_id=grant_id,
+                actor_id=actor_id,
+                metadata={
+                    "compensation_manifest_id": compensation_id,
+                    "attempted": str(compensation_result.attempted),
+                    "reason": (compensation_result.reason or "")[:200],
+                },
+            )
+
+        return CommitResult(
+            success=compensation_result.succeeded,
+            idempotency_key=compensation.idempotency_key,
+            provider_reference=outcome_ref,
+            detail=compensation_result.reason or compensation_result.detail,
+        )
+
     def compensate(
         self,
         manifest: EffectManifest,
@@ -1296,6 +1632,14 @@ class KarmaSakshiEngine:
         adapter: EffectAdapter,
         context: Any,
     ) -> CompensationResult:
+        """Legacy best-effort compensation path (v0.1).
+
+        Still calls ``adapter.compensate`` directly without a separate
+        sealed compensation grant. Prefer
+        :meth:`authorize_compensation` / :meth:`commit_compensation` for
+        the Phase 7 authorized path. This method never builds or mutates
+        an Action Passport.
+        """
         manifest_hash = manifest.canonical_hash()
         self._transition(
             manifest.manifest_id,
@@ -1316,6 +1660,7 @@ class KarmaSakshiEngine:
                 "attempted": str(result.attempted),
                 "succeeded": str(result.succeeded),
                 "reason": (result.reason or "")[:200],
+                "legacy_path": "true",
             },
         )
         return result

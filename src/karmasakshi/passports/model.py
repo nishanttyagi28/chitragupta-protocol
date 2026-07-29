@@ -87,6 +87,11 @@ class ActionPassport(BaseModel):
     compensation_attempted: bool | None = None
     compensation_succeeded: bool | None = None
     compensation_reason: str | None = None
+    #: Extreme-v2 Phase 7: pointer to a separate Compensation Passport /
+    #: compensation manifest. The original Action Passport never stores
+    #: compensation outcomes as its authoritative record when these are set.
+    compensation_manifest_hash: str | None = None
+    compensation_passport_status: str | None = None
 
     # Effect Intelligence assessment (advisory in this protocol version --
     # see docs/effect-intelligence.md; None if assess() was never called for
