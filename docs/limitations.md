@@ -17,7 +17,10 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   `SQLiteAuditBackend` serialize writers at the file level and are safe
   across processes on one machine, not across machines. Use
   `RedisGrantStore` for distributed grant consumption; there is no
-  distributed audit backend shipped (only in-memory and SQLite).
+  distributed audit consensus layer shipped. Optional `RedisAuditBackend`
+  (Phase 14) provides shared Redis append with Lua sequence checks — not
+  Raft/etcd. Default CLI/API still use SQLite. See
+  [docs/audit-journal.md](audit-journal.md).
 - **Redis test coverage is environment-dependent.** The Redis backend's
   test suite is collected but every test skips (with an explicit reason)
   if no Redis instance is reachable. In the environment this branch was

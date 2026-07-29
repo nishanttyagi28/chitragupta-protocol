@@ -66,9 +66,17 @@ fabricated as passing.
 
 ## Audit backends
 
-Parallel structure: `InMemoryAuditBackend` (tests/local examples) and
-`SQLiteAuditBackend` (durable, used by the CLI and API by default). Both
-implement `AuditBackend` (`append`, `all_events`, `last_event`); the
-hash-chain logic lives in `AuditJournal` and is backend-agnostic — a
-backend only needs to store and return events in order, `AuditJournal`
-does the tamper-evidence work regardless of which one is plugged in.
+Parallel structure to grant stores. The hash-chain logic lives in
+`AuditJournal` and is backend-agnostic; backends only store and return
+events in order.
+
+| Backend | Scope |
+|---|---|
+| `InMemoryAuditBackend` | Process-local (tests / examples) |
+| `SQLiteAuditBackend` | Durable single-node (CLI/API default) |
+| `RedisAuditBackend` | Shared Redis append (optional extra); Lua sequence check — **not** Raft/etcd |
+
+Multi-writer honesty: the journal process lock is not a distributed lock.
+Conflicting appends must fail closed (`AuditWriteError`) via SQLite
+primary-key or Redis Lua `LLEN+1 == sequence`. See
+[docs/audit-journal.md](audit-journal.md).
