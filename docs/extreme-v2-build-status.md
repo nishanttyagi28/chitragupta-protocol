@@ -622,20 +622,44 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 8: Durable saga orchestration.** Multi-step compensation-aware
-orchestration over sealed causal graphs / plans, with honest ambiguous-
-outcome handling per step.
+**Phase 9: Independent witness quorum.** Require N independent witnesses
+to confirm observed outcomes before PROVE-time acceptance of critical
+effects.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 6 (`72a681d`, PR #20)
-- current branch: `cursor/phase7-compensation-passports-ffca`
-- open PR: pending (Phase 7)
-- latest local green commit on Phase 7 branch: `1701f6d`
-- test counts: **571 passed, 6 skipped**; coverage **90.15%**
+- last merged phase on main: Phase 7 (`2736d60`, PR #21)
+- current branch: `cursor/phase8-saga-orchestration-ffca`
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/22 (pending number)
+- latest local green commit: `783398e`
+- test counts: **584 passed, 6 skipped**; coverage **90.11%**
 - known blockers: Redis-only skips; pip-audit pytest CVE (dev-only)
-- exact next command after Phase 7 merge: begin Phase 8 from updated `main`
-- exact next phase: 8 — Durable saga orchestration
+- exact next command after Phase 8 merge: begin Phase 9 from updated `main`
+- exact next phase: 9 — Independent witness quorum
+
+## Phase 8: Durable saga orchestration
+
+**Status: implemented on branch.**
+
+### What landed
+
+- `karmasakshi.saga`: deterministic topo order, `SagaPlan`/`SagaRun`,
+  fail-closed step machine
+- Engine: `begin_saga`, `authorize_saga_step`, `commit_saga_step`,
+  `verify_saga_step`, `recover_saga_step`, `record_saga_compensation`
+- Invariants **#46–#49**
+- Docs: `docs/saga-orchestration.md`
+
+### Design decisions
+
+- Multi-grant only (one grant per sealed step); multi-node single-grant
+  remains deferred
+- AMBIGUOUS blocks blind re-commit; recovery re-observes first
+- Compensation recording uses Phase 7 status triad in reverse order;
+  terminal saga status after compensation is `failed_partial` (never
+  claimed as atomic rollback)
+- Durability = audit events + process-local run state (Phase 13 for
+  shared durable saga storage)
 
 ## Phase 7: Compensation manifests / Compensation Passports
 
