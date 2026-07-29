@@ -174,6 +174,14 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   it; nothing calls it automatically from `authorize()`/`commit()`. No
   remote/network sink ships in this phase -- only in-memory and local
   JSON-Lines file sinks. See [docs/observability.md](observability.md).
+- **The AgentEval failure-memory store is advisory, unbounded, and
+  exact-match only** (`karmasakshi.integrations.agenteval.memory`):
+  nothing in `karmasakshi.engine` reads or writes it, it never expires
+  entries, and two conceptually similar failures with a different
+  `failure_category` string or cited `invariant` are treated as distinct
+  shapes -- no fuzzy matching or clustering. Local file only, no
+  shared/remote store. See
+  [docs/agenteval-integration.md](agenteval-integration.md).
 
 ## What "feature-complete" means here
 

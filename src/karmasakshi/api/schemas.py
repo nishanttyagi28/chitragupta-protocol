@@ -225,6 +225,13 @@ class AssessIn(BaseModel):
     from_audit_history: bool = False
 
 
+class AgentEvalRecordIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    failure_category: str
+    invariant: str | None = None
+
+
 class CausalEdgeIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -254,6 +261,7 @@ class ManifestSummary(BaseModel):
 
 
 __all__ = [
+    "AgentEvalRecordIn",
     "ApprovalPolicyBundleCreateIn",
     "ApprovalStatementIn",
     "ApproveIn",

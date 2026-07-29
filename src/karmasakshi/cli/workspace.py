@@ -83,6 +83,10 @@ class Workspace:
     def is_initialized(self) -> bool:
         return self.root.exists() and self.keys_dir.exists()
 
+    @property
+    def agenteval_memory_path(self) -> Path:
+        return self.root / "agenteval-memory.jsonl"
+
     # --- keys ---------------------------------------------------------------
 
     def _pubkey_path(self, key_id: str) -> Path:

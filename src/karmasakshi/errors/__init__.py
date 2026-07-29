@@ -479,3 +479,15 @@ class EvidencePackAssemblyError(PortableEvidenceError):
 
 class EvidencePackTooLargeError(PortableEvidenceError):
     """The audit slice or keyring exceeds the pack's embedding ceiling."""
+
+
+# --- AgentEval failure-memory loop (extreme-v2 Phase 25) --------------------------
+
+
+class FailureMemoryError(KarmaSakshiError):
+    """Base class for AgentEval failure-memory store errors."""
+
+
+class FailureMemoryCorruptedError(FailureMemoryError):
+    """A stored failure-memory record is not valid JSON or does not match
+    the ``RegressionFixture`` schema."""

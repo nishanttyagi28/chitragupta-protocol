@@ -14,6 +14,7 @@ from karmasakshi.adapters.payment_simulator import PaymentRequest
 from karmasakshi.adapters.sqlite_db import RowEffectRequest
 from karmasakshi.api.auth import is_dev_mode, require_auth
 from karmasakshi.api.schemas import (
+    AgentEvalRecordIn,
     ApprovalPolicyBundleCreateIn,
     ApprovalStatementIn,
     ApproveIn,
@@ -64,6 +65,7 @@ from karmasakshi.envelope import (
 )
 from karmasakshi.errors import KarmaSakshiError
 from karmasakshi.grants.model import ScopeConstraints
+from karmasakshi.integrations.agenteval import export_regression_fixture, failure_signature
 from karmasakshi.intelligence import AssessmentFacts, IntelligencePolicy, derive_facts_from_audit
 from karmasakshi.intelligence.policy import build_policy_bundle
 from karmasakshi.passports import (
@@ -1271,6 +1273,50 @@ def post_verify_evidence_pack(pack: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(422, f"invalid evidence pack: {exc}") from exc
     result = verify_evidence_pack(parsed)
     return result.model_dump(mode="json")
+
+
+@router.post("/manifests/{manifest_id}/agenteval/fixtures", dependencies=[Depends(require_auth)])
+def record_agenteval_fixture(
+    manifest_id: str, body: AgentEvalRecordIn, request: Request
+) -> dict[str, Any]:
+    """Export this manifest's outcome as an AgentEval regression fixture
+    and record it into the server's failure-memory store (Phase 25). See
+    docs/agenteval-integration.md and docs/portable-evidence.md's sibling
+    doc, docs/observability.md, for the same "advisory, never a security
+    decision" boundary applied here.
+    """
+    state = _state(request)
+    sealed = state.sealed_manifests.get(manifest_id)
+    if sealed is None:
+        raise HTTPException(404, "manifest not found")
+    fixture = export_regression_fixture(
+        manifest=sealed.manifest,
+        failure_category=body.failure_category,
+        commit_result=state.commit_results.get(manifest_id),
+        outcome_proof=state.outcome_proofs.get(manifest_id),
+        invariant=body.invariant,
+    )
+    state.agenteval_memory.record(fixture)
+    signature = failure_signature(fixture)
+    recurrence = state.agenteval_memory.recurrence_count(
+        effect_type=fixture.effect_type,
+        adapter_id=fixture.adapter_id,
+        failure_category=fixture.failure_category,
+        invariant=fixture.invariant,
+    )
+    return {
+        "signature": signature,
+        "occurrence_count": recurrence,
+        "fixture": fixture.model_dump(mode="json"),
+    }
+
+
+@router.get("/agenteval/fixtures/history", dependencies=[Depends(require_auth)])
+def agenteval_fixture_history(request: Request) -> dict[str, Any]:
+    """Summarize recorded failure signatures, most recurrent first."""
+    state = _state(request)
+    summaries = state.agenteval_memory.summarize()
+    return {"summaries": [s.model_dump(mode="json") for s in summaries]}
 
 
 @router.get("/kill-switch", dependencies=[Depends(require_auth)])

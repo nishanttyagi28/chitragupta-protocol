@@ -4,9 +4,14 @@ _Last updated: 2026-07-29_
 
 This ledger tracks work beyond the v0.1.0 baseline documented in
 [`BUILD_STATUS.md`](../BUILD_STATUS.md), toward the 25-phase program
-described in the extreme-v2 mission. It is deliberately honest about
-scope: most of the 25 phases are **not implemented**. Read this file
-before believing any marketing claim about this branch.
+described in the extreme-v2 mission. **As of Phase 25, all 25 phases in
+the original program are implemented** (see the table below for what
+each one actually covers and does not cover -- "implemented" describes
+real, tested logic, not certification, formal verification, or
+production hardening). Read this file, not marketing copy, before
+believing any claim about this branch; the commercial-product work that
+follows (Milestone A and beyond) is tracked separately in
+`docs/product/`.
 
 Branch: `feat/karmasakshi-extreme-v2` (this session's harness pushed it as
 `claude/karmasakshi-extreme-v2-lhmdqc`, tracking the same intent).
@@ -62,7 +67,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 22. State-machine model checking | **Implemented** | Bounded exhaustive graph checker; see below |
 | 23. Action Passport V2 | **Implemented** | Additive schema 2.0; see below |
 | 24. Portable evidence / observability | **Implemented** | Offline-verifiable Evidence Packs + advisory observability events; see below |
-| 25. AgentEval failure-memory loop | Not started | v0.1's AgentEval bridge (versioned, neutral export) is unchanged |
+| 25. AgentEval failure-memory loop | **Implemented** | `FailureMemoryStore` over exported fixtures; advisory only; see below |
 
 ## Phase 1: Effect Intelligence Engine
 
@@ -622,20 +627,95 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 25: AgentEval failure-memory loop.** Extend the existing v0.1
-AgentEval bridge (`karmasakshi.integrations.agenteval`) with a
-failure-memory loop over exported regression fixtures, keeping the same
-"versioned, neutral, not a compatibility claim" honesty boundary.
+**All 25 extreme-v2 phases are now implemented.** The next work is the
+commercial product roadmap tracked in `docs/product/` (Milestone A:
+KarmaSakshi Gateway HTTP API, typed Python SDK, Control Center approval
+inbox, durable organization model + migrations, Docker Compose evaluation
+environment, deterministic refund demo, commercial acceptance test).
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 24 (this phase)
-- branch: `cursor/phase24-portable-evidence-observability`
-- test counts: **768 passed, 8 skipped**; coverage **90.37%**
+- last merged phase on main: Phase 25 (this phase)
+- branch: `cursor/phase25-agenteval-failure-memory`
+- test counts: **787 passed, 8 skipped**; coverage **90.49%**
 - known blockers: none
-- exact next phase: 25 — AgentEval failure-memory loop
-- exact next command: create branch from updated main, implement
-  `karmasakshi.integrations.agenteval` failure-memory extensions
+- next: commercial product Milestone A (see `docs/product/ROADMAP.md`)
+
+## Phase 25: AgentEval failure-memory loop
+
+**Status: implemented.**
+
+### Files changed
+
+- Added: `src/karmasakshi/integrations/agenteval/memory.py`
+- Added: `src/karmasakshi/cli/agenteval_cmd.py`
+- Added: `tests/unit/test_agenteval_memory.py`,
+  `tests/property/test_agenteval_memory_properties.py`
+- Modified: `src/karmasakshi/integrations/agenteval/__init__.py` (new
+  exports), `src/karmasakshi/errors/__init__.py`
+  (`FailureMemoryError`, `FailureMemoryCorruptedError`),
+  `src/karmasakshi/cli/workspace.py` (`agenteval_memory_path`),
+  `src/karmasakshi/cli/app.py` (`agenteval` subcommand),
+  `src/karmasakshi/api/schemas.py` (`AgentEvalRecordIn`),
+  `src/karmasakshi/api/state.py` (`ApiState.agenteval_memory`),
+  `src/karmasakshi/api/routes.py`
+  (`POST /manifests/{id}/agenteval/fixtures`,
+  `GET /agenteval/fixtures/history`), `tests/integration/test_cli.py`,
+  `tests/integration/test_api.py`
+- Docs updated: `docs/agenteval-integration.md` (new "Failure-memory
+  loop" section), `docs/limitations.md`, `docs/api.md`, `docs/cli.md`,
+  `README.md`, `CHANGELOG.md`
+
+### What landed
+
+- `FailureMemoryStore`: an append-only JSON-Lines store of exported
+  `RegressionFixture`s. `record()` / `all_fixtures()` /
+  `recurrence_count()` / `summarize()`.
+- `failure_signature()` / `failure_signature_for()`: a deterministic
+  grouping key (`effect_type` + `adapter_id` + `failure_category` +
+  `invariant`) over `canonical_hash()`, independent of exact inputs,
+  timestamps, or manifest identity.
+- CLI `agenteval record <manifest_id> --failure-category CAT
+  [--invariant STR]` / `agenteval history`; API
+  `POST /manifests/{id}/agenteval/fixtures` /
+  `GET /agenteval/fixtures/history`.
+
+### Design decisions
+
+- **Advisory only, no new invariant.** Nothing in `karmasakshi.engine`
+  reads or writes a `FailureMemoryStore`; no authorization or commit
+  decision is affected by recurrence counts. Consistent with why Phase 1
+  (Effect Intelligence) added no invariant of its own: this is an
+  explanatory signal, not a security-critical decision, so it would be
+  dishonest to list it in `docs/security-model.md`.
+  See [[docs/security-model.md]].
+- **Unbounded by design**, unlike the size-ceilinged batches elsewhere in
+  this protocol (evidence/witness/approval sets, Phase 24 Evidence
+  Packs): a failure memory that silently forgot entries past some limit
+  would defeat its own purpose. Rotation/archival is the caller's
+  responsibility, the same as any other append-only log file.
+- **Exact-match signature, no fuzzy clustering** — two failures that
+  differ only in which exact `failure_category` string or `invariant`
+  was cited are treated as distinct shapes. Explicitly documented as a
+  known limitation rather than silently approximated.
+
+### Verification commands
+
+```bash
+ruff check .
+ruff format --check .
+mypy src
+bandit -r src/karmasakshi
+python -m pytest -q
+python -m pytest -q tests/unit/test_agenteval_memory.py tests/property/test_agenteval_memory_properties.py
+python -m build && python -m twine check dist/*
+```
+
+Results at the time of this commit: `ruff check`/`ruff format --check`/
+`mypy src`/`bandit` all clean; `pytest -q` → **787 passed, 8 skipped**
+(same Redis-only skips as prior phases); `pytest --cov=karmasakshi
+--cov-fail-under=90` → **90.49%** (100% on every new Phase 25 file);
+`build`/`twine check` clean.
 
 ## Phase 24: Portable evidence and observability
 

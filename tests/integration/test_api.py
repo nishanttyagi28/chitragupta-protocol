@@ -188,6 +188,70 @@ def test_evidence_pack_verify_requires_no_authentication(monkeypatch, tmp_path):
     assert resp.status_code == 422
 
 
+def test_agenteval_record_and_history_endpoints(dev_client):
+    """Phase 25: export+record a failure fixture via the API, then
+    summarize the failure-memory store."""
+    prep = _prepare_payment(dev_client, idempotency_key="idem-agenteval-1")
+    manifest_id = prep.json()["manifest_id"]
+    approve = _approve(dev_client, manifest_id)
+    grant_id = approve.json()["grant_id"]
+    dev_client.post(f"/manifests/{manifest_id}/execute", json={"grant_id": grant_id})
+    dev_client.post(f"/manifests/{manifest_id}/verify")
+
+    record_response = dev_client.post(
+        f"/manifests/{manifest_id}/agenteval/fixtures",
+        json={"failure_category": "verification_mismatch", "invariant": "#20"},
+    )
+    assert record_response.status_code == 200
+    body = record_response.json()
+    assert body["occurrence_count"] == 1
+    assert body["fixture"]["failure_category"] == "verification_mismatch"
+
+    prep2 = _prepare_payment(dev_client, idempotency_key="idem-agenteval-2")
+    manifest_id_2 = prep2.json()["manifest_id"]
+    approve2 = _approve(dev_client, manifest_id_2)
+    dev_client.post(
+        f"/manifests/{manifest_id_2}/execute", json={"grant_id": approve2.json()["grant_id"]}
+    )
+    dev_client.post(f"/manifests/{manifest_id_2}/verify")
+    second = dev_client.post(
+        f"/manifests/{manifest_id_2}/agenteval/fixtures",
+        json={"failure_category": "verification_mismatch", "invariant": "#20"},
+    )
+    assert second.json()["occurrence_count"] == 2
+
+    history = dev_client.get("/agenteval/fixtures/history")
+    assert history.status_code == 200
+    summaries = history.json()["summaries"]
+    assert len(summaries) == 1
+    assert summaries[0]["occurrence_count"] == 2
+
+
+def test_agenteval_record_unknown_manifest_404s(dev_client):
+    resp = dev_client.post(
+        "/manifests/does-not-exist/agenteval/fixtures",
+        json={"failure_category": "verification_mismatch"},
+    )
+    assert resp.status_code == 404
+
+
+def test_agenteval_history_requires_auth(monkeypatch, tmp_path):
+    from karmasakshi.api.app import create_app
+    from karmasakshi.api.auth import DEV_MODE_ENV, TOKEN_ENV
+
+    monkeypatch.delenv(DEV_MODE_ENV, raising=False)
+    monkeypatch.setenv(TOKEN_ENV, "correct-token")
+    app = create_app(data_dir=tmp_path / "api-data")
+    client = TestClient(app)
+    assert client.get("/agenteval/fixtures/history").status_code == 401
+    assert (
+        client.get(
+            "/agenteval/fixtures/history", headers={"Authorization": "Bearer correct-token"}
+        ).status_code
+        == 200
+    )
+
+
 def _create_policy_bundle(client, bundle_id="bundle-1", **overrides):
     body = {
         "bundle_id": bundle_id,

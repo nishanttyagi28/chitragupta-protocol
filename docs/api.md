@@ -76,6 +76,8 @@ without authentication — see `karmasakshi.api.auth.require_auth` and
 | GET | `/passports/{id}?fmt=json\|html\|markdown&version=v1\|v2` | Action Passport (v1 default; v2 = schema 2.0) |
 | GET | `/passports/{id}/evidence-pack` | Build a portable, offline-verifiable Evidence Pack (Phase 24; see docs/portable-evidence.md) |
 | POST | `/evidence-pack/verify` | Independently (fully offline) verify a submitted Evidence Pack -- deliberately unauthenticated |
+| POST | `/manifests/{id}/agenteval/fixtures` | Export + record an AgentEval regression fixture into the failure-memory store (Phase 25; advisory only) |
+| GET | `/agenteval/fixtures/history` | Summarize recorded failure signatures, most recurrent first |
 | GET | `/kill-switch` | Current status |
 | POST | `/kill-switch/engage` / `/disengage` | Emergency stop for `/execute` |
 

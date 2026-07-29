@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from karmasakshi import __version__
+from karmasakshi.cli.agenteval_cmd import agenteval_app
 from karmasakshi.cli.approve_cmd import approvals_app, approve
 from karmasakshi.cli.assess_cmd import assess
 from karmasakshi.cli.audit_cmd import audit_app
@@ -44,6 +45,7 @@ app.add_typer(policy_app, name="policy")
 app.add_typer(approvals_app, name="approvals")
 app.add_typer(witness_app, name="witness")
 app.add_typer(evidence_pack_app, name="evidence-pack")
+app.add_typer(agenteval_app, name="agenteval")
 
 
 @app.callback()
