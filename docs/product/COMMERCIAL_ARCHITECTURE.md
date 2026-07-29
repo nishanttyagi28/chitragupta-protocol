@@ -28,8 +28,11 @@
 durable organization + user model described above: `Organization`,
 `GatewayUser`, explicit versioned SQLite migrations, and local
 development authentication (PBKDF2, fails closed on cross-organization
-access). Not yet wired into an HTTP API or UI — see
-`docs/product/BUILD_STATUS.md` for what remains.
+access), plus an HTTP API (`/gateway/organizations`, `/gateway/auth/login`,
+org-scoped user management with session tokens). Not yet wired to the
+refund vertical slice (agent/adapter/policy registration, the effect
+lifecycle) or the Control Center UI — see `docs/product/BUILD_STATUS.md`
+for what remains.
 
 ## Evaluation modes
 

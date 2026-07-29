@@ -10,6 +10,9 @@ from karmasakshi import __version__
 from karmasakshi.api.auth import is_dev_mode, is_public_demo
 from karmasakshi.api.routes import router
 from karmasakshi.api.state import ApiState, build_default_state
+from karmasakshi.gateway.api import GatewayApiState
+from karmasakshi.gateway.api import router as gateway_router
+from karmasakshi.gateway.store import GatewayStore, default_gateway_db_path
 
 
 class PublicDemoMisconfiguredError(RuntimeError):
@@ -18,7 +21,12 @@ class PublicDemoMisconfiguredError(RuntimeError):
     copy of the real control-plane API/console -- refuse to start rather than risk that."""
 
 
-def create_app(*, state: ApiState | None = None, data_dir: Path | None = None) -> FastAPI:
+def create_app(
+    *,
+    state: ApiState | None = None,
+    data_dir: Path | None = None,
+    gateway_state: GatewayApiState | None = None,
+) -> FastAPI:
     if is_public_demo() and is_dev_mode():
         raise PublicDemoMisconfiguredError(
             "KARMASAKSHI_PUBLIC_DEMO=1 and KARMASAKSHI_API_DEV_MODE=1 must not both be set: "
@@ -47,6 +55,13 @@ def create_app(*, state: ApiState | None = None, data_dir: Path | None = None) -
     app.add_middleware(ResourceProtectionMiddleware, policy=policy_from_env())
     app.state.karmasakshi = state or build_default_state(data_dir)
     app.include_router(router)
+
+    resolved_data_dir = data_dir or Path.cwd() / ".karmasakshi-api"
+    resolved_data_dir.mkdir(parents=True, exist_ok=True)
+    app.state.karmasakshi_gateway = gateway_state or GatewayApiState(
+        store=GatewayStore(default_gateway_db_path(resolved_data_dir))
+    )
+    app.include_router(gateway_router)
 
     try:
         from karmasakshi.web.console import console_router

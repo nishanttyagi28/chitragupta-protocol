@@ -194,8 +194,15 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migrations (`schema_migrations` table, ordered `Migration` steps —
   distinct from the ad-hoc scripts used by the protocol core's
   single-table stores) and local development authentication
-  (PBKDF2-HMAC-SHA256, fails closed on cross-organization access). Not
-  yet wired into an HTTP API or UI. See [docs/gateway.md](docs/gateway.md).
+  (PBKDF2-HMAC-SHA256, fails closed on cross-organization access).
+- **Gateway HTTP API** (`karmasakshi.gateway.api`, mounted under
+  `/gateway`): organization bootstrap (platform-auth-gated), login
+  issuing a session token (`GatewaySessionStore`, 12h TTL, no silent
+  renewal), and org-scoped user management -- every org-scoped endpoint
+  independently re-checks the session's user actually belongs to the
+  `org_id` in the URL, returning `403` rather than reading across the
+  organization boundary. Not yet wired to the refund vertical slice or
+  Control Center UI. See [docs/gateway.md](docs/gateway.md).
 
 
 ## [0.1.0] - 2026-07-27

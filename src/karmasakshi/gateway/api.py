@@ -1,0 +1,210 @@
+"""Gateway HTTP API (Milestone A): organization bootstrap, login, and
+org-scoped user management.
+
+Mounted under ``/gateway`` alongside the existing protocol control-plane
+API (see `karmasakshi.api.app.create_app`). Organization *creation* is a
+platform-operator action gated by the same `karmasakshi.api.auth.require_auth`
+dev-mode/token check as the rest of the control plane; everything else
+here is gated by a Gateway session issued at login, scoped to one
+organization. See docs/gateway.md.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+
+from karmasakshi.api.auth import require_auth
+from karmasakshi.errors import (
+    CrossOrganizationAccessError,
+    GatewayAuthenticationError,
+    GatewayUserAlreadyExistsError,
+    KarmaSakshiError,
+    OrganizationAlreadyExistsError,
+    OrganizationNotFoundError,
+    OrganizationSuspendedError,
+)
+from karmasakshi.gateway.models import GatewayUser, GatewayUserRole, Organization
+from karmasakshi.gateway.schemas import (
+    GatewayUserCreateIn,
+    GatewayUserOut,
+    LoginIn,
+    LoginOut,
+    OrganizationBootstrapIn,
+    OrganizationBootstrapOut,
+    OrganizationOut,
+    UserListOut,
+)
+from karmasakshi.gateway.sessions import GatewaySessionStore
+from karmasakshi.gateway.store import GatewayStore
+
+router = APIRouter(prefix="/gateway", tags=["gateway"])
+
+
+@dataclass
+class GatewayApiState:
+    store: GatewayStore
+    sessions: GatewaySessionStore = field(default_factory=GatewaySessionStore)
+
+
+def _state(request: Request) -> GatewayApiState:
+    return request.app.state.karmasakshi_gateway  # type: ignore[no-any-return]
+
+
+def _user_out(user: GatewayUser) -> GatewayUserOut:
+    return GatewayUserOut(
+        user_id=user.user_id,
+        org_id=user.org_id,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role,
+        created_at=user.created_at,
+    )
+
+
+def _organization_out(org: Organization) -> OrganizationOut:
+    return OrganizationOut(
+        org_id=org.org_id,
+        name=org.name,
+        status=org.status,
+        created_at=org.created_at,
+    )
+
+
+async def require_gateway_session(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> GatewayUser:
+    """FastAPI dependency: resolve the bearer session token to its
+    authenticated `GatewayUser`, failing closed (401) on any of: missing
+    header, malformed header, unknown token, or expired token."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "missing or malformed Authorization header")
+    token = authorization.removeprefix("Bearer ")
+    state = _state(request)
+    session = state.sessions.get(token)
+    if session is None:
+        raise HTTPException(401, "invalid or expired session")
+    try:
+        return state.store.get_user_by_id(session.org_id, session.user_id)
+    except KarmaSakshiError as exc:
+        raise HTTPException(401, "session no longer valid") from exc
+
+
+def _assert_org_scope(request: Request, user: GatewayUser, org_id: str) -> None:
+    state = _state(request)
+    try:
+        state.store.assert_user_belongs_to_organization(user, org_id)
+    except CrossOrganizationAccessError as exc:
+        raise HTTPException(403, str(exc)) from exc
+
+
+@router.post("/organizations", dependencies=[Depends(require_auth)])
+def bootstrap_organization(
+    body: OrganizationBootstrapIn, request: Request
+) -> OrganizationBootstrapOut:
+    """Create a new organization together with its first (owner) user.
+    Platform-operator action -- gated by the control plane's own
+    dev-mode/token auth, not a Gateway session (there is no user yet)."""
+    state = _state(request)
+    try:
+        org = state.store.create_organization(body.org_id, body.name)
+        owner = state.store.create_user(
+            user_id=f"{body.org_id}-owner",
+            org_id=body.org_id,
+            email=body.owner_email,
+            display_name=body.owner_display_name,
+            password=body.owner_password,
+            role=GatewayUserRole.OWNER,
+        )
+    except OrganizationAlreadyExistsError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except GatewayUserAlreadyExistsError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return OrganizationBootstrapOut(
+        organization=_organization_out(org),
+        owner=_user_out(owner),
+    )
+
+
+@router.post("/auth/login")
+def login(body: LoginIn, request: Request) -> LoginOut:
+    """Authenticate a user against one organization and issue a session
+    token. Deliberately public (no platform auth) -- this *is* the
+    authentication step."""
+    state = _state(request)
+    try:
+        user = state.store.authenticate(
+            org_id=body.org_id, email=body.email, password=body.password
+        )
+    except GatewayAuthenticationError as exc:
+        raise HTTPException(401, "authentication failed") from exc
+    session = state.sessions.issue(user)
+    return LoginOut(
+        session_token=session.token,
+        expires_at=session.expires_at,
+        user=_user_out(user),
+    )
+
+
+@router.get("/auth/me")
+def me(user: Annotated[GatewayUser, Depends(require_gateway_session)]) -> GatewayUserOut:
+    return _user_out(user)
+
+
+@router.get("/organizations/{org_id}")
+def get_organization(
+    org_id: str, request: Request, user: Annotated[GatewayUser, Depends(require_gateway_session)]
+) -> OrganizationOut:
+    _assert_org_scope(request, user, org_id)
+    state = _state(request)
+    try:
+        org = state.store.get_organization(org_id)
+    except OrganizationNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return _organization_out(org)
+
+
+@router.get("/organizations/{org_id}/users")
+def list_organization_users(
+    org_id: str, request: Request, user: Annotated[GatewayUser, Depends(require_gateway_session)]
+) -> UserListOut:
+    _assert_org_scope(request, user, org_id)
+    state = _state(request)
+    try:
+        users = state.store.list_users(org_id)
+    except OrganizationNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except OrganizationSuspendedError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    return UserListOut(users=[_user_out(u) for u in users])
+
+
+@router.post("/organizations/{org_id}/users")
+def create_organization_user(
+    org_id: str,
+    body: GatewayUserCreateIn,
+    request: Request,
+    user: Annotated[GatewayUser, Depends(require_gateway_session)],
+) -> GatewayUserOut:
+    _assert_org_scope(request, user, org_id)
+    state = _state(request)
+    try:
+        created = state.store.create_user(
+            user_id=body.user_id,
+            org_id=org_id,
+            email=body.email,
+            display_name=body.display_name,
+            password=body.password,
+            role=body.role,
+        )
+    except GatewayUserAlreadyExistsError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except OrganizationSuspendedError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    return _user_out(created)
+
+
+__all__ = ["GatewayApiState", "require_gateway_session", "router"]

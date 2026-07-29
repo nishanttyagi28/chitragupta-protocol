@@ -92,7 +92,7 @@ select = ["E", "F", "I", "UP", "B", "C4", "SIM", "S", "N", "RUF", "BLE"]
 ignore = ["S101"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106", "S110", "E501", "RUF005"]
+"tests/**" = ["S101", "S105", "S106", "S107", "S110", "E501", "RUF005"]
 # Dev/demo tooling, not shipped in the package: fixed, non-user-controlled
 # subprocess argument lists (ffmpeg/uvicorn) and a hardcoded localhost health
 # check URL.

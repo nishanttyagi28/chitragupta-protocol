@@ -184,11 +184,14 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   [docs/agenteval-integration.md](agenteval-integration.md).
 - **The Gateway's organization/user model (`karmasakshi.gateway`) is
   local development authentication only** -- PBKDF2 password hashing,
-  no SSO, no MFA, no session/token issuance, and no server-enforced RBAC
-  (`GatewayUserRole` is metadata, not currently checked by any
-  authorization decision). Single-node SQLite only. Not yet wired into
-  an HTTP Gateway API or Control Center UI. See
-  [docs/gateway.md](gateway.md).
+  no SSO, no MFA, and no server-enforced RBAC (`GatewayUserRole` is
+  metadata, not currently checked by any authorization decision).
+  Single-node SQLite only. Gateway sessions are process-local, in-memory,
+  and non-durable -- a process restart invalidates every session; a
+  horizontally scaled Gateway would need a shared session backend
+  (Milestone B). No session revocation, password reset, or user-removal
+  endpoint exists yet. Not yet wired into the refund vertical slice or
+  Control Center UI. See [docs/gateway.md](gateway.md).
 
 ## What "feature-complete" means here
 
