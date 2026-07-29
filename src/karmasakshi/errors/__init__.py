@@ -419,6 +419,10 @@ class UntrustedAdapterError(AdapterError):
     declared capability of the trusted adapter registry (fail closed)."""
 
 
+class AdapterConformanceError(AdapterError):
+    """An adapter failed a Phase 18 conformance-kit check (fail closed)."""
+
+
 class UnsupportedCompensationError(AdapterError):
     """The effect is irreversible and cannot honestly be compensated."""
 

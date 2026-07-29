@@ -141,6 +141,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   revoked / undeclared-effect-type checks when configured (invariants
   #65–#67). Process-local; no dynamic plugins. See
   [docs/trusted-adapter-registry.md](docs/trusted-adapter-registry.md).
+- **Adapter conformance kit** (`run_adapter_conformance`): structural
+  contract checks including forged-success rejection before commit
+  (invariant #68). Not a cloud-provider certification. See
+  [docs/adapter-conformance.md](docs/adapter-conformance.md).
 
 
 ## [0.1.0] - 2026-07-27

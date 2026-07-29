@@ -57,6 +57,9 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   unknown/revoked/undeclared-effect-type checks when configured. Not a
   multi-node consensus store. See
   [docs/trusted-adapter-registry.md](trusted-adapter-registry.md).
+- **Adapter conformance kit is structural** (extreme-v2 Phase 18). Passing
+  does not certify a live cloud provider. See
+  [docs/adapter-conformance.md](adapter-conformance.md).
 - **No production key management.** Dev-mode key generation writes raw
   private key bytes to a local file with best-effort file permissions.
   There's no HSM/KMS integration, no automated rotation workflow, and no

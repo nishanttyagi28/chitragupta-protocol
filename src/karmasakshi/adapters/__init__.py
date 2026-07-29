@@ -8,6 +8,13 @@ from karmasakshi.adapters.base import (
     OutcomeProof,
     PreconditionResult,
 )
+from karmasakshi.adapters.conformance import (
+    AdapterConformanceKit,
+    ConformanceCheckResult,
+    ConformanceReport,
+    ConformanceScenario,
+    run_adapter_conformance,
+)
 from karmasakshi.adapters.email_sandbox import (
     EmailRequest,
     EmailSandboxAdapter,
@@ -32,9 +39,13 @@ from karmasakshi.adapters.sqlite_db import RowEffectRequest, SQLiteRowAdapter
 
 __all__ = [
     "AdapterCapability",
+    "AdapterConformanceKit",
     "AsyncEffectAdapter",
     "CommitResult",
     "CompensationResult",
+    "ConformanceCheckResult",
+    "ConformanceReport",
+    "ConformanceScenario",
     "EffectAdapter",
     "EmailRequest",
     "EmailSandboxAdapter",
@@ -53,4 +64,5 @@ __all__ = [
     "build_reference_registry",
     "facts_from_capability",
     "reference_adapter_capabilities",
+    "run_adapter_conformance",
 ]
