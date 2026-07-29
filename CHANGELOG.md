@@ -3,7 +3,7 @@
 All notable changes to this project are documented in this file. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] - extreme-v2 in progress
+## [Unreleased] - extreme-v2 complete; commercial Milestone A in progress
 
 ### Added
 
@@ -186,6 +186,16 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `agenteval record|history`; API `POST /manifests/{id}/agenteval/fixtures`,
   `GET /agenteval/fixtures/history`. See
   [docs/agenteval-integration.md](docs/agenteval-integration.md).
+
+### Commercial Milestone A (in progress)
+
+- **Gateway durable organization model** (`karmasakshi.gateway`):
+  `Organization` / `GatewayUser` with explicit, versioned SQLite
+  migrations (`schema_migrations` table, ordered `Migration` steps —
+  distinct from the ad-hoc scripts used by the protocol core's
+  single-table stores) and local development authentication
+  (PBKDF2-HMAC-SHA256, fails closed on cross-organization access). Not
+  yet wired into an HTTP API or UI. See [docs/gateway.md](docs/gateway.md).
 
 
 ## [0.1.0] - 2026-07-27

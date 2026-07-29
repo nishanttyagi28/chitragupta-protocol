@@ -22,6 +22,15 @@
 
 **Current protocol core** is still largely single-tenant process-local API state (see `docs/limitations.md`). Commercial Milestone A introduces durable organization models around that core without pretending multi-tenant production isolation is complete until Milestone B tests pass.
 
+## Implementation status
+
+`karmasakshi.gateway` (see [docs/gateway.md](../gateway.md)) implements the
+durable organization + user model described above: `Organization`,
+`GatewayUser`, explicit versioned SQLite migrations, and local
+development authentication (PBKDF2, fails closed on cross-organization
+access). Not yet wired into an HTTP API or UI — see
+`docs/product/BUILD_STATUS.md` for what remains.
+
 ## Evaluation modes
 
 | Mode | Purpose |
