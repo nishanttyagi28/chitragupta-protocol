@@ -113,7 +113,9 @@ class ParameterConstraint(BaseModel):
                 or self.currency is not None
             ):
                 raise ValueError("integer_range must not set monetary fields")
-            if "exact_value" in self.model_fields_set:
+            # Default exact_value is None. Reject only a concrete payload so
+            # JSON round-trips that rehydrate ``exact_value: null`` remain valid.
+            if self.exact_value is not None:
                 raise ValueError("integer_range must not set exact_value")
             return self
         if self.kind == "monetary_range":
@@ -136,7 +138,7 @@ class ParameterConstraint(BaseModel):
                 or self.max_int is not None
             ):
                 raise ValueError("monetary_range must not set enum/integer fields")
-            if "exact_value" in self.model_fields_set:
+            if self.exact_value is not None:
                 raise ValueError("monetary_range must not set exact_value")
             return self
         raise ValueError(f"unknown constraint kind: {self.kind!r}")
