@@ -70,6 +70,54 @@ class PolicyBundleCreateIn(BaseModel):
     sensitive_target_patterns: list[str] = []
 
 
+class ApprovalPolicyBundleCreateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bundle_id: str
+    bundle_version: str = "1.0"
+    issuer: PrincipalIn
+    tenant_id: str | None = None
+    effective_seconds: int = 30 * 24 * 3600
+    required_approvals: int = 1
+    required_roles: list[str] = []
+    forbid_proposer_as_approver: bool = True
+    forbid_subject_as_approver: bool = True
+    veto_on_any_dissent: bool = True
+    cooling_off_seconds: int = 0
+
+
+class ApprovalStatementIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    approval_policy_bundle_id: str
+    approver: PrincipalIn
+    decision: Literal["approve", "dissent"] = "approve"
+    role: str | None = None
+    reason: str | None = None
+    ttl_seconds: int = 3600
+
+
+class QuorumEvaluateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    approval_policy_bundle_id: str
+    proposer: PrincipalIn
+    subject: PrincipalIn
+
+
+class QuorumGrantIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    approval_policy_bundle_id: str
+    grant_issuer: PrincipalIn
+    proposer: PrincipalIn
+    subject: PrincipalIn
+    audience: list[str] | None = None
+    max_uses: int = 1
+    ttl_seconds: int = 300
+    policy_bundle_id: str | None = None
+
+
 class AssessIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -98,6 +146,8 @@ class ManifestSummary(BaseModel):
 
 
 __all__ = [
+    "ApprovalPolicyBundleCreateIn",
+    "ApprovalStatementIn",
     "ApproveIn",
     "AssessIn",
     "DenyIn",
@@ -106,4 +156,6 @@ __all__ = [
     "PolicyBundleCreateIn",
     "PrepareRequestIn",
     "PrincipalIn",
+    "QuorumEvaluateIn",
+    "QuorumGrantIn",
 ]

@@ -11,7 +11,8 @@ and rejects unknown fields.
 | `grant_id` | Unique identifier |
 | `manifest_hash` | The exact manifest this grant authorizes execution of. `None` only for a pure delegation/capability grant not yet bound to a concrete effect (see [delegation.md](delegation.md)); a grant actually presented to `engine.commit()` must have this set, and it must equal the sealed manifest's hash exactly (invariant #2) |
 | `policy_bundle_hash` | Optional (default `None`, backward compatible). If set, `engine.commit()` requires the exact same signed policy bundle (by hash) to be re-presented and re-verified before the effect executes — see [policy-bundles.md](policy-bundles.md) and invariant #31 |
-| `issuer` | Who authorized this — **must** be `human` or `service`, never `agent` (invariant #30, enforced in `grants/issuer.py`) |
+| `approval_set_hash` | Optional (default `None`, backward compatible). Set only by `engine.authorize_with_quorum()` — a hash over the approving `ApprovalStatement`s that satisfied quorum. Not re-verified at commit time (statements are immutable signed records, unlike a re-editable policy) — see [multi-party-authorization.md](multi-party-authorization.md) and invariant #33 |
+| `issuer` | Who authorized this — **must** be `human` or `service`, never `agent` (invariant #30, enforced in `grants/issuer.py`). When issued via `authorize_with_quorum()`, this is the `grant_issuer` (e.g. a "quorum service" identity), distinct from the individual approvers |
 | `subject` | Who the grant is issued to (typically the agent) |
 | `audience` | Allowed adapter id(s) this grant may be presented to |
 | `allowed_effect_types` | Allowed effect type(s) |

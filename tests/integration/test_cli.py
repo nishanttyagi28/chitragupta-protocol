@@ -618,3 +618,277 @@ def test_grant_and_execute_require_matching_policy_bundle(workspace_args, tmp_pa
         ]
     )
     assert json.loads(ok.output)["success"] is True
+
+
+# --- multi-party (M-of-N) authorization (extreme-v2 Phase 3) -----------------
+
+
+def test_quorum_workflow_end_to_end(workspace_args, tmp_path):
+    _run(workspace_args + ["init"])
+    _run(workspace_args + ["key", "generate", "dev-key"])
+    _run(workspace_args + ["key", "generate", "alice-key"])
+    _run(workspace_args + ["key", "generate", "bob-key"])
+    db_path = str(tmp_path / "quorum-ledger.db")
+
+    _run(
+        workspace_args
+        + [
+            "policy",
+            "create-approval",
+            "approval-policy-1",
+            "--issuer-id",
+            "policy-admin",
+            "--required-approvals",
+            "2",
+        ]
+    )
+    _run(workspace_args + ["policy", "sign", "approval-policy-1", "--key-id", "dev-key"])
+
+    prepare_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "prepare",
+            "--adapter",
+            "sqlite",
+            "--sqlite-db-path",
+            db_path,
+            "--row-operation",
+            "insert",
+            "--row-id",
+            "acct-quorum-1",
+            "--new-balance",
+            "1000",
+            "--actor-id",
+            "agent-1",
+            "--principal-id",
+            "user-1",
+            "--idempotency-key",
+            "idem-cli-quorum-1",
+        ]
+    )
+    manifest_id = json.loads(prepare_result.output)["manifest_id"]
+    _run(workspace_args + ["seal", manifest_id, "--key-id", "dev-key"])
+
+    # Issuing before any approvals fails closed.
+    missing = runner.invoke(
+        app,
+        workspace_args
+        + [
+            "grant",
+            "issue-with-quorum",
+            manifest_id,
+            "--approval-policy-bundle-id",
+            "approval-policy-1",
+            "--grant-issuer-id",
+            "quorum-service",
+            "--proposer-id",
+            "agent-1",
+            "--subject-id",
+            "agent-1",
+            "--key-id",
+            "dev-key",
+            "--audience",
+            "sqlite.row",
+        ],
+    )
+    assert missing.exit_code != 0
+
+    _run(
+        workspace_args
+        + [
+            "approve",
+            manifest_id,
+            "--approver-id",
+            "alice",
+            "--key-id",
+            "alice-key",
+            "--approval-policy-bundle-id",
+            "approval-policy-1",
+        ]
+    )
+
+    inspect_one = _run(
+        workspace_args
+        + [
+            "--json",
+            "approvals",
+            "inspect",
+            manifest_id,
+            "--approval-policy-bundle-id",
+            "approval-policy-1",
+            "--proposer-id",
+            "agent-1",
+            "--proposer-type",
+            "agent",
+            "--subject-id",
+            "agent-1",
+            "--subject-type",
+            "agent",
+        ]
+    )
+    assert json.loads(inspect_one.output)["satisfied"] is False
+
+    _run(
+        workspace_args
+        + [
+            "approve",
+            manifest_id,
+            "--approver-id",
+            "bob",
+            "--key-id",
+            "bob-key",
+            "--approval-policy-bundle-id",
+            "approval-policy-1",
+        ]
+    )
+
+    inspect_two = _run(
+        workspace_args
+        + [
+            "--json",
+            "approvals",
+            "inspect",
+            manifest_id,
+            "--approval-policy-bundle-id",
+            "approval-policy-1",
+            "--proposer-id",
+            "agent-1",
+            "--proposer-type",
+            "agent",
+            "--subject-id",
+            "agent-1",
+            "--subject-type",
+            "agent",
+        ]
+    )
+    assert json.loads(inspect_two.output)["satisfied"] is True
+
+    grant_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "grant",
+            "issue-with-quorum",
+            manifest_id,
+            "--approval-policy-bundle-id",
+            "approval-policy-1",
+            "--grant-issuer-id",
+            "quorum-service",
+            "--proposer-id",
+            "agent-1",
+            "--subject-id",
+            "agent-1",
+            "--key-id",
+            "dev-key",
+            "--audience",
+            "sqlite.row",
+        ]
+    )
+    grant_data = json.loads(grant_result.output)
+    assert grant_data["approval_set_hash"] is not None
+    grant_id = grant_data["grant_id"]
+
+    execute_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "execute",
+            manifest_id,
+            "--grant-id",
+            grant_id,
+            "--adapter",
+            "sqlite",
+            "--sqlite-db-path",
+            db_path,
+        ]
+    )
+    assert json.loads(execute_result.output)["success"] is True
+
+
+def test_dissent_blocks_quorum_via_cli(workspace_args, tmp_path):
+    _run(workspace_args + ["init"])
+    _run(workspace_args + ["key", "generate", "dev-key"])
+    _run(workspace_args + ["key", "generate", "alice-key"])
+    db_path = str(tmp_path / "quorum-dissent-ledger.db")
+
+    _run(
+        workspace_args
+        + [
+            "policy",
+            "create-approval",
+            "dissent-policy",
+            "--issuer-id",
+            "policy-admin",
+            "--required-approvals",
+            "1",
+        ]
+    )
+    _run(workspace_args + ["policy", "sign", "dissent-policy", "--key-id", "dev-key"])
+
+    prepare_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "prepare",
+            "--adapter",
+            "sqlite",
+            "--sqlite-db-path",
+            db_path,
+            "--row-operation",
+            "insert",
+            "--row-id",
+            "acct-dissent-1",
+            "--new-balance",
+            "500",
+            "--actor-id",
+            "agent-1",
+            "--principal-id",
+            "user-1",
+            "--idempotency-key",
+            "idem-cli-dissent-1",
+        ]
+    )
+    manifest_id = json.loads(prepare_result.output)["manifest_id"]
+    _run(workspace_args + ["seal", manifest_id, "--key-id", "dev-key"])
+
+    _run(
+        workspace_args
+        + [
+            "approve",
+            manifest_id,
+            "--approver-id",
+            "alice",
+            "--key-id",
+            "alice-key",
+            "--approval-policy-bundle-id",
+            "dissent-policy",
+            "--decision",
+            "dissent",
+            "--reason",
+            "not authorized",
+        ]
+    )
+
+    result = runner.invoke(
+        app,
+        workspace_args
+        + [
+            "grant",
+            "issue-with-quorum",
+            manifest_id,
+            "--approval-policy-bundle-id",
+            "dissent-policy",
+            "--grant-issuer-id",
+            "quorum-service",
+            "--proposer-id",
+            "agent-1",
+            "--subject-id",
+            "agent-1",
+            "--key-id",
+            "dev-key",
+            "--audience",
+            "sqlite.row",
+        ],
+    )
+    assert result.exit_code != 0

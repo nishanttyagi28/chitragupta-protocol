@@ -5,6 +5,8 @@ from datetime import timedelta
 
 import pytest
 
+from karmasakshi.crypto import generate_signing_key
+from karmasakshi.domain.enums import PrincipalType
 from karmasakshi.errors import (
     AdapterMismatchError,
     GrantAudienceError,
@@ -23,6 +25,10 @@ from karmasakshi.state_machine import LifecycleState
 def _prepare_and_seal(engine, adapter, manifest, signing_key):
     prepared = engine.prepare(adapter, manifest, context=None)
     return engine.seal(prepared, signing_key)
+
+
+def other_signing_key_factory(key_id):
+    return generate_signing_key(f"key-{key_id}")
 
 
 def _authorize(engine, sealed, *, issuer, subject, issuer_signing_key, now, **overrides):
@@ -683,4 +689,200 @@ def test_commit_without_bound_policy_bundle_is_unaffected_by_extra_bundle(
     assert grant.policy_bundle_hash is None
     sealed_bundle = _sealed_bundle(issuer_signing_key, now)
     result = engine.commit(sealed, grant, fake_adapter, context=None, policy_bundle=sealed_bundle)
+    assert result.success
+
+
+# --- multi-party (M-of-N) authorization (extreme-v2 Phase 3) -----------------
+
+
+def _quorum_engine(fixed_clock, *keys):
+    from karmasakshi.audit.journal import AuditJournal
+    from karmasakshi.crypto import Keyring
+    from karmasakshi.engine.context import EngineContext
+    from karmasakshi.engine.core import KarmaSakshiEngine
+    from karmasakshi.stores.memory import InMemoryGrantStore
+
+    ctx = EngineContext(
+        keyring=Keyring([k.verification_key() for k in keys]),
+        grant_store=InMemoryGrantStore(),
+        audit=AuditJournal(clock=fixed_clock),
+        clock=fixed_clock,
+    )
+    return KarmaSakshiEngine(ctx)
+
+
+def _sealed_approval_bundle(
+    signing_key, now, *, bundle_id="approval-bundle-1", required_approvals=2
+):
+    from karmasakshi.approval import ApprovalPolicy, build_approval_policy_bundle
+    from karmasakshi.config.clock import FixedClock
+    from karmasakshi.domain.common import Principal
+    from karmasakshi.domain.enums import PrincipalType
+    from karmasakshi.policy import seal_policy_bundle
+
+    bundle = build_approval_policy_bundle(
+        ApprovalPolicy(required_approvals=required_approvals),
+        bundle_id=bundle_id,
+        bundle_version="1.0",
+        issuer=Principal(principal_id="policy-admin", principal_type=PrincipalType.HUMAN),
+        created_at=now,
+        effective_from=now,
+    )
+    return seal_policy_bundle(bundle, signing_key, clock=FixedClock(now))
+
+
+def _approval(key, name, sealed, approval_bundle, now, *, decision="approve"):
+    from karmasakshi.approval import sign_approval_statement
+    from karmasakshi.config.clock import FixedClock
+    from karmasakshi.domain.common import Principal
+
+    return sign_approval_statement(
+        statement_id=f"stmt-{name}",
+        manifest_hash=sealed.seal.manifest_hash,
+        approval_policy_bundle_hash=approval_bundle.seal.bundle_hash,
+        approver=Principal(principal_id=name, principal_type=PrincipalType.HUMAN),
+        decision=decision,
+        signing_key=key,
+        expires_at=now + timedelta(minutes=30),
+        nonce=f"nonce-{name}",
+        clock=FixedClock(now),
+    )
+
+
+def test_authorize_with_quorum_succeeds_with_enough_approvals(
+    manifest_factory, agent_principal, issuer_signing_key, fixed_clock, now, fake_adapter
+):
+    from karmasakshi.domain.common import Principal
+    from karmasakshi.grants.model import ScopeConstraints
+
+    alice_key = other_signing_key_factory("alice")
+    bob_key = other_signing_key_factory("bob")
+    engine = _quorum_engine(fixed_clock, issuer_signing_key, alice_key, bob_key)
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    approval_bundle = _sealed_approval_bundle(issuer_signing_key, now, required_approvals=2)
+    statements = (
+        _approval(alice_key, "alice", sealed, approval_bundle, now),
+        _approval(bob_key, "bob", sealed, approval_bundle, now),
+    )
+    grant = engine.authorize_with_quorum(
+        sealed,
+        statements=statements,
+        approval_policy_bundle=approval_bundle,
+        proposer=manifest.actor,
+        subject=agent_principal,
+        grant_issuer=Principal(principal_id="quorum-service", principal_type=PrincipalType.SERVICE),
+        audience=("payment.simulator",),
+        allowed_effect_types=(manifest.effect_type,),
+        scope=ScopeConstraints(),
+        not_before=now,
+        expires_at=now + timedelta(minutes=5),
+        signing_key=issuer_signing_key,
+    )
+    assert grant.approval_set_hash is not None
+    result = engine.commit(sealed, grant, fake_adapter, context=None)
+    assert result.success
+
+
+def test_authorize_with_quorum_raises_when_quorum_not_met(
+    manifest_factory, agent_principal, issuer_signing_key, fixed_clock, now, fake_adapter
+):
+    from karmasakshi.domain.common import Principal
+    from karmasakshi.errors import QuorumNotMetError
+    from karmasakshi.grants.model import ScopeConstraints
+
+    alice_key = other_signing_key_factory("alice")
+    engine = _quorum_engine(fixed_clock, issuer_signing_key, alice_key)
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    approval_bundle = _sealed_approval_bundle(issuer_signing_key, now, required_approvals=2)
+    statements = (_approval(alice_key, "alice", sealed, approval_bundle, now),)
+
+    with pytest.raises(QuorumNotMetError):
+        engine.authorize_with_quorum(
+            sealed,
+            statements=statements,
+            approval_policy_bundle=approval_bundle,
+            proposer=manifest.actor,
+            subject=agent_principal,
+            grant_issuer=Principal(
+                principal_id="quorum-service", principal_type=PrincipalType.SERVICE
+            ),
+            audience=("payment.simulator",),
+            allowed_effect_types=(manifest.effect_type,),
+            scope=ScopeConstraints(),
+            not_before=now,
+            expires_at=now + timedelta(minutes=5),
+            signing_key=issuer_signing_key,
+        )
+
+
+def test_authorize_with_quorum_rejects_dissent_veto(
+    manifest_factory, agent_principal, issuer_signing_key, fixed_clock, now, fake_adapter
+):
+    from karmasakshi.domain.common import Principal
+    from karmasakshi.errors import QuorumNotMetError
+    from karmasakshi.grants.model import ScopeConstraints
+
+    alice_key = other_signing_key_factory("alice")
+    bob_key = other_signing_key_factory("bob")
+    engine = _quorum_engine(fixed_clock, issuer_signing_key, alice_key, bob_key)
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    approval_bundle = _sealed_approval_bundle(issuer_signing_key, now, required_approvals=1)
+    statements = (
+        _approval(alice_key, "alice", sealed, approval_bundle, now, decision="approve"),
+        _approval(bob_key, "bob", sealed, approval_bundle, now, decision="dissent"),
+    )
+    with pytest.raises(QuorumNotMetError):
+        engine.authorize_with_quorum(
+            sealed,
+            statements=statements,
+            approval_policy_bundle=approval_bundle,
+            proposer=manifest.actor,
+            subject=agent_principal,
+            grant_issuer=Principal(
+                principal_id="quorum-service", principal_type=PrincipalType.SERVICE
+            ),
+            audience=("payment.simulator",),
+            allowed_effect_types=(manifest.effect_type,),
+            scope=ScopeConstraints(),
+            not_before=now,
+            expires_at=now + timedelta(minutes=5),
+            signing_key=issuer_signing_key,
+        )
+
+
+def test_authorize_with_quorum_grant_commits_without_re_presenting_approvals(
+    manifest_factory, agent_principal, issuer_signing_key, fixed_clock, now, fake_adapter
+):
+    """The approval set is validated once at authorize time; commit()
+    does not require the statements to be re-presented (unlike policy
+    bundles) -- see the docstring on authorize_with_quorum for why."""
+    from karmasakshi.domain.common import Principal
+    from karmasakshi.grants.model import ScopeConstraints
+
+    alice_key = other_signing_key_factory("alice")
+    engine = _quorum_engine(fixed_clock, issuer_signing_key, alice_key)
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    approval_bundle = _sealed_approval_bundle(issuer_signing_key, now, required_approvals=1)
+    statements = (_approval(alice_key, "alice", sealed, approval_bundle, now),)
+    grant = engine.authorize_with_quorum(
+        sealed,
+        statements=statements,
+        approval_policy_bundle=approval_bundle,
+        proposer=manifest.actor,
+        subject=agent_principal,
+        grant_issuer=Principal(principal_id="quorum-service", principal_type=PrincipalType.SERVICE),
+        audience=("payment.simulator",),
+        allowed_effect_types=(manifest.effect_type,),
+        scope=ScopeConstraints(),
+        not_before=now,
+        expires_at=now + timedelta(minutes=5),
+        signing_key=issuer_signing_key,
+    )
+    # No `statements=` kwarg accepted by commit() at all -- proves the grant
+    # alone (plus its cryptographic approval_set_hash) is sufficient.
+    result = engine.commit(sealed, grant, fake_adapter, context=None)
     assert result.success

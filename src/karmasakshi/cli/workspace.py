@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 from karmasakshi.adapters.base import CommitResult, CompensationResult, OutcomeProof
+from karmasakshi.approval.model import ApprovalStatement
 from karmasakshi.audit.journal import AuditJournal
 from karmasakshi.audit.sqlite_backend import SQLiteAuditBackend
 from karmasakshi.crypto.keyring import Keyring
@@ -54,6 +55,7 @@ class Workspace:
         self.manifests_dir = self.root / "manifests"
         self.grants_dir = self.root / "grants"
         self.policies_dir = self.root / "policies"
+        self.approvals_dir = self.root / "approvals"
 
     def ensure_initialized(self) -> None:
         for d in (
@@ -62,6 +64,7 @@ class Workspace:
             self.manifests_dir,
             self.grants_dir,
             self.policies_dir,
+            self.approvals_dir,
         ):
             d.mkdir(parents=True, exist_ok=True)
 
@@ -175,6 +178,25 @@ class Workspace:
     def load_sealed_policy_bundle(self, bundle_id: str) -> SealedPolicyBundle:
         path = self.policies_dir / f"{bundle_id}.json"
         return SealedPolicyBundle.model_validate_json(path.read_text(encoding="utf-8"))
+
+    # --- approval statements (extreme-v2 Phase 3) ------------------------------
+
+    def save_approval_statement(self, statement: ApprovalStatement) -> Path:
+        path = (
+            self.approvals_dir
+            / f"{statement.manifest_hash.removeprefix('sha256:')}.{statement.statement_id}.json"
+        )
+        path.write_text(statement.model_dump_json(indent=2), encoding="utf-8")
+        return path
+
+    def load_approval_statements(self, manifest_hash: str) -> tuple[ApprovalStatement, ...]:
+        prefix = manifest_hash.removeprefix("sha256:")
+        statements = []
+        for path in sorted(self.approvals_dir.glob(f"{prefix}.*.json")):
+            statements.append(
+                ApprovalStatement.model_validate_json(path.read_text(encoding="utf-8"))
+            )
+        return tuple(statements)
 
     # --- grants -------------------------------------------------------------
 

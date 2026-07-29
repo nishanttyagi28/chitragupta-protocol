@@ -35,10 +35,18 @@ karmasakshi seal <manifest_id> --key-id ID
 
 karmasakshi policy create <bundle_id> --issuer-id ID [--issuer-type human|service] [--block-threshold N]
     [--review-threshold N] [--restricted-effect-type TEXT ...] [--sensitive-target-pattern REGEX ...]
+karmasakshi policy create-approval <bundle_id> --issuer-id ID [--required-approvals N]
+    [--required-role TEXT ...] [--cooling-off-seconds N]
 karmasakshi policy sign <bundle_id> --key-id ID
 karmasakshi policy verify <bundle_id>
 
+karmasakshi approve <manifest_id> --approver-id ID --key-id ID --approval-policy-bundle-id ID
+    [--approver-type human|service] [--role TEXT] [--decision approve|dissent] [--reason TEXT]
+karmasakshi approvals inspect <manifest_id> --approval-policy-bundle-id ID --proposer-id ID --subject-id ID
+
 karmasakshi grant issue <manifest_id> --issuer-id ID --subject-id ID --key-id ID [--audience ...] [--max-uses N] [--policy-bundle-id ID]
+karmasakshi grant issue-with-quorum <manifest_id> --approval-policy-bundle-id ID --grant-issuer-id ID
+    --proposer-id ID --subject-id ID --key-id ID [--audience ...] [--policy-bundle-id ID]
 karmasakshi grant verify <grant_id>
 karmasakshi grant delegate <parent_grant_id> --issuer-id ID --subject-id ID --key-id ID [--max-uses N] [--ttl-seconds N]
 karmasakshi grant revoke <grant_id> [--manifest-id ID]
@@ -105,6 +113,18 @@ the issued grant; the same bundle must then be passed to `execute
 --policy-bundle-id` or the commit fails closed
 (`PolicyBundleMismatchError`) -- this is what prevents a policy edit
 between approval and execution from silently changing what was approved.
+
+## `policy create-approval`, `approve`, `approvals inspect`, `grant issue-with-quorum`
+
+Multi-party (M-of-N) authorization (see
+[docs/multi-party-authorization.md](multi-party-authorization.md)):
+`policy create-approval` builds a quorum-rules bundle (reuse `policy
+sign`/`policy verify` on it -- they're generic across bundle types);
+`approve` signs one approval or dissent statement for a manifest;
+`approvals inspect` dry-runs quorum evaluation without issuing a grant;
+`grant issue-with-quorum` issues a grant only if the statements submitted
+so far satisfy the bound policy's quorum, failing closed
+(`QuorumNotMetError`, non-zero exit) otherwise.
 
 ## `doctor`
 

@@ -85,6 +85,81 @@ def issue(
     run_guarded(as_json, _do)
 
 
+@grant_app.command("issue-with-quorum")
+def issue_with_quorum(
+    ctx: typer.Context,
+    manifest_id: Annotated[str, typer.Argument()],
+    approval_policy_bundle_id: Annotated[str, typer.Option("--approval-policy-bundle-id")],
+    grant_issuer_id: Annotated[str, typer.Option()],
+    proposer_id: Annotated[str, typer.Option()],
+    subject_id: Annotated[str, typer.Option()],
+    key_id: Annotated[str, typer.Option(help="Signing key id in the workspace")],
+    grant_issuer_type: Annotated[PrincipalType, typer.Option()] = PrincipalType.SERVICE,
+    proposer_type: Annotated[PrincipalType, typer.Option()] = PrincipalType.AGENT,
+    subject_type: Annotated[PrincipalType, typer.Option()] = PrincipalType.AGENT,
+    audience: Annotated[
+        list[str], typer.Option("--audience", help="Allowed adapter_id, repeatable")
+    ] = [],  # noqa: B006
+    max_uses: Annotated[int, typer.Option()] = 1,
+    ttl_seconds: Annotated[int, typer.Option()] = 300,
+    policy_bundle_id: Annotated[str | None, typer.Option("--policy-bundle-id")] = None,
+) -> None:
+    """Issue an ExecutionGrant only if the approval statements already
+    submitted for this manifest (via `karmasakshi approve`) satisfy the
+    quorum rules in the given signed approval policy bundle. Fails
+    closed with a non-zero exit code (and no grant written) if quorum is
+    not met -- see `karmasakshi approvals inspect` to check first."""
+    workspace: Workspace = ctx.obj["workspace"]
+    as_json: bool = ctx.obj["json"]
+
+    def _do() -> None:
+        sealed = workspace.load_sealed_manifest(manifest_id)
+        approval_bundle = workspace.load_sealed_policy_bundle(approval_policy_bundle_id)
+        statements = workspace.load_approval_statements(sealed.seal.manifest_hash)
+        signing_key = workspace.load_signing_key(key_id)
+        engine = workspace.build_engine()
+        workspace.reconstruct_lifecycle_state(engine, manifest_id)
+        now = datetime.now(timezone.utc)
+        policy_bundle = (
+            workspace.load_sealed_policy_bundle(policy_bundle_id)
+            if policy_bundle_id is not None
+            else None
+        )
+        grant = engine.authorize_with_quorum(
+            sealed,
+            statements=statements,
+            approval_policy_bundle=approval_bundle,
+            proposer=Principal(principal_id=proposer_id, principal_type=proposer_type),
+            subject=Principal(principal_id=subject_id, principal_type=subject_type),
+            grant_issuer=Principal(principal_id=grant_issuer_id, principal_type=grant_issuer_type),
+            audience=tuple(audience) or (sealed.manifest.adapter.adapter_id,),
+            allowed_effect_types=(sealed.manifest.effect_type,),
+            scope=ScopeConstraints(),
+            not_before=now,
+            expires_at=now + timedelta(seconds=ttl_seconds),
+            signing_key=signing_key,
+            max_uses=max_uses,
+            policy_bundle=policy_bundle,
+        )
+        path = workspace.save_grant(grant)
+        emit(
+            {
+                "grant_id": grant.grant_id,
+                "manifest_id": manifest_id,
+                "approval_set_hash": grant.approval_set_hash,
+                "policy_bundle_hash": grant.policy_bundle_hash,
+                "path": str(path),
+            },
+            as_json=as_json,
+            human=(
+                f"Issued grant [bold]{grant.grant_id}[/bold] (quorum met) "
+                f"for manifest {manifest_id} -> {path}"
+            ),
+        )
+
+    run_guarded(as_json, _do)
+
+
 @grant_app.command("verify")
 def verify(ctx: typer.Context, grant_id: Annotated[str, typer.Argument()]) -> None:
     """Verify a grant's signature and time-window validity."""

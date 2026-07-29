@@ -49,6 +49,7 @@ class ActionPassport(BaseModel):
     authorization_valid_from: datetime | None = None
     authorization_valid_until: datetime | None = None
     authorization_policy_bundle_hash: str | None = None
+    authorization_approval_set_hash: str | None = None
     was_revoked: bool = False
 
     # What was executed

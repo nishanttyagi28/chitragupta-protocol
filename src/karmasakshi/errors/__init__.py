@@ -196,6 +196,36 @@ class PolicyBundleIssuerNotAuthorizedError(PolicyBundleError):
     issuer of the bundle that governs it."""
 
 
+# --- Multi-party approval / quorum ------------------------------------------------
+
+
+class ApprovalError(KarmaSakshiError):
+    """Base class for multi-party approval and quorum errors."""
+
+
+class ApprovalIssuerNotAuthorizedError(ApprovalError):
+    """Attempted to sign an approval statement with an agent principal as
+    the approver. An agent may never satisfy human/service approval
+    quorum -- invariant #30 applied to approvals."""
+
+
+class ApprovalExpiredError(ApprovalError):
+    """Approval statement's ``expires_at`` has passed relative to now."""
+
+
+class ApprovalBatchTooLargeError(ApprovalError):
+    """More approval statements were submitted than the policy's
+    ``max_statements_considered`` bound allows -- rejected outright
+    (fail closed) rather than silently truncated, which could drop a
+    statement that would have changed the quorum outcome."""
+
+
+class QuorumNotMetError(ApprovalError):
+    """The submitted approval statements did not satisfy the bound
+    ApprovalPolicy's quorum requirement; see the accompanying
+    ``QuorumResult`` for exactly why."""
+
+
 # --- Adapters --------------------------------------------------------------------
 
 

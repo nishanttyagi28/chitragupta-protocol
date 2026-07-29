@@ -71,9 +71,22 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
 - **The Effect Intelligence Engine (`karmasakshi.intelligence`) is
   advisory only.** `assess()` scores a manifest and records the result in
   the audit journal; `authorize()`/`commit()` do not read or enforce its
-  `recommendation`. `IntelligencePolicy` is not cryptographically signed.
-  See [docs/effect-intelligence.md](effect-intelligence.md) and the
-  threat model's "New trusted component" section.
+  `recommendation`. See [docs/effect-intelligence.md](effect-intelligence.md)
+  and the threat model's "New trusted component" section. (An
+  `IntelligencePolicy` *can* now be cryptographically signed via a
+  `PolicyBundle` -- see the next item -- but doing so still only pins
+  *which* policy was used, not that its recommendation is enforced.)
+- **Signed policy bundles and multi-party authorization
+  (`karmasakshi.policy`, `karmasakshi.approval`) do not read
+  `EffectAssessment` automatically.** A caller must explicitly configure
+  `IntelligencePolicy`/`ApprovalPolicy` thresholds; there is no automatic
+  link from a Phase 1 assessment's `required_human_approvals` to a Phase
+  3 `ApprovalPolicy.required_approvals`. Approval roles are self-asserted
+  (no RBAC/identity-directory check). The reference API signs every
+  approval statement with one shared service key, not a distinct key per
+  approver (the CLI does not have this limitation). See
+  [docs/policy-bundles.md](policy-bundles.md) and
+  [docs/multi-party-authorization.md](multi-party-authorization.md).
 - **The public sandbox demo (`KARMASAKSHI_PUBLIC_DEMO=1`) is a single
   shared, in-memory session**, not multi-tenant: every visitor to a given
   deployment sees and can affect the same sandbox state until it

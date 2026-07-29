@@ -16,6 +16,7 @@ from karmasakshi.adapters.base import CommitResult, CompensationResult, EffectAd
 from karmasakshi.adapters.email_sandbox import EmailSandboxAdapter, SandboxOutbox
 from karmasakshi.adapters.payment_simulator import PaymentSimulator, PaymentSimulatorAdapter
 from karmasakshi.adapters.sqlite_db import SQLiteRowAdapter
+from karmasakshi.approval.model import ApprovalStatement
 from karmasakshi.audit.journal import AuditJournal
 from karmasakshi.audit.sqlite_backend import SQLiteAuditBackend
 from karmasakshi.crypto.keyring import Keyring
@@ -45,6 +46,7 @@ class ApiState:
     compensation_results: dict[str, CompensationResult] = field(default_factory=dict)
     assessments: dict[str, EffectAssessment] = field(default_factory=dict)
     policy_bundles: dict[str, SealedPolicyBundle] = field(default_factory=dict)
+    approval_statements: dict[str, list[ApprovalStatement]] = field(default_factory=dict)
     kill_switch_engaged: bool = False
 
     def register_grant(self, manifest_id: str, grant: ExecutionGrant) -> None:

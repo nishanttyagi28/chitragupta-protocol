@@ -20,6 +20,9 @@ from karmasakshi.adapters.base import (
     EffectAdapter,
     OutcomeProof,
 )
+from karmasakshi.approval.model import ApprovalStatement
+from karmasakshi.approval.policy import POLICY_TYPE_APPROVAL, approval_policy_from_bundle_payload
+from karmasakshi.approval.quorum import evaluate_quorum
 from karmasakshi.crypto.keys import SigningKey
 from karmasakshi.delegation.attenuation import assert_grant_narrower_or_equal
 from karmasakshi.domain.common import Principal
@@ -34,6 +37,7 @@ from karmasakshi.errors import (
     GrantRevokedError,
     KarmaSakshiError,
     PolicyBundleMismatchError,
+    QuorumNotMetError,
     StaleManifestError,
 )
 from karmasakshi.grants.issuer import issue_grant
@@ -292,6 +296,162 @@ class KarmaSakshiEngine:
             actor_id=issuer.principal_id,
             metadata={
                 "subject": subject.principal_id,
+                **({"policy_bundle_hash": policy_bundle_hash} if policy_bundle_hash else {}),
+            },
+        )
+        return grant
+
+    # --- AUTHORIZE WITH QUORUM (extreme-v2 Phase 3) --------------------------
+
+    def authorize_with_quorum(
+        self,
+        sealed: SealedManifest,
+        *,
+        statements: tuple[ApprovalStatement, ...],
+        approval_policy_bundle: SealedPolicyBundle,
+        proposer: Principal,
+        subject: Principal,
+        grant_issuer: Principal,
+        audience: tuple[str, ...],
+        allowed_effect_types: tuple[str, ...],
+        scope: ScopeConstraints,
+        not_before: datetime,
+        expires_at: datetime,
+        signing_key: SigningKey,
+        grant_id: str | None = None,
+        nonce: str | None = None,
+        max_uses: int = 1,
+        parent_grant_id: str | None = None,
+        policy_bundle: SealedPolicyBundle | None = None,
+    ) -> ExecutionGrant:
+        """Issue an :class:`ExecutionGrant` only if ``statements`` satisfy
+        the quorum rules bound in ``approval_policy_bundle``.
+
+        This is additive: :meth:`authorize` (single-issuer) is unchanged
+        and remains fully supported. Here, ``grant_issuer`` is the
+        principal recorded as the grant's signing authority (e.g. a
+        "quorum service" identity) -- distinct from the individual
+        ``statements.approver``s whose collective decision is what
+        actually authorizes the effect. Verifies ``approval_policy_bundle``
+        (signature, tamper, effective window, and ``policy_type ==
+        "approval.v1"``), evaluates ``statements`` against it via
+        ``approval.quorum.evaluate_quorum``, and -- only if satisfied --
+        binds a hash of the counted approval statements into the issued
+        grant (``ExecutionGrant.approval_set_hash``). Raises
+        :class:`QuorumNotMetError` (carrying the full ``QuorumResult`` in
+        its message) if quorum is not met; the grant is structurally
+        impossible to obtain any other way through this method.
+
+        Unlike ``policy_bundle`` binding, the approval set is **not**
+        re-verified at :meth:`commit` time: each ``ApprovalStatement`` is
+        already an individually signed, immutable historical record
+        validated once here, not a mutable, re-editable policy an
+        attacker could swap later -- see docs/multi-party-authorization.md
+        for the full rationale.
+        """
+        verify_seal(sealed, self._ctx.keyring)
+        manifest_hash = sealed.seal.manifest_hash
+        try:
+            verify_policy_bundle(
+                approval_policy_bundle,
+                self._ctx.keyring,
+                now=self._ctx.clock.now(),
+                expected_policy_type=POLICY_TYPE_APPROVAL,
+            )
+        except KarmaSakshiError:
+            self._ctx.audit.record(
+                event_type="approval_policy_bundle.verification_failed",
+                decision="blocked",
+                manifest_id=sealed.manifest.manifest_id,
+                manifest_hash=manifest_hash,
+                actor_id=grant_issuer.principal_id,
+                metadata={"bundle_id": approval_policy_bundle.bundle.bundle_id},
+            )
+            raise
+
+        approval_policy = approval_policy_from_bundle_payload(approval_policy_bundle.bundle.payload)
+        approval_policy_bundle_hash = approval_policy_bundle.seal.bundle_hash
+        quorum = evaluate_quorum(
+            statements,
+            approval_policy,
+            manifest_hash=manifest_hash,
+            approval_policy_bundle_hash=approval_policy_bundle_hash,
+            keyring=self._ctx.keyring,
+            proposer=proposer,
+            subject=subject,
+            now=self._ctx.clock.now(),
+        )
+        self._ctx.audit.record(
+            event_type="approval.quorum_evaluated",
+            decision="satisfied" if quorum.satisfied else "not_satisfied",
+            manifest_id=sealed.manifest.manifest_id,
+            manifest_hash=manifest_hash,
+            actor_id=grant_issuer.principal_id,
+            metadata={
+                "approving_count": str(quorum.approving_count),
+                "approving_principal_ids": ",".join(quorum.approving_principal_ids),
+                "approval_set_hash": quorum.approval_set_hash,
+                "reason": quorum.reason[:200],
+            },
+        )
+        if not quorum.satisfied:
+            raise QuorumNotMetError(
+                f"approval quorum not met for manifest {manifest_hash}: {quorum.reason}"
+            )
+
+        if policy_bundle is not None:
+            try:
+                verify_policy_bundle(policy_bundle, self._ctx.keyring, now=self._ctx.clock.now())
+            except KarmaSakshiError:
+                self._ctx.audit.record(
+                    event_type="policy_bundle.verification_failed",
+                    decision="blocked",
+                    manifest_id=sealed.manifest.manifest_id,
+                    manifest_hash=manifest_hash,
+                    actor_id=grant_issuer.principal_id,
+                    metadata={"bundle_id": policy_bundle.bundle.bundle_id},
+                )
+                raise
+        policy_bundle_hash = policy_bundle.seal.bundle_hash if policy_bundle is not None else None
+
+        try:
+            grant = issue_grant(
+                grant_id=grant_id or str(uuid.uuid4()),
+                issuer=grant_issuer,
+                subject=subject,
+                audience=audience,
+                allowed_effect_types=allowed_effect_types,
+                scope=scope,
+                not_before=not_before,
+                expires_at=expires_at,
+                nonce=nonce or uuid.uuid4().hex,
+                signing_key=signing_key,
+                manifest_hash=manifest_hash,
+                policy_bundle_hash=policy_bundle_hash,
+                approval_set_hash=quorum.approval_set_hash,
+                max_uses=max_uses,
+                parent_grant_id=parent_grant_id,
+                clock=self._ctx.clock,
+            )
+        except KarmaSakshiError:
+            self._ctx.audit.record(
+                event_type="grant.issue_denied",
+                decision="blocked",
+                manifest_id=sealed.manifest.manifest_id,
+                manifest_hash=manifest_hash,
+                actor_id=grant_issuer.principal_id,
+            )
+            raise
+        self._transition(
+            sealed.manifest.manifest_id,
+            LifecycleState.AUTHORIZED,
+            event_type="grant.issued",
+            manifest_hash=manifest_hash,
+            grant_id=grant.grant_id,
+            actor_id=grant_issuer.principal_id,
+            metadata={
+                "subject": subject.principal_id,
+                "approval_set_hash": quorum.approval_set_hash,
                 **({"policy_bundle_hash": policy_bundle_hash} if policy_bundle_hash else {}),
             },
         )

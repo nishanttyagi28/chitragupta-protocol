@@ -179,6 +179,101 @@ def test_execute_with_swapped_policy_bundle_is_rejected(dev_client):
     assert execute.status_code == 409
 
 
+def _create_approval_policy_bundle(client, bundle_id="approval-policy-1", **overrides):
+    body = {
+        "bundle_id": bundle_id,
+        "issuer": {"principal_id": "policy-admin", "principal_type": "human"},
+        **overrides,
+    }
+    return client.post("/policy/approval-bundles", json=body)
+
+
+def _submit_approval(client, manifest_id, approver_id, approval_policy_bundle_id, **overrides):
+    body = {
+        "approval_policy_bundle_id": approval_policy_bundle_id,
+        "approver": {"principal_id": approver_id, "principal_type": "human"},
+        **overrides,
+    }
+    return client.post(f"/manifests/{manifest_id}/approvals", json=body)
+
+
+def test_quorum_workflow_end_to_end(dev_client):
+    _create_approval_policy_bundle(dev_client, required_approvals=2)
+    prep = _prepare_payment(dev_client, idempotency_key="idem-api-quorum-1")
+    manifest_id = prep.json()["manifest_id"]
+
+    evaluate_before = dev_client.post(
+        f"/manifests/{manifest_id}/approvals/evaluate",
+        json={
+            "approval_policy_bundle_id": "approval-policy-1",
+            "proposer": {"principal_id": "agent-1", "principal_type": "agent"},
+            "subject": {"principal_id": "agent-1", "principal_type": "agent"},
+        },
+    )
+    assert evaluate_before.json()["satisfied"] is False
+
+    _submit_approval(dev_client, manifest_id, "alice", "approval-policy-1")
+    _submit_approval(dev_client, manifest_id, "bob", "approval-policy-1")
+
+    listed = dev_client.get(f"/manifests/{manifest_id}/approvals")
+    assert len(listed.json()["statements"]) == 2
+
+    evaluate_after = dev_client.post(
+        f"/manifests/{manifest_id}/approvals/evaluate",
+        json={
+            "approval_policy_bundle_id": "approval-policy-1",
+            "proposer": {"principal_id": "agent-1", "principal_type": "agent"},
+            "subject": {"principal_id": "agent-1", "principal_type": "agent"},
+        },
+    )
+    assert evaluate_after.json()["satisfied"] is True
+
+    grant = dev_client.post(
+        f"/manifests/{manifest_id}/approve-with-quorum",
+        json={
+            "approval_policy_bundle_id": "approval-policy-1",
+            "grant_issuer": {"principal_id": "quorum-service", "principal_type": "service"},
+            "proposer": {"principal_id": "agent-1", "principal_type": "agent"},
+            "subject": {"principal_id": "agent-1", "principal_type": "agent"},
+        },
+    )
+    assert grant.status_code == 200
+    grant_data = grant.json()
+    assert grant_data["approval_set_hash"] is not None
+    grant_id = grant_data["grant_id"]
+
+    execute = dev_client.post(f"/manifests/{manifest_id}/execute", json={"grant_id": grant_id})
+    assert execute.status_code == 200
+    assert execute.json()["success"] is True
+
+
+def test_quorum_not_met_returns_403(dev_client):
+    _create_approval_policy_bundle(dev_client, bundle_id="strict-policy", required_approvals=2)
+    prep = _prepare_payment(dev_client, idempotency_key="idem-api-quorum-2")
+    manifest_id = prep.json()["manifest_id"]
+    _submit_approval(dev_client, manifest_id, "alice", "strict-policy")
+
+    grant = dev_client.post(
+        f"/manifests/{manifest_id}/approve-with-quorum",
+        json={
+            "approval_policy_bundle_id": "strict-policy",
+            "grant_issuer": {"principal_id": "quorum-service", "principal_type": "service"},
+            "proposer": {"principal_id": "agent-1", "principal_type": "agent"},
+            "subject": {"principal_id": "agent-1", "principal_type": "agent"},
+        },
+    )
+    assert grant.status_code == 403
+
+
+def test_approval_policy_bundle_rejects_agent_issuer(dev_client):
+    resp = _create_approval_policy_bundle(
+        dev_client,
+        bundle_id="bad-policy",
+        issuer={"principal_id": "agent-1", "principal_type": "agent"},
+    )
+    assert resp.status_code == 422
+
+
 def test_assess_endpoint_records_and_is_retrievable(dev_client):
     prep = _prepare_payment(dev_client, idempotency_key="idem-api-assess-1")
     manifest_id = prep.json()["manifest_id"]

@@ -40,7 +40,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 |---|---|---|
 | 1. Effect Intelligence | **Implemented** (advisory only) | See below |
 | 2. Signed policy bundles | **Implemented** | See below |
-| 3. Multi-party (M-of-N) authorization | Not started | |
+| 3. Multi-party (M-of-N) authorization | **Implemented** | See below |
 | 4. Separation of duties (explicit roles) | Not started | |
 | 5. Causal effect graphs | Not started | `parent_manifest_id` remains a single unsigned string field, unchanged from v0.1 |
 | 6. Atomic plan authorization / decision envelopes | Not started | |
@@ -273,32 +273,140 @@ same 1 known dev-only vulnerability as Phase 1 (unchanged, unresolved).
 - `d9a941b` — Phase 2: Signed Policy Bundles implementation, tests, docs
 - PR [#16](https://github.com/nishanttyagi28/karmasakshi-protocol/pull/16) — merged (`99db98e`), all 14 CI checks green
 
+## Phase 3: Multi-party (M-of-N) Authorization
+
+**Status: implemented.**
+
+### Files changed
+
+- Added: `src/karmasakshi/approval/{__init__,model,policy,quorum,signing}.py`
+- Added: `src/karmasakshi/cli/approve_cmd.py`
+- Added: `docs/multi-party-authorization.md`
+- Added: `tests/unit/test_approval.py`,
+  `tests/property/test_approval_quorum_properties.py`,
+  `tests/adversarial/test_approval_gaming.py`
+- Modified: `src/karmasakshi/errors/__init__.py` (5 new `ApprovalError`
+  subclasses), `src/karmasakshi/grants/model.py`
+  (`ExecutionGrant.approval_set_hash`, `is_quorum_bound()`),
+  `src/karmasakshi/grants/issuer.py` (`issue_grant(approval_set_hash=...)`),
+  `src/karmasakshi/engine/core.py` (`authorize_with_quorum()`),
+  `src/karmasakshi/cli/{app,grant_cmd,policy_cmd,workspace}.py`
+  (`approve`, `approvals inspect`, `grant issue-with-quorum`, `policy
+  create-approval`), `src/karmasakshi/api/{schemas,state,routes}.py`
+  (`/policy/approval-bundles`, `/manifests/{id}/approvals[/evaluate]`,
+  `/manifests/{id}/approve-with-quorum`),
+  `src/karmasakshi/passports/{model,generator,render}.py`
+  (`authorization_approval_set_hash`)
+- Docs updated: `docs/security-model.md` (invariants #33-#36),
+  `docs/threat-model.md` (new trusted-component section covering both
+  Phase 2 and Phase 3), `docs/execution-grants.md`, `docs/limitations.md`,
+  `docs/cli.md`, `docs/api.md`, `README.md`, `CHANGELOG.md`
+
+### Tests added
+
+- 29 unit tests (`test_approval.py`): `ApprovalPolicy` validation,
+  policy<->bundle payload round trip, agent-issuer rejection for approval
+  policy bundles, statement signing/verification (expired, unknown
+  signer, forged signature), and `evaluate_quorum` coverage (N-of-M,
+  role requirements, proposer/subject exclusion, agent-approver
+  rejection via direct model construction, duplicate-approver dedup,
+  dissent veto on/off, wrong manifest/bundle hash, cooling-off, batch
+  size limit, order-independent `approval_set_hash`).
+- 2 Hypothesis property tests (`test_approval_quorum_properties.py`, 100-150
+  examples each): the quorum verdict (`satisfied`, `approving_count`,
+  `approving_principal_ids`, `dissenting_principal_ids`, `missing_roles`,
+  `approval_set_hash`) is identical regardless of statement order across
+  randomized statement sets, required-approval counts, and veto settings;
+  approving count never exceeds the number of distinct approvers.
+- 6 adversarial tests (`test_approval_gaming.py`): replay against a
+  different manifest, identity collision (two keys claiming the same
+  principal_id counted once), a later dissent overriding an earlier
+  approval from the same approver (and the reverse presentation order
+  producing the same result), a stale approval replay failing to
+  override a later dissent, proposer+subject exclusion leaving no
+  exploitable gap, and a tampered role claim failing signature
+  verification.
+- Engine integration tests (`test_engine.py`, 4 new):
+  `authorize_with_quorum()` succeeds with sufficient approvals and binds
+  `approval_set_hash`; raises `QuorumNotMetError` when quorum isn't met;
+  a dissent vetoes even when the raw count would otherwise satisfy
+  quorum; a quorum-issued grant commits via the ordinary `commit()` path
+  with no approval-set re-presentation required.
+- API integration tests (`test_api.py`, 3 new): full create-approval-bundle
+  → submit approvals → evaluate → approve-with-quorum → execute cycle;
+  `403` when quorum isn't met; `422` for an agent-typed approval-bundle
+  issuer.
+- CLI integration tests (`test_cli.py`, 2 new): full
+  `policy create-approval` → `policy sign` → `approve` (x2) →
+  `approvals inspect` → `grant issue-with-quorum` → `execute` cycle
+  against the sqlite adapter (including the pre-quorum failure case);
+  a dissenting statement blocking `grant issue-with-quorum` end to end.
+- Full existing suite remains green throughout (460 passed, 6 skipped --
+  no regressions across all three phases).
+
+### Security invariants added
+
+- **#33**: A grant issued via `authorize_with_quorum()` is structurally
+  impossible without a satisfied approval quorum.
+- **#34**: An agent principal can never satisfy approval quorum, and can
+  never sign an approval statement.
+- **#35**: The proposer of a manifest and the subject/executor of a grant
+  can never satisfy that grant's approval quorum (when required, the
+  default).
+- **#36**: Quorum evaluation is deterministic and order-independent,
+  including when one approver submitted conflicting statements (latest
+  `signed_at` wins, not submission order).
+
+### Known limitations
+
+See `docs/multi-party-authorization.md`'s "Known limitations" section in
+full; summary: approval roles are self-asserted (no RBAC/identity
+directory); the reference API signs every approval statement with one
+shared service key rather than a distinct key per approver (the CLI does
+not have this limitation -- each workspace key is genuinely separate);
+`commit()` does not re-verify the approval set (by design, documented
+rationale, not an oversight); `EffectAssessment.required_human_approvals`
+(Phase 1) is not yet automatically wired into `ApprovalPolicy.required_approvals`.
+
+### Verification commands
+
+Same procedure as Phases 1-2 (see above). Results at the time of this
+commit: `ruff check`/`ruff format --check`/`mypy src`/`bandit` all clean;
+`pytest -q` → **460 passed, 6 skipped**; `build`/`twine check` clean;
+`pip-audit` → the same 1 known dev-only vulnerability as Phases 1-2
+(unchanged, unresolved).
+
+### Commit SHAs / PR
+
+Recorded after this slice's PR is opened and merged, matching the
+pattern established for Phases 1-2.
+
 ## Exact next executable step
 
-**Phase 3: Multi-party (M-of-N) authorization.** Concretely:
+**Phase 4: Separation of Duties.** Concretely:
 
-1. Add `ApprovalStatement` (one principal's signed yes/no on a specific
-   `manifest_hash` + `policy_bundle_hash` pair, with expiry) and
-   `ApprovalSet` (a collection of statements) domain models, mirroring
-   the `Seal`/`PolicyBundleSeal` sign/verify pattern a third time.
-2. Add `ApprovalPolicy` (quorum rules: N-of-M, named-role requirements
-   such as "finance + security", no-self-approval, proposer/executor
-   exclusion) -- this is a natural companion payload type for the
-   `PolicyBundle` envelope built in Phase 2 (`policy_type =
-   "approval.v1"`), reusing the same signed-bundle infrastructure rather
-   than inventing a new one.
-3. Extend `engine.authorize()` (or add a new `engine.authorize_with_quorum()`
-   entry point, preserving the existing single-issuer `authorize()` for
-   backward compatibility per the mission's explicit requirement) to
-   accept an `ApprovalSet`, verify each statement (signature, expiry,
-   manifest/policy binding, no duplicate/self approvers), evaluate it
-   against the bound `ApprovalPolicy`'s quorum rule, and only then issue
-   the grant.
-4. This is also the natural point to read
-   `EffectAssessment.required_human_approvals`/
-   `required_witness_quorum` from Phase 1 and make it feed the quorum
-   requirement -- turning the advisory recommendation into a structural
-   requirement for the first time, now that both the policy (Phase 2)
-   and the approval set (Phase 3) are cryptographically pinned.
-5. Extend the CLI (`karmasakshi approve`/`karmasakshi approvals inspect`)
-   and API accordingly.
+1. Introduce explicit protocol roles as a first-class concept
+   (`proposer`, `resolver`, `assessor`, `sealer`, `approver`, `executor`,
+   `verifier`, `witness`, `compensator`, `auditor`) -- Phase 3 already
+   has *ad hoc* versions of `proposer`/`subject`(executor)/`approver`
+   scattered through `authorize_with_quorum()`'s parameters; Phase 4's
+   job is to formalize these into a reusable `RoleAssignment`
+   record-keeping structure and a `SeparationOfDutyPolicy` (which role
+   pairs may never be held by the same principal for a given manifest,
+   e.g. "the sealer may not also be an approver" for high-risk effects).
+2. This is a natural extension of `ApprovalPolicy` rather than a wholly
+   separate system: `forbid_proposer_as_approver`/
+   `forbid_subject_as_approver` in Phase 3 are exactly two hard-coded
+   instances of a general separation-of-duty rule. Phase 4 should
+   generalize that into a configurable N-role separation matrix bound
+   into the same signed `PolicyBundle` envelope (a third `policy_type`),
+   rather than duplicating Phase 3's evaluation logic.
+3. Record role participation inside the Action Passport (a new
+   passport field, e.g. `role_participation: dict[str, str]` mapping
+   role name to principal_id, populated from the audit trail -- every
+   engine method that already records `actor_id` in its audit events is
+   a source for this).
+4. Extend the CLI/API only as needed to expose role-assignment
+   inspection; avoid introducing a parallel authorization mechanism --
+   separation-of-duty should be a *constraint checked during* `authorize()`/
+   `authorize_with_quorum()`, not a new gate that runs after them.
