@@ -630,16 +630,16 @@ outcome handling per step.
 
 - last merged phase on main: Phase 6 (`72a681d`, PR #20)
 - current branch: `cursor/phase7-compensation-passports-ffca`
-- open PR: (pending create for Phase 7)
-- latest local green commit on Phase 7 branch: pending
-- test counts (Phase 7 local pre-PR): **571 passed, 6 skipped**
+- open PR: pending (Phase 7)
+- latest local green commit on Phase 7 branch: `1701f6d`
+- test counts: **571 passed, 6 skipped**; coverage **90.15%**
 - known blockers: Redis-only skips; pip-audit pytest CVE (dev-only)
 - exact next command after Phase 7 merge: begin Phase 8 from updated `main`
 - exact next phase: 8 — Durable saga orchestration
 
 ## Phase 7: Compensation manifests / Compensation Passports
 
-**Status: implemented on branch (pending merge).**
+**Status: implemented on branch `cursor/phase7-compensation-passports-ffca` (`1701f6d`).**
 
 ### What landed
 
@@ -661,6 +661,11 @@ outcome handling per step.
   not `adapter.commit` on the compensation manifest.
 - Action Passport pointer fields only; Compensation Passport is the
   authoritative compensation record.
+
+### Verification
+
+Local: **571 passed, 6 skipped**; coverage **90.15%**; ruff/mypy/bandit/
+build/twine clean.
 
 ## Preserved Phase 5 design notes
 
