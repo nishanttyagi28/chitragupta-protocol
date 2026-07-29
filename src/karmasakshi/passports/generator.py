@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from karmasakshi.adapters.base import CommitResult, CompensationResult, OutcomeProof
 from karmasakshi.audit.journal import AuditJournal
+from karmasakshi.causal.graph import CausalEffectGraph
 from karmasakshi.config.clock import SYSTEM_CLOCK, Clock
 from karmasakshi.crypto.keyring import Keyring
 from karmasakshi.domain.seal import SealedManifest
@@ -53,6 +54,7 @@ def build_passport(
     compensation_result: CompensationResult | None = None,
     assessment: EffectAssessment | None = None,
     role_assignment: RoleAssignment | None = None,
+    causal_graph: CausalEffectGraph | None = None,
     clock: Clock = SYSTEM_CLOCK,
 ) -> ActionPassport:
     manifest = sealed.manifest
@@ -84,6 +86,17 @@ def build_passport(
     if grant is not None and grant_store is not None:
         was_revoked = grant_store.is_revoked(grant.grant_id)
 
+    causal_verified: bool | None = None
+    causal_ancestors: tuple[str, ...] = ()
+    if causal_graph is not None:
+        try:
+            causal_graph.verify(keyring)
+            causal_verified = True
+            causal_ancestors = causal_graph.ancestors_of(sealed.seal.manifest_hash)
+        except KarmaSakshiError as exc:
+            causal_verified = False
+            seal_detail = (seal_detail + "; " if seal_detail else "") + str(exc)
+
     return ActionPassport(
         generated_at=clock.now(),
         manifest_id=manifest.manifest_id,
@@ -107,6 +120,10 @@ def build_passport(
             if role_assignment is not None
             else _role_participation_from_audit(audit, manifest.manifest_id)
         ),
+        causal_graph_id=causal_graph.graph_id if causal_graph is not None else None,
+        causal_graph_hash=causal_graph.canonical_hash() if causal_graph is not None else None,
+        causal_ancestor_manifest_hashes=causal_ancestors,
+        causal_graph_verified=causal_verified,
         commit_attempted=commit_result is not None,
         commit_success=commit_result.success if commit_result is not None else None,
         provider_reference=commit_result.provider_reference if commit_result is not None else None,
