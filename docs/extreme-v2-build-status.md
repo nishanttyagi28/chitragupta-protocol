@@ -58,7 +58,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 18. Adapter conformance kit | **Implemented** | Structural contract checks; see below |
 | 19. Multi-tenant control plane | **Implemented** | Process-local isolation; see below |
 | 20. Resource/DoS protection | **Implemented** | API size + rate ceilings; see below |
-| 21. Adversarial/fuzz testing | Partial | Phase 1's own scoring engine has adversarial + property coverage; no new coverage added for pre-existing v0.1 components beyond the baseline fix |
+| 21. Adversarial/fuzz testing | **Expanded** | Phase 21 Hypothesis + gaming suites; see below |
 | 22. State-machine model checking | Not started | v0.1's `tests/property/test_state_machine_properties.py` (BFS reachability) is unchanged |
 | 23. Action Passport V2 | Not started | Phase 1 added optional `assessment_*` fields to the existing (v1) passport rather than a new versioned schema |
 | 24. Portable evidence / observability | Not started | |
@@ -622,19 +622,30 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 21: Adversarial and fuzz testing.** Expand Hypothesis/adversarial
-coverage across grants, adapters, and remaining protocol surfaces.
+**Phase 22: Bounded state-machine model checking.** Expand beyond BFS
+reachability toward bounded exhaustive transition checks.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 19 (`49ad114`, PR #34)
-- current branch: `cursor/phase20-resource-dos-protection-ffca` (stacked on Phase 19)
-- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/35
-- exact next phase: 21 — Adversarial and fuzz testing
+- last merged phase on main: Phase 20 (`bbee4cb`, PR #35)
+- current branch: `cursor/phase21-adversarial-fuzz-ffca`
+- open PR: (pending)
+- test counts: **707 passed, 8 skipped**; coverage **90.11%**
+- exact next phase: 22 — Bounded state-machine model checking
+
+## Phase 21: Adversarial and fuzz testing
+
+**Status: expanded on branch.**
+
+### What landed
+
+- Hypothesis properties for tenant match, Content-Length, rate limiter
+- Adversarial gaming for tenant lookalikes
+- Docs: `docs/adversarial-fuzz.md`
 
 ## Phase 20: Resource and DoS protection
 
-**Status: implemented on branch (stacked on Phase 19).**
+**Status: merged to main (`bbee4cb`, PR #35).**
 
 ### What landed
 

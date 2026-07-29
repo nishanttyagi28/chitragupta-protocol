@@ -153,6 +153,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Content-Length and per-client rate ceilings on the control-plane API
   (invariants #71–#72). Process-local. See
   [docs/resource-protection.md](docs/resource-protection.md).
+- **Adversarial / fuzz expansion** (Phase 21): Hypothesis properties and
+  gaming tests for tenant isolation and resource protection. See
+  [docs/adversarial-fuzz.md](docs/adversarial-fuzz.md).
 
 
 ## [0.1.0] - 2026-07-27
