@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS idempotency_ledger (
     idempotency_key TEXT PRIMARY KEY,
     outcome_ref TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS grant_lineage (
+    grant_id TEXT PRIMARY KEY,
+    parent_grant_id TEXT
+);
 """
 
 
@@ -163,6 +167,38 @@ class SQLiteGrantStore:
                 raise StoreUnavailableError(
                     f"sqlite record_idempotent_outcome() failed for key {idempotency_key}"
                 ) from exc
+
+    def record_lineage(self, grant_id: str, parent_grant_id: str | None) -> None:
+        with self._lock:
+            try:
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO grant_lineage(grant_id, parent_grant_id) VALUES (?, ?)",
+                    (grant_id, parent_grant_id),
+                )
+                self._conn.commit()
+            except sqlite3.Error as exc:
+                _safe_rollback(self._conn)
+                raise StoreUnavailableError(
+                    f"sqlite record_lineage() failed for grant {grant_id}"
+                ) from exc
+
+    def get_parent_grant_id(self, grant_id: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT parent_grant_id FROM grant_lineage WHERE grant_id = ?",
+                (grant_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            return str(row[0]) if row[0] is not None else None
+
+    def has_lineage(self, grant_id: str) -> bool:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM grant_lineage WHERE grant_id = ?",
+                (grant_id,),
+            ).fetchone()
+            return row is not None
 
 
 __all__ = ["SQLiteGrantStore"]

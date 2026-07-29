@@ -25,11 +25,12 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   and unit-testable in isolation, but was not exercised against a live
   Redis server as part of this build. Run `docker compose up redis` and
   re-run `pytest -m redis` to exercise it.
-- **Multi-hop delegation revocation propagation is one-hop by default.**
-  `engine.commit()` checks the immediate parent grant's revocation status
-  automatically; a grandparent (or deeper) revocation requires calling
-  `delegation.verify_delegation_chain()` explicitly with the full chain of
-  grant objects. See [docs/delegation.md](delegation.md).
+- **Multi-hop delegation revocation walks recorded lineage at commit
+  time** (extreme-v2 Phase 11). Grants issued through the engine record
+  parent pointers in the grant store. Missing intermediate lineage fails
+  closed (revocation uncertainty). Cascading “mark all descendants
+  revoked” is not implemented — descendants are blocked at commit when an
+  ancestor is revoked. See [docs/delegation.md](delegation.md).
 - **Compensation is best-effort, never guaranteed.** Some effects
   (irreversible ones by classification, or provider states that don't
   support cancellation, like a settled payment) honestly refuse

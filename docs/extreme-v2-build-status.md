@@ -48,7 +48,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 8. Saga orchestration | **Implemented** | Multi-grant topo orchestration; see below |
 | 9. Independent witness quorum | **Implemented** | See below |
 | 10. Evidence quality and provenance | **Implemented** | See below |
-| 11. Deep delegation revocation | Not started | v0.1's one-hop revocation propagation (documented limitation) is unchanged |
+| 11. Deep delegation revocation | **Implemented** | Lineage walk at commit; see below |
 | 12. Authority budgets | Not started | |
 | 13. Durable lifecycle storage | Not started | Lifecycle state remains process-local + audit-journal-reconstructed, as in v0.1 |
 | 14. Distributed audit journal | Not started | SQLite/Redis backends are v0.1; no new distributed-consensus work |
@@ -622,19 +622,31 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 11: Deep delegation revocation.** Propagate revocation through
-delegation chains beyond the current one-hop limitation.
+**Phase 12: Atomic authority budgets.** Track consumable authority
+budgets (monetary / count / resource) bound to grants with fail-closed
+exhaustion.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 9 (`d9521d8`, PR #24)
-- current branch: `cursor/phase10-evidence-provenance-ffca`
+- last merged phase on main: Phase 10 (`1ab447c`, PR #25)
+- current branch: `cursor/phase11-deep-delegation-revocation-ffca`
 - open PR: (pending)
 - latest local green commit: (pending)
-- test counts: pending
+- test counts: pending full suite
 - known blockers: Redis-only skips; pip-audit pytest CVE (dev-only)
-- exact next command after Phase 10 merge: begin Phase 11 from updated `main`
-- exact next phase: 11 — Deep delegation revocation
+- exact next command after Phase 11 merge: begin Phase 12 from updated `main`
+- exact next phase: 12 — Atomic authority budgets
+
+## Phase 11: Deep delegation revocation
+
+**Status: implemented on branch.**
+
+### What landed
+
+- GrantStore lineage API on memory/SQLite/Redis
+- `assert_no_revoked_ancestors` (depth/cycle/uncertainty fail-closed)
+- Engine records lineage on authorize/delegate; commit walks ancestors
+- Invariants **#58–#59**
 
 ## Phase 10: Evidence quality and provenance
 

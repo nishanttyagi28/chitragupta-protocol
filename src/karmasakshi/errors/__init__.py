@@ -98,6 +98,11 @@ class DelegationError(KarmaSakshiError):
     """Base class for delegation/attenuation errors."""
 
 
+class DelegationLineageError(DelegationError):
+    """Delegation lineage is incomplete, cyclic, or exceeds the depth bound
+    so deep revocation safety cannot be proven (fail closed)."""
+
+
 class ConstraintWideningError(DelegationError):
     """Child grant attempts to widen authority relative to its parent."""
 

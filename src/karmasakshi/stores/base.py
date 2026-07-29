@@ -60,5 +60,21 @@ class GrantStore(Protocol):
         reserve -> commit path."""
         ...
 
+    def record_lineage(self, grant_id: str, parent_grant_id: str | None) -> None:
+        """Record ``grant_id``'s parent pointer for deep revocation walks
+        (extreme-v2 Phase 11). ``parent_grant_id=None`` means this grant is
+        a recorded root. Must be called when a grant is issued."""
+        ...
+
+    def get_parent_grant_id(self, grant_id: str) -> str | None:
+        """Return the recorded parent grant id, or ``None`` if this grant is
+        a recorded root. Raises nothing for unknown grants -- callers must
+        use :meth:`has_lineage` to distinguish root from unknown."""
+        ...
+
+    def has_lineage(self, grant_id: str) -> bool:
+        """Return True iff :meth:`record_lineage` was called for ``grant_id``."""
+        ...
+
 
 __all__ = ["GrantStore"]

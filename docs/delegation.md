@@ -74,17 +74,20 @@ verifies, in one call:
 
 ## Revocation propagation
 
-`engine.commit()` checks one hop of ancestor revocation automatically: if
-`grant.parent_grant_id` is set and that parent grant_id is revoked in the
-store, the child is blocked (`GrantRevokedError`) even though the child
-itself was never directly revoked. This is deliberately limited to one
-hop — the `GrantStore` only tracks revocation by `grant_id`, not full
-lineage, so it cannot walk further than the immediate parent without the
-caller supplying the full chain. **For a delegation chain deeper than one
-hop, call `verify_delegation_chain()` explicitly with the full chain of
-grant objects before commit** if you need guaranteed multi-hop revocation
-propagation; `engine.commit()` alone does not reconstruct unknown
-ancestors.
+Extreme-v2 Phase 11: `engine.commit()` walks the **full recorded ancestor
+lineage** via the grant store (`record_lineage` / `get_parent_grant_id` /
+`has_lineage`) and blocks the leaf if any ancestor is revoked
+(`GrantRevokedError`). Missing intermediate lineage, cycles, or depth
+overflow fail closed (`DelegationLineageError`) — revocation uncertainty
+must never silently allow a commit.
+
+Authorize and `delegate()` paths record lineage when a grant is issued.
+`verify_delegation_chain()` remains available for callers that hold the
+full grant objects and want signature/attenuation checks as well.
+
+Cascading “mark every descendant revoked in the store” is **not**
+implemented: descendants are refused at commit time when an ancestor is
+revoked.
 
 ## `engine.delegate()`
 
