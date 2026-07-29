@@ -18,12 +18,13 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
-
-import httpx
+from typing import TYPE_CHECKING
 
 from karmasakshi.passports import ActionPassportV2
 from karmasakshi.portable import verify_evidence_pack
-from karmasakshi.sdk import GatewayClient, KarmaSakshiApiError
+
+if TYPE_CHECKING:
+    from karmasakshi.sdk import KarmaSakshiApiError
 
 _AGENT_ID = "refund-agent-1"
 _ADAPTER_ID = "payment.simulator"
@@ -104,6 +105,8 @@ def _expect_api_error(
     status_code: int,
     label: str,
 ) -> KarmaSakshiApiError:
+    from karmasakshi.sdk import KarmaSakshiApiError
+
     try:
         action()
     except KarmaSakshiApiError as exc:
@@ -125,6 +128,8 @@ def _control_center_approve(
     report: AcceptanceReport,
     inspect_effect: bool,
 ) -> None:
+    import httpx
+
     with httpx.Client(base_url=base_url, timeout=30.0, follow_redirects=False) as browser:
         login_page = browser.get("/control-center/login")
         if inspect_effect:
@@ -185,6 +190,8 @@ def _sdk_complete_quorum(
     manifest_id: str,
     credentials: list[tuple[str, str]],
 ) -> str:
+    from karmasakshi.sdk import GatewayClient
+
     grant_id: str | None = None
     for email, password in credentials:
         with GatewayClient(base_url, timeout=30.0) as approver:
@@ -213,6 +220,10 @@ def run_acceptance(
     owner_password: str,
     report_path: Path | None = None,
 ) -> AcceptanceReport:
+    import httpx
+
+    from karmasakshi.sdk import GatewayClient, KarmaSakshiApiError
+
     report = AcceptanceReport(base_url=base_url, org_id=org_id)
     other_org_id = f"{org_id}-other"
     other_password = secrets.token_urlsafe(18)
