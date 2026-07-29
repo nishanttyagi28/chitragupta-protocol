@@ -629,8 +629,9 @@ limits, and fail-closed resource ceilings on API / engine paths.
 
 - last merged phase on main: Phase 18 (`ea45e84`, PR #33)
 - current branch: `cursor/phase19-multi-tenant-control-plane-ffca`
-- open PR: (pending)
-- test counts: (pending full suite)
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/34
+- test counts: **695 passed, 8 skipped**; coverage **90.14%**
+- quality gates: ruff / mypy / bandit / build / twine clean
 - exact next phase: 20 — Resource and DoS protection
 
 ## Phase 19: Multi-tenant control plane
