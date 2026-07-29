@@ -629,12 +629,16 @@ dev emulators — no fabricated cloud provider support.
 
 - last merged phase on main: Phase 14 (`2f7ad35`, PR #29)
 - current branch: `cursor/phase15-transactional-outbox-ffca`
-- open PR: (pending)
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/30
 - exact next phase: 16 — Production signer interfaces
 
 ## Phase 15: Transactional outbox and recovery
 
-**Status: implemented on branch.**
+**Status: implemented on branch (PR #30).**
+
+### Local gates
+
+**662 passed, 8 skipped**; coverage **90.01%**.
 
 ### What landed
 
