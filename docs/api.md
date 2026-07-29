@@ -52,6 +52,10 @@ without authentication — see `karmasakshi.api.auth.require_auth` and
 | POST | `/decision-envelopes` | Build, seal, and store a constrained Decision Envelope (see docs/decision-envelopes.md) |
 | GET | `/decision-envelopes/{id}` | Fetch a stored Decision Envelope and verification status |
 | POST | `/decision-envelopes/{id}/substitute` | Deterministically resolve parameter choices under a sealed envelope |
+| POST | `/manifests/{id}/compensation/prepare` | Build and seal a compensation manifest bound to the original (Phase 7) |
+| POST | `/manifests/{id}/compensation/{cid}/authorize` | Issue a separate grant for the compensation effect |
+| POST | `/manifests/{id}/compensation/{cid}/execute` | Consume the compensation grant and call `adapter.compensate` |
+| GET | `/manifests/{id}/compensation/{cid}/passport` | Emit a Compensation Passport (never mutates the Action Passport) |
 | POST | `/policy/bundles` | Build, sign, and store a policy bundle (see docs/policy-bundles.md) |
 | GET | `/policy/bundles/{id}` | Fetch a stored sealed policy bundle |
 | POST | `/policy/bundles/{id}/verify` | Re-verify a stored bundle's signature/integrity/window |

@@ -33,7 +33,10 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
 - **Compensation is best-effort, never guaranteed.** Some effects
   (irreversible ones by classification, or provider states that don't
   support cancellation, like a settled payment) honestly refuse
-  compensation rather than pretending to roll back.
+  compensation rather than pretending to roll back. Extreme-v2 Phase 7
+  adds a separately authorized compensation path and Compensation
+  Passports ([docs/compensation-manifests.md](compensation-manifests.md));
+  that path still cannot invent provider rollback that does not exist.
 - **No production key management.** Dev-mode key generation writes raw
   private key bytes to a local file with best-effort file permissions.
   There's no HSM/KMS integration, no automated rotation workflow, and no
@@ -49,7 +52,7 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   walkthrough of all three.
 - **No rate limiting, DoS protection, or resource-exhaustion defense**
   anywhere in the CLI, API, or engine.
-- **No formal verification.** The 42 documented invariants
+- **No formal verification.** The 45 documented invariants
   ([docs/security-model.md](security-model.md)) are backed by unit tests,
   property-based tests (Hypothesis), and adversarial-input tests — not by
   a theorem prover or model checker. Passing tests demonstrate the stated

@@ -98,6 +98,8 @@ def render_passport_markdown(passport: ActionPassport) -> str:
         f"- Attempted: {_bool_str(p.compensation_attempted)}",
         f"- Succeeded: {_bool_str(p.compensation_succeeded)}",
         f"- Reason: {p.compensation_reason or 'n/a'}",
+        f"- Compensation manifest hash (pointer): `{p.compensation_manifest_hash or 'none'}`",
+        f"- Compensation passport status (pointer): `{p.compensation_passport_status or 'n/a'}`",
         "",
         "## Cryptographic Verification Status",
         "",

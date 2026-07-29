@@ -20,16 +20,18 @@ versioned, experimental protocol.** This is not a certified, audited, or
 "production proven" system — see [Limitations](#limitations) and
 [docs/threat-model.md](docs/threat-model.md).
 
-**In progress:** extreme-v2 Phases 1–6 have landed on top of v0.1 —
+**In progress:** extreme-v2 Phases 1–7 have landed on top of v0.1 —
 Effect Intelligence (advisory), signed policy bundles, multi-party
-authorization, separation of duties, signed causal effect graphs, and
-constrained Decision Envelopes / atomic plan authorization. See
+authorization, separation of duties, signed causal effect graphs,
+constrained Decision Envelopes / atomic plan authorization, and
+compensation manifests with separate Compensation Passports. See
 [docs/effect-intelligence.md](docs/effect-intelligence.md),
 [docs/policy-bundles.md](docs/policy-bundles.md),
 [docs/multi-party-authorization.md](docs/multi-party-authorization.md),
 [docs/separation-of-duties.md](docs/separation-of-duties.md),
 [docs/causal-effect-graphs.md](docs/causal-effect-graphs.md),
-[docs/decision-envelopes.md](docs/decision-envelopes.md), and the
+[docs/decision-envelopes.md](docs/decision-envelopes.md),
+[docs/compensation-manifests.md](docs/compensation-manifests.md), and the
 build ledger at
 [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for
 exactly what's implemented vs. planned.

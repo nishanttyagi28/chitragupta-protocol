@@ -98,6 +98,22 @@ class DecisionEnvelopeSubstituteIn(BaseModel):
     choices: dict[str, str | int | bool | None] = {}
 
 
+class CompensationAuthorizeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    issuer: PrincipalIn
+    subject: PrincipalIn
+    audience: list[str] | None = None
+    max_uses: int = 1
+    ttl_seconds: int = 300
+
+
+class CompensationExecuteIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    grant_id: str
+
+
 class PolicyBundleCreateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

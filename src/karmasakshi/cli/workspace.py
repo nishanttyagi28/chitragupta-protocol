@@ -19,6 +19,7 @@ from karmasakshi.approval.model import ApprovalStatement
 from karmasakshi.audit.journal import AuditJournal
 from karmasakshi.audit.sqlite_backend import SQLiteAuditBackend
 from karmasakshi.causal import CausalEffectGraph
+from karmasakshi.compensation.passport import CompensationPassport
 from karmasakshi.crypto.keyring import Keyring
 from karmasakshi.crypto.keys import (
     SigningKey,
@@ -275,6 +276,17 @@ class Workspace:
         if not path.exists():
             return None
         return CompensationResult(**json.loads(path.read_text(encoding="utf-8")))
+
+    def save_compensation_passport(self, passport: CompensationPassport) -> Path:
+        path = (
+            self.manifests_dir / f"{passport.compensation_manifest_id}.compensation-passport.json"
+        )
+        path.write_text(passport.model_dump_json(indent=2), encoding="utf-8")
+        return path
+
+    def load_compensation_passport(self, compensation_manifest_id: str) -> CompensationPassport:
+        path = self.manifests_dir / f"{compensation_manifest_id}.compensation-passport.json"
+        return CompensationPassport.model_validate_json(path.read_text(encoding="utf-8"))
 
     # --- durable stores -------------------------------------------------------
 

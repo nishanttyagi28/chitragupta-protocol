@@ -210,6 +210,28 @@ class AtomicPlanError(KarmaSakshiError):
     membership, hash mismatch, or unverified graph."""
 
 
+# --- Compensation manifests / passports (extreme-v2 Phase 7) -----------------
+
+
+class CompensationError(KarmaSakshiError):
+    """Base class for compensation-manifest / Compensation Passport errors."""
+
+
+class CompensationBindingError(CompensationError):
+    """A compensation effect is not correctly bound to its original sealed
+    manifest hash, or a caller attempted to compensate the wrong original."""
+
+
+class CompensationNotAuthorizedError(CompensationError):
+    """Attempted to commit an authorized compensation path without a valid
+    grant bound to the compensation manifest (and original hash)."""
+
+
+class CompensationPassportIntegrityError(CompensationError):
+    """A Compensation Passport failed integrity checks, or a caller attempted
+    to treat a mutated Action Passport as a compensation record."""
+
+
 # --- Policy bundles ----------------------------------------------------------------
 
 

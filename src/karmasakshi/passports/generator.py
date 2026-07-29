@@ -55,6 +55,8 @@ def build_passport(
     assessment: EffectAssessment | None = None,
     role_assignment: RoleAssignment | None = None,
     causal_graph: CausalEffectGraph | None = None,
+    compensation_manifest_hash: str | None = None,
+    compensation_passport_status: str | None = None,
     clock: Clock = SYSTEM_CLOCK,
 ) -> ActionPassport:
     manifest = sealed.manifest
@@ -148,6 +150,8 @@ def build_passport(
         compensation_reason=(
             compensation_result.reason if compensation_result is not None else None
         ),
+        compensation_manifest_hash=compensation_manifest_hash,
+        compensation_passport_status=compensation_passport_status,
         assessment_id=assessment.assessment_id if assessment is not None else None,
         assessment_score=assessment.score if assessment is not None else None,
         assessment_risk_level=assessment.risk_level.value if assessment is not None else None,

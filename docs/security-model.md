@@ -1,4 +1,4 @@
-# Security Model: the 42 Invariants
+# Security Model: the 45 Invariants
 
 Each invariant below is implemented in a specific, named location and
 verified by at least one named test. This list exists so a reviewer can
@@ -49,6 +49,9 @@ under a minute per row.
 | 40 | A grant bound to a Decision Envelope cannot commit against a missing, different, tampered, expired, or constraint-violating envelope | `engine.commit()` re-verifies and re-checks fit when `decision_envelope_hash` is set | `test_authorize_with_envelope_then_commit_rejects_missing_and_swapped`, `tests/adversarial/test_decision_envelope_gaming.py` |
 | 41 | A grant bound to an atomic plan (causal graph) cannot commit unless the presented graph matches the bound hash and the sealed manifest is a verified node | `engine.commit()` + `assert_manifest_in_plan` | `test_authorize_plan_rejects_non_member_and_commit_requires_graph` |
 | 42 | An agent principal cannot issue a Decision Envelope; envelope constraint evaluation and substitution are deterministic | `build_decision_envelope()` rejects agent issuers; `substitute_parameters` / narrowing are pure | `test_agent_cannot_issue_decision_envelope`, `tests/property/test_decision_envelope_properties.py` |
+| 43 | A compensation effect must cryptographically bind the original sealed manifest hash; a grant for compensating A cannot authorize compensating B | `build_compensation_manifest` / `assert_compensation_binds_original`; `authorize_compensation` / `commit_compensation` | `test_binding_rejects_wrong_original`, `test_authorize_compensation_rejects_unbound_manifest`, `tests/adversarial/test_compensation_gaming.py` |
+| 44 | Compensation outcomes live in a separate Compensation Passport; building it never mutates an Action Passport | `build_compensation_passport`; Action Passport only carries optional pointer fields | `test_authorized_compensation_path_and_separate_passport`, `test_building_compensation_passport_does_not_alter_action_passport` |
+| 45 | Compensation status distinguishes refused / attempted / verified; adapter success alone is never `verified` | `derive_compensation_status` | `test_derive_status_triad` |
 
 ## What this table does not claim
 

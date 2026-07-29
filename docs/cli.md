@@ -66,6 +66,10 @@ karmasakshi execute <manifest_id> --grant-id ID --adapter {sqlite,email,payment}
     [adapter-specific options...]
 karmasakshi verify <manifest_id> --adapter {sqlite,email,payment} [...]
 karmasakshi compensate <manifest_id> --adapter {sqlite,email,payment} [...]
+karmasakshi compensation prepare <original_manifest_id> [--key-id ID]
+karmasakshi compensation authorize <original_id> <compensation_id> [--issuer-id ID] [--key-id ID]
+karmasakshi compensation execute <original_id> <compensation_id> --grant-id ID --adapter {sqlite,email,payment} [...]
+karmasakshi compensation passport <original_id> <compensation_id> [--grant-id ID]
 
 karmasakshi audit list
 karmasakshi audit show <manifest_id>

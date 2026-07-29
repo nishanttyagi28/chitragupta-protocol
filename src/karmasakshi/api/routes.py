@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from karmasakshi.adapters.base import CompensationResult
 from karmasakshi.adapters.email_sandbox import EmailRequest
 from karmasakshi.adapters.payment_simulator import PaymentRequest
 from karmasakshi.adapters.sqlite_db import RowEffectRequest
@@ -18,6 +19,8 @@ from karmasakshi.api.schemas import (
     ApproveIn,
     AssessIn,
     CausalGraphCreateIn,
+    CompensationAuthorizeIn,
+    CompensationExecuteIn,
     DecisionEnvelopeCreateIn,
     DecisionEnvelopeSubstituteIn,
     DenyIn,
@@ -39,6 +42,10 @@ from karmasakshi.approval import (
     sign_approval_statement,
 )
 from karmasakshi.causal import build_causal_graph, sign_causal_link
+from karmasakshi.compensation import (
+    build_compensation_manifest,
+    build_compensation_passport,
+)
 from karmasakshi.domain.common import AdapterIdentity, MonetaryAmount, Principal
 from karmasakshi.duty import SeparationOfDutyPolicy, build_separation_of_duty_policy_bundle
 from karmasakshi.duty.roles import RoleAssignment
@@ -884,6 +891,155 @@ def verify_manifest(manifest_id: str, request: Request) -> dict[str, Any]:
     proof = state.engine.verify(sealed.manifest, result, adapter, context=None)
     state.outcome_proofs[manifest_id] = proof
     return {"matched_expected": proof.matched_expected, "detail": proof.detail}
+
+
+@router.post(
+    "/manifests/{manifest_id}/compensation/prepare",
+    dependencies=[Depends(require_auth)],
+)
+def prepare_compensation(manifest_id: str, request: Request) -> dict[str, Any]:
+    """Build and seal a compensation manifest bound to the original effect."""
+    state = _state(request)
+    original = state.sealed_manifests.get(manifest_id)
+    if original is None:
+        raise HTTPException(404, "manifest not found")
+    commit_result = state.commit_results.get(manifest_id)
+    try:
+        unsigned = build_compensation_manifest(original=original, original_commit=commit_result)
+        state.engine.prepare_compensation(unsigned, original_sealed=original)
+        sealed = state.engine.seal(unsigned, state.signing_key)
+    except KarmaSakshiError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    state.sealed_manifests[sealed.manifest.manifest_id] = sealed
+    return {
+        "compensation_manifest_id": sealed.manifest.manifest_id,
+        "compensation_manifest_hash": sealed.seal.manifest_hash,
+        "original_manifest_id": original.manifest.manifest_id,
+        "original_manifest_hash": original.seal.manifest_hash,
+        "effect_type": sealed.manifest.effect_type,
+    }
+
+
+@router.post(
+    "/manifests/{manifest_id}/compensation/{compensation_id}/authorize",
+    dependencies=[Depends(require_auth)],
+)
+def authorize_compensation(
+    manifest_id: str,
+    compensation_id: str,
+    body: CompensationAuthorizeIn,
+    request: Request,
+) -> dict[str, Any]:
+    state = _state(request)
+    original = state.sealed_manifests.get(manifest_id)
+    compensation = state.sealed_manifests.get(compensation_id)
+    if original is None or compensation is None:
+        raise HTTPException(404, "original or compensation manifest not found")
+    now = datetime.now(timezone.utc)
+    try:
+        grant = state.engine.authorize_compensation(
+            original,
+            compensation,
+            issuer=Principal(**body.issuer.model_dump()),
+            subject=Principal(**body.subject.model_dump()),
+            audience=tuple(body.audience)
+            if body.audience
+            else (compensation.manifest.adapter.adapter_id,),
+            allowed_effect_types=(compensation.manifest.effect_type,),
+            scope=ScopeConstraints(),
+            not_before=now,
+            expires_at=now + timedelta(seconds=body.ttl_seconds),
+            signing_key=state.signing_key,
+            max_uses=body.max_uses,
+        )
+    except KarmaSakshiError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    state.register_grant(compensation_id, grant)
+    return {
+        "grant_id": grant.grant_id,
+        "compensation_manifest_id": compensation_id,
+        "original_manifest_id": manifest_id,
+        "manifest_hash": grant.manifest_hash,
+    }
+
+
+@router.post(
+    "/manifests/{manifest_id}/compensation/{compensation_id}/execute",
+    dependencies=[Depends(require_auth)],
+)
+def execute_compensation(
+    manifest_id: str,
+    compensation_id: str,
+    body: CompensationExecuteIn,
+    request: Request,
+) -> dict[str, Any]:
+    state = _state(request)
+    if state.kill_switch_engaged:
+        raise HTTPException(503, "kill switch engaged; execution refused")
+    original = state.sealed_manifests.get(manifest_id)
+    compensation = state.sealed_manifests.get(compensation_id)
+    grant = state.grants.get(body.grant_id)
+    if original is None or compensation is None or grant is None:
+        raise HTTPException(404, "manifest or grant not found")
+    original_commit = state.commit_results.get(manifest_id)
+    if original_commit is None:
+        raise HTTPException(404, "original commit result not found; execute the original first")
+    adapter = state.adapters[compensation.manifest.adapter.adapter_id]
+    try:
+        result = state.engine.commit_compensation(
+            original,
+            compensation,
+            grant,
+            adapter,
+            context=None,
+            original_commit=original_commit,
+        )
+    except KarmaSakshiError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    state.commit_results[compensation_id] = result
+    state.compensation_results[manifest_id] = CompensationResult(
+        attempted=True,
+        succeeded=result.success,
+        reason=result.detail,
+        detail=result.detail,
+    )
+    return {
+        "success": result.success,
+        "provider_reference": result.provider_reference,
+        "detail": result.detail,
+        "compensation_manifest_id": compensation_id,
+        "original_manifest_id": manifest_id,
+    }
+
+
+@router.get(
+    "/manifests/{manifest_id}/compensation/{compensation_id}/passport",
+    dependencies=[Depends(require_auth)],
+)
+def get_compensation_passport(
+    manifest_id: str, compensation_id: str, request: Request
+) -> dict[str, Any]:
+    state = _state(request)
+    original = state.sealed_manifests.get(manifest_id)
+    compensation = state.sealed_manifests.get(compensation_id)
+    if original is None or compensation is None:
+        raise HTTPException(404, "original or compensation manifest not found")
+    grant_ids = state.grants_by_manifest.get(compensation_id, [])
+    grant = state.grants[grant_ids[-1]] if grant_ids else None
+    try:
+        passport = build_compensation_passport(
+            compensation_sealed=compensation,
+            original_sealed=original,
+            keyring=state.keyring,
+            audit=state.engine.context.audit,
+            grant=grant,
+            commit_result=state.commit_results.get(compensation_id),
+            outcome_proof=state.outcome_proofs.get(compensation_id),
+        )
+    except KarmaSakshiError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    state.compensation_passports[compensation_id] = passport
+    return passport.model_dump(mode="json")
 
 
 @router.get("/audit", dependencies=[Depends(require_auth)])
