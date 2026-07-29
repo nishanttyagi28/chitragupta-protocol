@@ -49,17 +49,54 @@ journal as every other engine step.
 recommendation is informational only in this protocol version. Do not
 treat calling `assess()` (or seeing `recommendation: block` in a passport)
 as evidence that a manifest was actually blocked -- check the lifecycle
-state and the presence/absence of a valid `ExecutionGrant` instead. Wiring
-a `BLOCK` recommendation (or an unmet approval/witness-quorum requirement)
-into a structural authorization gate is planned for a later phase (signed
-policy bundles binding `policy_hash` into the grant, plus M-of-N
-authorization) and is **not implemented today**.
+state and the presence/absence of a valid `ExecutionGrant` instead.
+Signed policy bundles (below) and M-of-N authorization (below) are now
+implemented, but neither one reads `EffectAssessment.recommendation`
+automatically yet -- a caller must still explicitly configure
+`IntelligencePolicy`/`ApprovalPolicy` thresholds; nothing derives one
+from the other's output today.
 
-`IntelligencePolicy` itself is an unsigned, in-process value: whoever
-constructs the `EffectIntelligenceEngine` a caller uses controls the
-thresholds, with no cryptographic binding yet to prevent a compromised
-caller from picking permissive thresholds and calling the result
-authoritative advice.
+## New trusted components: signed policy bundles and multi-party authorization
+
+`karmasakshi.policy` (see [docs/policy-bundles.md](policy-bundles.md)) and
+`karmasakshi.approval` (see
+[docs/multi-party-authorization.md](multi-party-authorization.md)) add two
+real structural security properties, unlike the advisory Effect
+Intelligence Engine above:
+
+- **A grant bound to a policy bundle cannot commit against a different,
+  missing, tampered, or expired one** (invariant #31). This *does* change
+  the security model: `IntelligencePolicy` is no longer a purely
+  in-process, unsigned value when a caller chooses to bind one --
+  `PolicyBundle`'s signature and effective window are enforced both at
+  `authorize()` and `commit()` time.
+- **A grant issued via `authorize_with_quorum()` is structurally
+  impossible to obtain without a satisfied M-of-N approval quorum**
+  (invariant #33), with hard-coded exclusions for agent approvers,
+  self-approval by the proposer, and approval by the executing subject
+  (invariants #34, #35).
+
+Both remain **additive**: the original single-issuer `authorize()`/
+`commit()` path (with no policy bundle, no approval set) is unchanged and
+still fully supported -- these are opt-in stronger guarantees, not a
+replacement for the base protocol. New trust assumptions this introduces:
+
+- Whoever holds a signing key trusted for `policy_type="approval.v1"`
+  bundles can set arbitrarily loose quorum rules (e.g.
+  `required_approvals=1` with no role requirements) -- the cryptographic
+  binding proves *which* policy was used, not that the policy itself was
+  wise. Reviewing who is authorized to sign approval policy bundles is a
+  deployment responsibility, same as for Effect Intelligence policies.
+- The reference API's approval-statement endpoint signs every submitted
+  statement with the control plane's own single service key rather than a
+  distinct per-approver key -- see docs/multi-party-authorization.md's
+  "Honesty note" for the exact implication and why the CLI does not share
+  this limitation.
+- Approval roles (`ApprovalStatement.role`) are self-asserted by the
+  signer, not checked against any external identity/role directory --
+  there is no RBAC system in this protocol version (planned: Phase 4,
+  separation of duties, and the commercial roadmap's enterprise approval
+  groups).
 
 ## Explicitly out of scope
 
@@ -99,6 +136,14 @@ authoritative advice.
 - **Enforcement of Effect Intelligence Engine recommendations.** See "New
   trusted component" above -- `assess()` scores and records, it does not
   gate.
+- **Role-based access control / identity directory for approval roles.**
+  `ApprovalStatement.role` is self-asserted by the signer; nothing
+  verifies a claimed role ("finance", "security") against an external
+  system of record. See docs/multi-party-authorization.md.
+- **Per-approver keys in the reference API.** The `/manifests/{id}/approvals`
+  endpoint signs on behalf of the caller-supplied approver identity using
+  the control plane's one service key. The CLI does not have this gap
+  (each workspace key is a distinct keypair).
 
 ## Trust boundaries (see also docs/architecture.md)
 

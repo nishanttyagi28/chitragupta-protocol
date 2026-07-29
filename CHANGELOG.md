@@ -33,6 +33,25 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   create/sign/verify`, `--policy-bundle-id` on `grant issue`/`execute`)
   and the API (`POST /policy/bundles`, `--policy_bundle_id` on
   `/approve`/`/execute`). See [docs/policy-bundles.md](docs/policy-bundles.md).
+- **Multi-party (M-of-N) authorization** (`karmasakshi.approval`): signed
+  `ApprovalStatement`s (approve/dissent, bound to one exact manifest +
+  approval-policy-bundle pair) evaluated deterministically and
+  order-independently against a versioned `ApprovalPolicy` (required
+  approval count, required roles, no-self-approval, no-executor-approval,
+  dissent veto, cooling-off period) via
+  `KarmaSakshiEngine.authorize_with_quorum()`. A grant issued this way is
+  structurally impossible without a satisfied quorum (invariant #33); an
+  agent can never sign or count as an approval (invariant #34); the
+  proposer and executing subject can never satisfy their own grant's
+  quorum (invariant #35); evaluation is deterministic regardless of
+  statement order, including conflicting statements from the same
+  approver (invariant #36). Additive: the original single-issuer
+  `authorize()` is unchanged. Integrated into the CLI (`karmasakshi policy
+  create-approval`, `karmasakshi approve`, `karmasakshi approvals
+  inspect`, `karmasakshi grant issue-with-quorum`) and the API (`POST
+  /policy/approval-bundles`, `/manifests/{id}/approvals[/evaluate]`,
+  `/manifests/{id}/approve-with-quorum`). See
+  [docs/multi-party-authorization.md](docs/multi-party-authorization.md).
 
 ## [0.1.0] - 2026-07-27
 

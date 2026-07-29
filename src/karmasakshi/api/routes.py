@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -12,6 +13,8 @@ from karmasakshi.adapters.payment_simulator import PaymentRequest
 from karmasakshi.adapters.sqlite_db import RowEffectRequest
 from karmasakshi.api.auth import is_dev_mode, require_auth
 from karmasakshi.api.schemas import (
+    ApprovalPolicyBundleCreateIn,
+    ApprovalStatementIn,
     ApproveIn,
     AssessIn,
     DenyIn,
@@ -19,8 +22,17 @@ from karmasakshi.api.schemas import (
     ManifestSummary,
     PolicyBundleCreateIn,
     PrepareRequestIn,
+    QuorumEvaluateIn,
+    QuorumGrantIn,
 )
 from karmasakshi.api.state import ApiState
+from karmasakshi.approval import (
+    ApprovalPolicy,
+    approval_policy_from_bundle_payload,
+    build_approval_policy_bundle,
+    evaluate_quorum,
+    sign_approval_statement,
+)
 from karmasakshi.domain.common import Principal
 from karmasakshi.errors import KarmaSakshiError
 from karmasakshi.grants.model import ScopeConstraints
@@ -311,6 +323,169 @@ def verify_policy_bundle_route(bundle_id: str, request: Request) -> dict[str, An
     except KarmaSakshiError as exc:
         raise HTTPException(422, f"policy bundle verification failed: {exc}") from exc
     return {"bundle_id": bundle_id, "verified": True}
+
+
+@router.post("/policy/approval-bundles", dependencies=[Depends(require_auth)])
+def create_approval_policy_bundle(
+    body: ApprovalPolicyBundleCreateIn, request: Request
+) -> dict[str, Any]:
+    """Build, sign, and store an approval (quorum) policy bundle
+    (``policy_type == "approval.v1"``). Shares storage with
+    ``/policy/bundles`` -- both are ``PolicyBundle`` envelopes,
+    distinguished by ``policy_type``. See docs/multi-party-authorization.md.
+    """
+    state = _state(request)
+    now = datetime.now(timezone.utc)
+    policy = ApprovalPolicy(
+        required_approvals=body.required_approvals,
+        required_roles=tuple(body.required_roles),
+        forbid_proposer_as_approver=body.forbid_proposer_as_approver,
+        forbid_subject_as_approver=body.forbid_subject_as_approver,
+        veto_on_any_dissent=body.veto_on_any_dissent,
+        cooling_off_seconds=body.cooling_off_seconds,
+    )
+    try:
+        bundle = build_approval_policy_bundle(
+            policy,
+            bundle_id=body.bundle_id,
+            bundle_version=body.bundle_version,
+            issuer=Principal(**body.issuer.model_dump()),
+            created_at=now,
+            effective_from=now,
+            effective_until=now + timedelta(seconds=body.effective_seconds),
+            tenant_id=body.tenant_id,
+        )
+        sealed = seal_policy_bundle(bundle, state.signing_key)
+    except (KarmaSakshiError, ValueError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+    state.policy_bundles[body.bundle_id] = sealed
+    return sealed.model_dump(mode="json")
+
+
+@router.post("/manifests/{manifest_id}/approvals", dependencies=[Depends(require_auth)])
+def submit_approval(
+    manifest_id: str, body: ApprovalStatementIn, request: Request
+) -> dict[str, Any]:
+    """Record one approval or dissent statement for a manifest.
+
+    Honesty note: this reference control plane signs every approval
+    statement with its own single service signing key (the same key used
+    for manifests, grants, and policy bundles elsewhere in this API) --
+    it does not hold a distinct private key per human approver. The
+    ``approver`` identity is still recorded and enforced (duplicate/self/
+    subject-approver rejection all still apply), but the cryptographic
+    signature does not by itself distinguish *which* approver submitted
+    it the way independently-held keys would in a production deployment
+    (see docs/multi-party-authorization.md and the CLI, where each
+    workspace key genuinely is distinct).
+    """
+    state = _state(request)
+    sealed = state.sealed_manifests.get(manifest_id)
+    if sealed is None:
+        raise HTTPException(404, "manifest not found")
+    approval_bundle = state.policy_bundles.get(body.approval_policy_bundle_id)
+    if approval_bundle is None:
+        raise HTTPException(
+            404, f"approval policy bundle {body.approval_policy_bundle_id!r} not found"
+        )
+    try:
+        statement = sign_approval_statement(
+            statement_id=str(uuid.uuid4()),
+            manifest_hash=sealed.seal.manifest_hash,
+            approval_policy_bundle_hash=approval_bundle.seal.bundle_hash,
+            approver=Principal(**body.approver.model_dump()),
+            decision=body.decision,
+            signing_key=state.signing_key,
+            expires_at=datetime.now(timezone.utc) + timedelta(seconds=body.ttl_seconds),
+            nonce=str(uuid.uuid4()),
+            role=body.role,
+            reason=body.reason,
+        )
+    except KarmaSakshiError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    state.approval_statements.setdefault(manifest_id, []).append(statement)
+    return statement.model_dump(mode="json")
+
+
+@router.get("/manifests/{manifest_id}/approvals", dependencies=[Depends(require_auth)])
+def list_approvals(manifest_id: str, request: Request) -> dict[str, Any]:
+    state = _state(request)
+    statements = state.approval_statements.get(manifest_id, [])
+    return {"statements": [s.model_dump(mode="json") for s in statements]}
+
+
+@router.post("/manifests/{manifest_id}/approvals/evaluate", dependencies=[Depends(require_auth)])
+def evaluate_approvals(
+    manifest_id: str, body: QuorumEvaluateIn, request: Request
+) -> dict[str, Any]:
+    """Dry-run quorum evaluation: does not issue a grant."""
+    state = _state(request)
+    sealed = state.sealed_manifests.get(manifest_id)
+    if sealed is None:
+        raise HTTPException(404, "manifest not found")
+    approval_bundle = state.policy_bundles.get(body.approval_policy_bundle_id)
+    if approval_bundle is None:
+        raise HTTPException(
+            404, f"approval policy bundle {body.approval_policy_bundle_id!r} not found"
+        )
+    policy = approval_policy_from_bundle_payload(approval_bundle.bundle.payload)
+    statements = tuple(state.approval_statements.get(manifest_id, []))
+    result = evaluate_quorum(
+        statements,
+        policy,
+        manifest_hash=sealed.seal.manifest_hash,
+        approval_policy_bundle_hash=approval_bundle.seal.bundle_hash,
+        keyring=state.keyring,
+        proposer=Principal(**body.proposer.model_dump()),
+        subject=Principal(**body.subject.model_dump()),
+        now=datetime.now(timezone.utc),
+    )
+    return result.model_dump(mode="json")
+
+
+@router.post("/manifests/{manifest_id}/approve-with-quorum", dependencies=[Depends(require_auth)])
+def approve_with_quorum(manifest_id: str, body: QuorumGrantIn, request: Request) -> dict[str, Any]:
+    """Issue an ExecutionGrant only if the manifest's stored approval
+    statements satisfy the referenced approval policy bundle's quorum."""
+    state = _state(request)
+    sealed = state.sealed_manifests.get(manifest_id)
+    if sealed is None:
+        raise HTTPException(404, "manifest not found")
+    approval_bundle = state.policy_bundles.get(body.approval_policy_bundle_id)
+    if approval_bundle is None:
+        raise HTTPException(
+            404, f"approval policy bundle {body.approval_policy_bundle_id!r} not found"
+        )
+    policy_bundle = None
+    if body.policy_bundle_id is not None:
+        policy_bundle = state.policy_bundles.get(body.policy_bundle_id)
+        if policy_bundle is None:
+            raise HTTPException(404, f"policy bundle {body.policy_bundle_id!r} not found")
+    statements = tuple(state.approval_statements.get(manifest_id, []))
+    now = datetime.now(timezone.utc)
+    try:
+        grant = state.engine.authorize_with_quorum(
+            sealed,
+            statements=statements,
+            approval_policy_bundle=approval_bundle,
+            proposer=Principal(**body.proposer.model_dump()),
+            subject=Principal(**body.subject.model_dump()),
+            grant_issuer=Principal(**body.grant_issuer.model_dump()),
+            audience=(
+                tuple(body.audience) if body.audience else (sealed.manifest.adapter.adapter_id,)
+            ),
+            allowed_effect_types=(sealed.manifest.effect_type,),
+            scope=ScopeConstraints(),
+            not_before=now,
+            expires_at=now + timedelta(seconds=body.ttl_seconds),
+            signing_key=state.signing_key,
+            max_uses=body.max_uses,
+            policy_bundle=policy_bundle,
+        )
+    except KarmaSakshiError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    state.register_grant(manifest_id, grant)
+    return {"grant_id": grant.grant_id, "approval_set_hash": grant.approval_set_hash}
 
 
 @router.post("/grants/{grant_id}/revoke", dependencies=[Depends(require_auth)])

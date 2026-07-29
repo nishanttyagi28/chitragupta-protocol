@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from karmasakshi import __version__
+from karmasakshi.cli.approve_cmd import approvals_app, approve
 from karmasakshi.cli.assess_cmd import assess
 from karmasakshi.cli.audit_cmd import audit_app
 from karmasakshi.cli.common import console, emit
@@ -32,6 +33,7 @@ app.add_typer(audit_app, name="audit")
 app.add_typer(grant_app, name="grant")
 app.add_typer(key_app, name="key")
 app.add_typer(policy_app, name="policy")
+app.add_typer(approvals_app, name="approvals")
 
 
 @app.callback()
@@ -69,6 +71,7 @@ def version() -> None:
 
 app.command("prepare")(prepare)
 app.command("assess")(assess)
+app.command("approve")(approve)
 app.command("seal")(seal)
 app.command("execute")(execute)
 app.command("verify")(execute_verify)

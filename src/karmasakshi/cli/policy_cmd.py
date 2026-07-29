@@ -5,6 +5,7 @@ from typing import Annotated
 
 import typer
 
+from karmasakshi.approval import ApprovalPolicy, build_approval_policy_bundle
 from karmasakshi.cli.common import emit, run_guarded
 from karmasakshi.cli.workspace import Workspace
 from karmasakshi.domain.common import Principal
@@ -71,6 +72,61 @@ def create(
             {"bundle_id": bundle_id, "policy_hash": bundle.canonical_hash(), "path": str(path)},
             as_json=as_json,
             human=f"Created unsigned policy bundle [bold]{bundle_id}[/bold] -> {path}",
+        )
+
+    run_guarded(as_json, _do)
+
+
+@policy_app.command("create-approval")
+def create_approval(
+    ctx: typer.Context,
+    bundle_id: Annotated[str, typer.Argument()],
+    issuer_id: Annotated[str, typer.Option()],
+    issuer_type: Annotated[PrincipalType, typer.Option()] = PrincipalType.HUMAN,
+    bundle_version: Annotated[str, typer.Option()] = "1.0",
+    effective_seconds: Annotated[int, typer.Option()] = 30 * 24 * 3600,
+    tenant_id: Annotated[str | None, typer.Option()] = None,
+    required_approvals: Annotated[int, typer.Option()] = 1,
+    required_role: Annotated[list[str], typer.Option("--required-role", help="repeatable")] = [],  # noqa: B006
+    forbid_proposer_as_approver: Annotated[bool, typer.Option()] = True,
+    forbid_subject_as_approver: Annotated[bool, typer.Option()] = True,
+    veto_on_any_dissent: Annotated[bool, typer.Option()] = True,
+    cooling_off_seconds: Annotated[int, typer.Option()] = 0,
+) -> None:
+    """Build an unsigned approval (quorum) policy bundle -- an
+    ``ApprovalPolicy`` wrapped in the same signed ``PolicyBundle``
+    envelope as an Effect Intelligence policy (``policy_type ==
+    "approval.v1"``). Sign it with `policy sign` and verify it with
+    `policy verify`, exactly like an intelligence policy bundle."""
+    workspace: Workspace = ctx.obj["workspace"]
+    as_json: bool = ctx.obj["json"]
+
+    def _do() -> None:
+        workspace.ensure_initialized()
+        now = datetime.now(timezone.utc)
+        policy = ApprovalPolicy(
+            required_approvals=required_approvals,
+            required_roles=tuple(required_role),
+            forbid_proposer_as_approver=forbid_proposer_as_approver,
+            forbid_subject_as_approver=forbid_subject_as_approver,
+            veto_on_any_dissent=veto_on_any_dissent,
+            cooling_off_seconds=cooling_off_seconds,
+        )
+        bundle = build_approval_policy_bundle(
+            policy,
+            bundle_id=bundle_id,
+            bundle_version=bundle_version,
+            issuer=Principal(principal_id=issuer_id, principal_type=issuer_type),
+            created_at=now,
+            effective_from=now,
+            effective_until=now + timedelta(seconds=effective_seconds),
+            tenant_id=tenant_id,
+        )
+        path = workspace.save_unsigned_policy_bundle(bundle)
+        emit(
+            {"bundle_id": bundle_id, "policy_hash": bundle.canonical_hash(), "path": str(path)},
+            as_json=as_json,
+            human=f"Created unsigned approval policy bundle [bold]{bundle_id}[/bold] -> {path}",
         )
 
     run_guarded(as_json, _do)

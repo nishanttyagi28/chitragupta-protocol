@@ -21,11 +21,15 @@ versioned, experimental protocol.** This is not a certified, audited, or
 [docs/threat-model.md](docs/threat-model.md).
 
 **In progress:** a deterministic Effect Intelligence Engine (advisory risk
-scoring, not yet an enforcement gate) and signed policy bundles (a
-policy edit after approval can no longer silently alter what a grant
-authorizes) have landed on top of v0.1 — see
-[docs/effect-intelligence.md](docs/effect-intelligence.md),
-[docs/policy-bundles.md](docs/policy-bundles.md), and the build ledger at
+scoring, not yet an enforcement gate), signed policy bundles (a policy
+edit after approval can no longer silently alter what a grant
+authorizes), and multi-party (M-of-N) authorization (a grant can now
+require a quorum of independently signed approvals, with hard-coded
+no-self-approval and no-agent-approver rules) have landed on top of v0.1
+— see [docs/effect-intelligence.md](docs/effect-intelligence.md),
+[docs/policy-bundles.md](docs/policy-bundles.md),
+[docs/multi-party-authorization.md](docs/multi-party-authorization.md),
+and the build ledger at
 [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for
 exactly what's implemented vs. planned.
 
@@ -559,6 +563,7 @@ means precisely: [docs/action-passports.md](docs/action-passports.md).
 - [docs/deployment.md](docs/deployment.md) — including the public sandbox demo
 - [docs/effect-intelligence.md](docs/effect-intelligence.md) — deterministic risk-scoring engine (advisory only)
 - [docs/policy-bundles.md](docs/policy-bundles.md) — signed, versioned policy bundles bound into authorization
+- [docs/multi-party-authorization.md](docs/multi-party-authorization.md) — M-of-N approval quorum
 - [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) — build ledger for work beyond v0.1.0
 - [docs/limitations.md](docs/limitations.md)
 - [docs/comparison.md](docs/comparison.md)

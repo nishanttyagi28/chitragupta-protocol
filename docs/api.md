@@ -52,6 +52,11 @@ without authentication — see `karmasakshi.api.auth.require_auth` and
 | POST | `/policy/bundles` | Build, sign, and store a policy bundle (see docs/policy-bundles.md) |
 | GET | `/policy/bundles/{id}` | Fetch a stored sealed policy bundle |
 | POST | `/policy/bundles/{id}/verify` | Re-verify a stored bundle's signature/integrity/window |
+| POST | `/policy/approval-bundles` | Build, sign, and store an approval (quorum) policy bundle (see docs/multi-party-authorization.md) |
+| POST | `/manifests/{id}/approvals` | Record one approval/dissent statement (signed by the control plane's own key -- see the "Honesty note" in docs/multi-party-authorization.md) |
+| GET | `/manifests/{id}/approvals` | List statements recorded for a manifest |
+| POST | `/manifests/{id}/approvals/evaluate` | Dry-run quorum evaluation, does not issue a grant |
+| POST | `/manifests/{id}/approve-with-quorum` | Issue a grant if quorum is met (`403` if not) |
 | POST | `/grants/{id}/revoke` | Revoke a grant |
 | POST | `/manifests/{id}/execute` | Commit (blocked with `503` if the kill switch is engaged); if the grant is policy-bundle-bound, the same `policy_bundle_id` must be supplied or the commit fails closed |
 | POST | `/manifests/{id}/verify` | Independently verify the outcome |
