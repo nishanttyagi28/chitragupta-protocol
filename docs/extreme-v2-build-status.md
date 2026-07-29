@@ -61,7 +61,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 21. Adversarial/fuzz testing | **Expanded** | Phase 21 Hypothesis + gaming suites; see below |
 | 22. State-machine model checking | **Implemented** | Bounded exhaustive graph checker; see below |
 | 23. Action Passport V2 | **Implemented** | Additive schema 2.0; see below |
-| 24. Portable evidence / observability | Not started | |
+| 24. Portable evidence / observability | **Implemented** | Offline-verifiable Evidence Packs + advisory observability events; see below |
 | 25. AgentEval failure-memory loop | Not started | v0.1's AgentEval bridge (versioned, neutral export) is unchanged |
 
 ## Phase 1: Effect Intelligence Engine
@@ -622,21 +622,122 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 24: Portable evidence / observability.** Export packs and
-honest observability hooks without inventing third-party product
-integrations.
+**Phase 25: AgentEval failure-memory loop.** Extend the existing v0.1
+AgentEval bridge (`karmasakshi.integrations.agenteval`) with a
+failure-memory loop over exported regression fixtures, keeping the same
+"versioned, neutral, not a compatibility claim" honesty boundary.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 22 (`61dc7bc`, PR #37)
-- current branch: `cursor/phase23-action-passport-v2-ffca`
-- open PR: (pending push)
-- test counts: **724 passed, 8 skipped**; coverage **90.09%**
-- exact next phase: 24 — Portable evidence / observability
+- last merged phase on main: Phase 24 (this phase)
+- branch: `cursor/phase24-portable-evidence-observability`
+- test counts: **768 passed, 8 skipped**; coverage **90.37%**
+- known blockers: none
+- exact next phase: 25 — AgentEval failure-memory loop
+- exact next command: create branch from updated main, implement
+  `karmasakshi.integrations.agenteval` failure-memory extensions
+
+## Phase 24: Portable evidence and observability
+
+**Status: implemented.**
+
+### Files changed
+
+- Added: `src/karmasakshi/portable/{__init__,model,builder,verify}.py`
+- Added: `src/karmasakshi/observability/{__init__,model,sinks}.py`
+- Added: `src/karmasakshi/cli/evidence_pack_cmd.py`
+- Added: `docs/portable-evidence.md`, `docs/observability.md`
+- Added: `tests/unit/test_portable_evidence.py`,
+  `tests/unit/test_observability.py`,
+  `tests/adversarial/test_portable_evidence_gaming.py`,
+  `tests/property/test_portable_evidence_properties.py`
+- Modified: `src/karmasakshi/audit/journal.py` (extracted pure
+  `verify_event_chain()` / new `verify_event_self_consistency()` /
+  public `compute_event_hash()`, no behavior change to
+  `AuditJournal.verify_chain()`), `src/karmasakshi/engine/context.py`
+  (`EngineContext.observability_sink`), `src/karmasakshi/engine/core.py`
+  (`KarmaSakshiEngine.observe()`), `src/karmasakshi/errors/__init__.py`
+  (`PortableEvidenceError`, `EvidencePackAssemblyError`,
+  `EvidencePackTooLargeError`), `src/karmasakshi/cli/app.py`
+  (`evidence-pack` subcommand), `src/karmasakshi/api/routes.py`
+  (`GET /passports/{id}/evidence-pack`, `POST /evidence-pack/verify`),
+  `tests/integration/test_cli.py`, `tests/integration/test_api.py`
+- Docs updated: `docs/security-model.md` (invariant #74, title corrected
+  to "74 Invariants"), `docs/limitations.md`, `docs/api.md`, `docs/cli.md`,
+  `README.md` (also corrected several stale "42 invariants" / "Phases
+  1-15" / "296 passed" references left unmaintained since early phases —
+  pre-existing drift, not introduced this phase), `CHANGELOG.md`
+
+### What landed
+
+- **Portable Evidence Packs** (`karmasakshi.portable`,
+  `evidence_pack.v1` / schema `1.0`): bundles an Action Passport V2,
+  sealed manifest, grant (if any), this manifest's audit event slice,
+  and the public keys needed to re-verify every embedded signature.
+  `verify_evidence_pack()` is fully offline — no live keyring, store, or
+  audit journal consulted — and fails closed on any cross-component
+  mismatch (invariant #74). CLI `evidence-pack build|verify`; API
+  `GET /passports/{id}/evidence-pack` (authenticated),
+  `POST /evidence-pack/verify` (deliberately unauthenticated, like a
+  signature checker).
+- **Observability** (`karmasakshi.observability`): neutral, versioned
+  `ObservabilityEvent` + `NullObservabilitySink` /
+  `InMemoryObservabilitySink` / `JsonlObservabilitySink`.
+  `KarmaSakshiEngine.observe()` is an explicit, non-gating call (same
+  posture as Phase 1's `assess()`) that never writes to the audit
+  journal and never lets a failing sink propagate
+  (`emit_safely()`).
+
+### Design decisions
+
+- **Audit-chain verification has two honest tiers.** The existing
+  `AuditJournal.verify_chain()` (now delegating to
+  `verify_event_chain()`) proves a complete from-genesis hash chain —
+  valid only over the *entire* journal. A pack embeds
+  `events_for_manifest()`, a filtered slice of a shared journal, so it is
+  checked with the weaker `verify_event_self_consistency()` instead
+  (per-event hash integrity + strictly increasing sequence, not a
+  from-genesis chain) — documented explicitly rather than silently
+  applying the wrong guarantee to a filtered subset.
+- **Offline verification proves internal consistency, not provenance** —
+  documented and adversarially tested
+  (`test_offline_verification_does_not_prove_the_pack_reflects_a_real_deployment`)
+  rather than left implicit.
+- **Observability is explicit, not auto-wired.** `engine.observe()` is
+  called by CLI/API at the points that matter to them, mirroring how
+  `assess()` was never wired automatically into `authorize()`/`commit()`
+  — keeps the 2500-line, heavily-tested `engine/core.py` lifecycle
+  methods untouched, at essentially zero regression risk.
+
+### Known limitations
+
+See `docs/portable-evidence.md` and `docs/observability.md` in full;
+summary: a pack embeds at most 10,000 audit events / 256 keys
+(`EvidencePackTooLargeError` beyond that, no silent truncation); a
+revoked key still verifies against an already-generated pack; no
+remote/network observability sink ships yet (local JSONL / in-memory
+only).
+
+### Verification commands
+
+```bash
+ruff check .
+ruff format --check .
+mypy src
+bandit -r src/karmasakshi
+python -m pytest -q
+python -m pytest -q tests/unit/test_portable_evidence.py tests/unit/test_observability.py tests/adversarial/test_portable_evidence_gaming.py tests/property/test_portable_evidence_properties.py
+python -m build && python -m twine check dist/*
+```
+
+Results at the time of this commit: `ruff check`/`ruff format --check`/
+`mypy src`/`bandit` all clean; `pytest -q` → **768 passed, 8 skipped**
+(same Redis-only skips as prior phases); `pytest --cov=karmasakshi
+--cov-fail-under=90` → **90.37%**; `build`/`twine check` clean.
 
 ## Phase 23: Action Passport V2
 
-**Status: implemented on branch.**
+**Status: merged to main (`cd98211`, PR #38).**
 
 ### What landed
 

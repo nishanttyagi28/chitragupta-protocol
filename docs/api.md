@@ -20,8 +20,8 @@ development and demos.
 
 ## Authentication
 
-**Fail closed by default.** Every route except `/health` and `/ready`
-requires either:
+**Fail closed by default.** Every route except `/health`, `/ready`, and
+`POST /evidence-pack/verify` requires either:
 
 - `KARMASAKSHI_API_DEV_MODE=1` set explicitly (unauthenticated local dev —
   the OpenAPI description and the console's base template both label this
@@ -74,6 +74,8 @@ without authentication — see `karmasakshi.api.auth.require_auth` and
 | GET | `/audit` | Full audit timeline |
 | GET | `/audit/verify` | Verify the hash chain |
 | GET | `/passports/{id}?fmt=json\|html\|markdown&version=v1\|v2` | Action Passport (v1 default; v2 = schema 2.0) |
+| GET | `/passports/{id}/evidence-pack` | Build a portable, offline-verifiable Evidence Pack (Phase 24; see docs/portable-evidence.md) |
+| POST | `/evidence-pack/verify` | Independently (fully offline) verify a submitted Evidence Pack -- deliberately unauthenticated |
 | GET | `/kill-switch` | Current status |
 | POST | `/kill-switch/engage` / `/disengage` | Emergency stop for `/execute` |
 

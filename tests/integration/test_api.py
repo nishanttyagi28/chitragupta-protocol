@@ -114,6 +114,80 @@ def test_passport_v2_endpoint(dev_client):
     assert bad.status_code == 400
 
 
+def test_evidence_pack_build_and_verify_endpoints(dev_client):
+    """Phase 24: build a portable Evidence Pack, then independently
+    (and statelessly) verify it via the unauthenticated verify endpoint."""
+    prep = _prepare_payment(dev_client, idempotency_key="idem-evpack-1")
+    assert prep.status_code == 200
+    manifest_id = prep.json()["manifest_id"]
+    approve = _approve(dev_client, manifest_id)
+    grant_id = approve.json()["grant_id"]
+    assert (
+        dev_client.post(
+            f"/manifests/{manifest_id}/execute", json={"grant_id": grant_id}
+        ).status_code
+        == 200
+    )
+    assert dev_client.post(f"/manifests/{manifest_id}/verify").status_code == 200
+
+    pack_response = dev_client.get(f"/passports/{manifest_id}/evidence-pack")
+    assert pack_response.status_code == 200
+    pack = pack_response.json()
+    assert pack["pack_format"] == "evidence_pack.v1"
+    assert pack["manifest_id"] == manifest_id
+    assert len(pack["audit_events"]) > 0
+    assert len(pack["verification_keys"]) >= 1
+
+    verify_response = dev_client.post("/evidence-pack/verify", json=pack)
+    assert verify_response.status_code == 200
+    result = verify_response.json()
+    assert result["all_verified"] is True
+    assert result["reasons"] == []
+
+
+def test_evidence_pack_not_found_for_unknown_manifest(dev_client):
+    resp = dev_client.get("/passports/does-not-exist/evidence-pack")
+    assert resp.status_code == 404
+
+
+def test_evidence_pack_verify_rejects_tampered_pack(dev_client):
+    prep = _prepare_payment(dev_client, idempotency_key="idem-evpack-2")
+    manifest_id = prep.json()["manifest_id"]
+    approve = _approve(dev_client, manifest_id)
+    grant_id = approve.json()["grant_id"]
+    dev_client.post(f"/manifests/{manifest_id}/execute", json={"grant_id": grant_id})
+    dev_client.post(f"/manifests/{manifest_id}/verify")
+
+    pack = dev_client.get(f"/passports/{manifest_id}/evidence-pack").json()
+    pack["pack_hash"] = "sha256:" + ("0" * 64)
+
+    verify_response = dev_client.post("/evidence-pack/verify", json=pack)
+    assert verify_response.status_code == 200
+    result = verify_response.json()
+    assert result["all_verified"] is False
+    assert result["pack_hash_verified"] is False
+
+
+def test_evidence_pack_verify_rejects_malformed_body(dev_client):
+    resp = dev_client.post("/evidence-pack/verify", json={"not": "a pack"})
+    assert resp.status_code == 422
+
+
+def test_evidence_pack_verify_requires_no_authentication(monkeypatch, tmp_path):
+    """The verify endpoint checks a self-contained document, not server
+    state, so a recipient with no account on this deployment can use it."""
+    from karmasakshi.api.app import create_app
+    from karmasakshi.api.auth import DEV_MODE_ENV, TOKEN_ENV
+
+    monkeypatch.delenv(DEV_MODE_ENV, raising=False)
+    monkeypatch.setenv(TOKEN_ENV, "some-secret-token")
+    app = create_app(data_dir=tmp_path / "api-data")
+    client = TestClient(app)
+    resp = client.post("/evidence-pack/verify", json={"not": "a pack"})
+    # Reaches route logic (422 for a malformed body), not blocked by auth (401).
+    assert resp.status_code == 422
+
+
 def _create_policy_bundle(client, bundle_id="bundle-1", **overrides):
     body = {
         "bundle_id": bundle_id,

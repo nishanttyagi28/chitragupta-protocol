@@ -164,6 +164,20 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   versioned passport with deterministic `outcome_status`, content
   `passport_hash`, and optional `tenant_id` (invariant #73). V1 remains
   default. See [docs/action-passport-v2.md](docs/action-passport-v2.md).
+- **Portable Evidence Packs** (`karmasakshi.portable`, `evidence_pack.v1`
+  / schema `1.0`): a self-contained, offline-verifiable bundle (Action
+  Passport V2 + sealed manifest + grant + audit slice + public keys) that
+  a recipient can independently re-verify with no access to the original
+  store, database, or live keyring (invariant #74). CLI
+  `evidence-pack build|verify`; API `GET /passports/{id}/evidence-pack`,
+  unauthenticated `POST /evidence-pack/verify`. See
+  [docs/portable-evidence.md](docs/portable-evidence.md).
+- **Observability** (`karmasakshi.observability`): a neutral, versioned
+  lifecycle event (`ObservabilityEvent`) and pluggable sinks
+  (in-memory, JSON-Lines file). Advisory only — `engine.observe()` never
+  gates a lifecycle transition, is never written to the audit journal,
+  and a failing sink never propagates. See
+  [docs/observability.md](docs/observability.md).
 
 
 ## [0.1.0] - 2026-07-27

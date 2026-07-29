@@ -1,4 +1,4 @@
-# Security Model: the 72 Invariants
+# Security Model: the 74 Invariants
 
 Each invariant below is implemented in a specific, named location and
 verified by at least one named test. This list exists so a reviewer can
@@ -80,6 +80,7 @@ under a minute per row.
 | 71 | Oversized API requests fail closed when resource protection is enabled | `enforce_content_length` / `ResourceProtectionMiddleware` | `test_enforce_content_length_fail_closed`, `test_api_middleware_rejects_oversized` |
 | 72 | Clients exceeding the configured API rate limit fail closed | `FixedWindowRateLimiter` / `ResourceProtectionMiddleware` | `test_rate_limiter_trips` |
 | 73 | Action Passport V2 never classifies executor success alone as `verified_match` | `derive_outcome_status` | `test_adversary_cannot_force_verified_match_from_executor_success_alone`, `test_passport_v2_upgrade_verified_match` |
+| 74 | A portable Evidence Pack fails offline verification if any embedded component (sealed manifest, grant, passport, audit slice) does not cryptographically and referentially match the others -- individually-authentic components spliced from a different manifest are not enough | `verify_evidence_pack()` | `test_cross_pack_sealed_manifest_splice_rejected`, `test_cross_pack_audit_slice_splice_rejected`, `tests/unit/test_portable_evidence.py` |
 
 ## What this table does not claim
 

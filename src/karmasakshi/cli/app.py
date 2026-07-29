@@ -16,6 +16,7 @@ from karmasakshi.cli.compensation_cmd import compensation_app
 from karmasakshi.cli.demo_cmd import demo
 from karmasakshi.cli.doctor_cmd import doctor
 from karmasakshi.cli.envelope_cmd import envelope_app
+from karmasakshi.cli.evidence_pack_cmd import evidence_pack_app
 from karmasakshi.cli.execute_cmd import compensate, execute
 from karmasakshi.cli.execute_cmd import verify as execute_verify
 from karmasakshi.cli.grant_cmd import grant_app
@@ -42,6 +43,7 @@ app.add_typer(key_app, name="key")
 app.add_typer(policy_app, name="policy")
 app.add_typer(approvals_app, name="approvals")
 app.add_typer(witness_app, name="witness")
+app.add_typer(evidence_pack_app, name="evidence-pack")
 
 
 @app.callback()

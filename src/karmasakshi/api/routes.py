@@ -75,6 +75,7 @@ from karmasakshi.passports import (
     render_passport_v2_markdown,
 )
 from karmasakshi.policy import seal_policy_bundle, verify_policy_bundle
+from karmasakshi.portable import EvidencePack, build_evidence_pack, verify_evidence_pack
 
 router = APIRouter()
 
@@ -1214,6 +1215,62 @@ def get_passport(
 
         return PlainTextResponse(render_passport_markdown(passport))
     return passport.model_dump(mode="json")
+
+
+@router.get("/passports/{manifest_id}/evidence-pack", dependencies=[Depends(require_auth)])
+def get_evidence_pack(manifest_id: str, request: Request) -> Any:
+    """Build a self-contained, offline-verifiable Evidence Pack (Phase 24):
+    Action Passport V2 + sealed manifest + grant (if any) + this manifest's
+    audit event slice + the public keys needed to re-verify every embedded
+    signature -- with no further calls back to this API required. See
+    docs/portable-evidence.md.
+    """
+    state = _state(request)
+    sealed = state.sealed_manifests.get(manifest_id)
+    if sealed is None:
+        raise HTTPException(404, "manifest not found")
+    grant_ids = state.grants_by_manifest.get(manifest_id, [])
+    grant = state.grants[grant_ids[-1]] if grant_ids else None
+    lifecycle_state = state.engine.get_lifecycle_state(manifest_id).value
+    passport = build_passport_v2(
+        sealed=sealed,
+        keyring=state.keyring,
+        audit=state.engine.context.audit,
+        lifecycle_state=lifecycle_state,
+        grant=grant,
+        grant_store=state.engine.context.grant_store,
+        commit_result=state.commit_results.get(manifest_id),
+        outcome_proof=state.outcome_proofs.get(manifest_id),
+        compensation_result=state.compensation_results.get(manifest_id),
+        assessment=state.assessments.get(manifest_id),
+        tenant_id=state.engine.context.tenant_id,
+    )
+    pack = build_evidence_pack(
+        passport=passport,
+        sealed_manifest=sealed,
+        audit=state.engine.context.audit,
+        keyring=state.keyring,
+        grant=grant,
+    )
+    return pack.model_dump(mode="json")
+
+
+@router.post("/evidence-pack/verify")
+def post_verify_evidence_pack(pack: dict[str, Any]) -> dict[str, Any]:
+    """Independently (and fully offline) verify a submitted Evidence Pack.
+
+    Uses only the pack's own embedded contents -- no server-side keyring,
+    store, or audit journal is consulted. Deliberately unauthenticated
+    (like a signature checker): a recipient with no account on this
+    deployment can still verify a pack they were handed. See
+    docs/portable-evidence.md.
+    """
+    try:
+        parsed = EvidencePack.model_validate(pack)
+    except (ValueError, TypeError, KarmaSakshiError) as exc:
+        raise HTTPException(422, f"invalid evidence pack: {exc}") from exc
+    result = verify_evidence_pack(parsed)
+    return result.model_dump(mode="json")
 
 
 @router.get("/kill-switch", dependencies=[Depends(require_auth)])

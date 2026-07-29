@@ -11,6 +11,7 @@ from karmasakshi.config.clock import SYSTEM_CLOCK, Clock
 from karmasakshi.config.settings import ClockSkewPolicy
 from karmasakshi.crypto.keyring import Keyring
 from karmasakshi.intelligence.engine import EffectIntelligenceEngine
+from karmasakshi.observability.sinks import ObservabilitySink
 from karmasakshi.outbox.model import OutboxStore
 from karmasakshi.stores.base import GrantStore
 from karmasakshi.stores.lifecycle import LifecycleStore
@@ -44,6 +45,12 @@ class EngineContext:
     #: tenant-scoped artifacts) must present the same ``tenant_id`` or the
     #: engine fails closed. When ``None``, legacy single-tenant behavior.
     tenant_id: str | None = None
+    #: Optional Phase 24 observability sink. When set, ``engine.observe()``
+    #: forwards a neutral :class:`~karmasakshi.observability.model.ObservabilityEvent`
+    #: to it. Advisory only: never consulted by any authorization or commit
+    #: decision, and a raising sink never propagates (see
+    #: ``karmasakshi.observability.sinks.emit_safely``).
+    observability_sink: ObservabilitySink | None = None
 
 
 __all__ = ["EngineContext"]

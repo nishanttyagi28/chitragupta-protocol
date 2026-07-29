@@ -463,3 +463,19 @@ class RequestTooLargeError(ResourceProtectionError):
 
 class RateLimitExceededError(ResourceProtectionError):
     """Client exceeded the configured request rate limit."""
+
+
+# --- Portable evidence packs (extreme-v2 Phase 24) --------------------------------
+
+
+class PortableEvidenceError(KarmaSakshiError):
+    """Base class for portable Evidence Pack errors."""
+
+
+class EvidencePackAssemblyError(PortableEvidenceError):
+    """The artifacts supplied to build an Evidence Pack are inconsistent
+    (e.g. passport and sealed manifest reference different manifest ids)."""
+
+
+class EvidencePackTooLargeError(PortableEvidenceError):
+    """The audit slice or keyring exceeds the pack's embedding ceiling."""

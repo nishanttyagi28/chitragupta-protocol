@@ -159,6 +159,21 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   auto-resets on a timer. It is a reference demo for exploring the
   protocol interactively, not a template for a multi-user production
   service. See [docs/deployment.md](deployment.md#public-sandbox-demo-mode).
+- **Portable Evidence Pack offline verification proves internal
+  consistency, not provenance** (`karmasakshi.portable`): a
+  self-consistent, self-signed pack can be fabricated by anyone who
+  controls key generation and still pass `verify_evidence_pack()`.
+  Recipients who need to know the pack came from a specific organization
+  must separately, independently confirm the embedded `key_id`s are
+  trusted -- this pack alone does not establish that. A revoked key is
+  also not re-checked against current trust status. See
+  [docs/portable-evidence.md](portable-evidence.md).
+- **Observability is advisory and not automatically wired into the
+  lifecycle** (`karmasakshi.observability`): `engine.observe()` must be
+  called explicitly by a caller (CLI/API) at the points that matter to
+  it; nothing calls it automatically from `authorize()`/`commit()`. No
+  remote/network sink ships in this phase -- only in-memory and local
+  JSON-Lines file sinks. See [docs/observability.md](observability.md).
 
 ## What "feature-complete" means here
 
