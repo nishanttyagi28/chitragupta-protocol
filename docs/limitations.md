@@ -112,6 +112,10 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   Witness quorum is optional at PROVE time unless callers invoke
   `prove_with_witness_quorum`. See
   [docs/witness-quorum.md](witness-quorum.md).
+- **Evidence quality evaluation is opt-in** (`karmasakshi.evidence`):
+  adapters do not yet auto-emit `EvidenceRecord`s; callers must wrap
+  `OutcomeProof` with an honest `EvidenceKind`. Sealed evidence-policy
+  bundles are deferred. See [docs/evidence-quality.md](evidence-quality.md).
 - **The public sandbox demo (`KARMASAKSHI_PUBLIC_DEMO=1`) is a single
   shared, in-memory session**, not multi-tenant: every visitor to a given
   deployment sees and can affect the same sandbox state until it

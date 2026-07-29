@@ -255,6 +255,21 @@ class WitnessQuorumNotMetError(WitnessError):
     """Independent witness quorum was not satisfied."""
 
 
+# --- Evidence quality / provenance (extreme-v2 Phase 10) ---------------------
+
+
+class EvidenceError(KarmaSakshiError):
+    """Base class for evidence quality and provenance errors."""
+
+
+class EvidenceQualityError(EvidenceError):
+    """Evidence set failed freshness, provenance, or quality policy checks."""
+
+
+class EvidenceBatchTooLargeError(EvidenceError):
+    """More evidence records were submitted than the policy bound allows."""
+
+
 # --- Saga orchestration (extreme-v2 Phase 8) ---------------------------------
 
 

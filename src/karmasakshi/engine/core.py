@@ -46,6 +46,7 @@ from karmasakshi.errors import (
     AtomicPlanError,
     CompensationBindingError,
     DecisionEnvelopeMismatchError,
+    EvidenceQualityError,
     GrantAudienceError,
     GrantExhaustedError,
     GrantManifestMismatchError,
@@ -60,6 +61,8 @@ from karmasakshi.errors import (
     StaleManifestError,
     WitnessQuorumNotMetError,
 )
+from karmasakshi.evidence.evaluate import evaluate_evidence_quality
+from karmasakshi.evidence.model import EvidenceAssessment, EvidencePolicy, EvidenceRecord
 from karmasakshi.grants.issuer import issue_grant
 from karmasakshi.grants.model import ExecutionGrant, ScopeConstraints
 from karmasakshi.grants.verifier import verify_grant
@@ -1425,6 +1428,77 @@ class KarmaSakshiEngine:
             metadata={
                 "witness_set_hash": result.witness_set_hash or "",
                 "witness_policy_hash": result.witness_policy_hash,
+            },
+        )
+        return result
+
+    # --- EVIDENCE QUALITY (VERIFY/PROVE; extreme-v2 Phase 10) ---------------
+
+    def evaluate_evidence(
+        self,
+        sealed: SealedManifest,
+        *,
+        records: tuple[EvidenceRecord, ...] | list[EvidenceRecord],
+        policy: EvidencePolicy,
+        expected_after_state_digest: str | None,
+    ) -> EvidenceAssessment:
+        """Dry-run evidence quality evaluation (no raise on miss)."""
+        verify_seal(sealed, self._ctx.keyring)
+        result = evaluate_evidence_quality(
+            records,
+            policy,
+            manifest_hash=sealed.seal.manifest_hash,
+            expected_after_state_digest=expected_after_state_digest,
+            now=self._ctx.clock.now(),
+        )
+        self._ctx.audit.record(
+            event_type="evidence.quality_evaluated",
+            decision="acceptable" if result.acceptable else "rejected",
+            manifest_id=sealed.manifest.manifest_id,
+            manifest_hash=sealed.seal.manifest_hash,
+            actor_id=sealed.manifest.actor.principal_id,
+            metadata={
+                "accepted_count": str(len(result.accepted_evidence_ids)),
+                "evidence_set_hash": result.evidence_set_hash or "",
+                "evidence_policy_hash": result.evidence_policy_hash,
+                "strongest_kind": (
+                    result.strongest_kind.value if result.strongest_kind is not None else ""
+                ),
+                "min_kind": policy.min_kind.value,
+            },
+        )
+        return result
+
+    def assert_evidence_quality(
+        self,
+        sealed: SealedManifest,
+        *,
+        records: tuple[EvidenceRecord, ...] | list[EvidenceRecord],
+        policy: EvidencePolicy,
+        expected_after_state_digest: str | None,
+    ) -> EvidenceAssessment:
+        """Assert evidence quality for VERIFY/PROVE acceptance."""
+        result = self.evaluate_evidence(
+            sealed,
+            records=records,
+            policy=policy,
+            expected_after_state_digest=expected_after_state_digest,
+        )
+        if not result.acceptable:
+            reasons = "; ".join(result.rejection_reasons) or "evidence not acceptable"
+            raise EvidenceQualityError(
+                f"evidence quality not acceptable for manifest "
+                f"{sealed.seal.manifest_hash}: {reasons}"
+            )
+        self._ctx.audit.record(
+            event_type="evidence.quality_asserted",
+            decision="acceptable",
+            manifest_id=sealed.manifest.manifest_id,
+            manifest_hash=sealed.seal.manifest_hash,
+            actor_id=sealed.manifest.actor.principal_id,
+            metadata={
+                "evidence_set_hash": result.evidence_set_hash or "",
+                "evidence_policy_hash": result.evidence_policy_hash,
             },
         )
         return result

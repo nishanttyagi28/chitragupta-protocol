@@ -47,7 +47,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 7. Compensation manifests | **Implemented** | Separate Compensation Passports; see below |
 | 8. Saga orchestration | **Implemented** | Multi-grant topo orchestration; see below |
 | 9. Independent witness quorum | **Implemented** | See below |
-| 10. Evidence quality and provenance | Not started | |
+| 10. Evidence quality and provenance | **Implemented** | See below |
 | 11. Deep delegation revocation | Not started | v0.1's one-hop revocation propagation (documented limitation) is unchanged |
 | 12. Authority budgets | Not started | |
 | 13. Durable lifecycle storage | Not started | Lifecycle state remains process-local + audit-journal-reconstructed, as in v0.1 |
@@ -622,21 +622,41 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 10: Evidence quality and provenance.** Typed evidence records,
-freshness/staleness bounds, and provenance binding so VERIFY/PROVE cannot
-accept low-quality or unattributed observations as conclusive.
+**Phase 11: Deep delegation revocation.** Propagate revocation through
+delegation chains beyond the current one-hop limitation.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 8 (`f3f3530`, PR #22); product docs
-  Milestone A drafts merged (`61d6354`, PR #23)
-- current branch: `cursor/phase9-witness-quorum-ffca`
-- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/24
-- latest local green commit: `69e286b` (+ CLI docs follow-up)
-- test counts: **607 passed, 6 skipped**; coverage **90.39%**
+- last merged phase on main: Phase 9 (`d9521d8`, PR #24)
+- current branch: `cursor/phase10-evidence-provenance-ffca`
+- open PR: (pending)
+- latest local green commit: (pending)
+- test counts: pending
 - known blockers: Redis-only skips; pip-audit pytest CVE (dev-only)
-- exact next command after Phase 9 merge: begin Phase 10 from updated `main`
-- exact next phase: 10 — Evidence quality and provenance
+- exact next command after Phase 10 merge: begin Phase 11 from updated `main`
+- exact next phase: 11 — Deep delegation revocation
+
+## Phase 10: Evidence quality and provenance
+
+**Status: implemented on branch.**
+
+### What landed
+
+- `karmasakshi.evidence`: `EvidenceKind` ladder, `EvidenceRecord`,
+  `EvidencePolicy`, `evaluate_evidence_quality` /
+  `assert_evidence_quality`, `evidence_from_outcome_proof`
+- Engine: `evaluate_evidence`, `assert_evidence_quality`
+- Passport optional evidence fields
+- Invariants **#54–#57**
+- Docs: `docs/evidence-quality.md`
+
+### Design decisions
+
+- Default `min_kind=adapter_reobserve` so provider success echoes alone
+  cannot satisfy VERIFY/PROVE evidence policy
+- Adapters not auto-emitting EvidenceRecords yet; callers wrap
+  OutcomeProof with an honest kind
+- Sealed evidence-policy bundles deferred
 
 ## Phase 9: Independent witness quorum
 

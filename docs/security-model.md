@@ -1,4 +1,4 @@
-# Security Model: the 53 Invariants
+# Security Model: the 57 Invariants
 
 Each invariant below is implemented in a specific, named location and
 verified by at least one named test. This list exists so a reviewer can
@@ -60,6 +60,10 @@ under a minute per row.
 | 51 | Actor and subject/executor cannot witness their own effect when the witness policy forbids it (default) | `evaluate_witness_quorum` | `test_actor_cannot_witness_own_effect`, `test_subject_executor_cannot_self_witness` |
 | 52 | Witness digest/policy-hash/expiry/signature failures and oversized batches fail closed and never count toward quorum | `evaluate_witness_quorum` / `WitnessBatchTooLargeError` | `test_digest_mismatch_rejected`, `test_expired_statement_rejected`, `test_batch_too_large_fails_closed`, `test_policy_hash_mismatch_rejected` |
 | 53 | Witness quorum evaluation is deterministic and order-independent; the same authoritative set always yields the same `witness_set_hash` | `evaluate_witness_quorum` | `test_order_independent_hash`, `test_later_statement_wins_per_witness` |
+| 54 | Provider-claim-only evidence cannot satisfy the default evidence policy (`min_kind >= adapter_reobserve`) | `evaluate_evidence_quality` | `test_provider_claim_rejected_by_default_min_kind`, `test_cannot_upgrade_provider_claim_by_relabeling_without_meeting_min_kind` |
+| 55 | Stale evidence (`observed_at` older than `max_age_seconds`) fails closed | `evaluate_evidence_quality` | `test_stale_evidence_rejected`, `test_future_dated_observation_rejected` |
+| 56 | Unattributed evidence and digest/manifest mismatches never count; oversized batches raise | `evaluate_evidence_quality` / `EvidenceBatchTooLargeError` | `test_unattributed_rejected`, `test_digest_mismatch_rejected`, `test_swapped_manifest_hash_never_counts`, `test_batch_too_large` |
+| 57 | Evidence quality evaluation is deterministic and order-independent | `evaluate_evidence_quality` | `test_order_independent` |
 
 ## What this table does not claim
 
