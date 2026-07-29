@@ -31,6 +31,10 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   closed (revocation uncertainty). Cascading “mark all descendants
   revoked” is not implemented — descendants are blocked at commit when an
   ancestor is revoked. See [docs/delegation.md](delegation.md).
+- **Authority budgets are single-process** (extreme-v2 Phase 12).
+  `InMemoryBudgetLedger` provides atomic reserve/commit under a process
+  lock; there is no durable multi-node budget ledger yet (Phase 13+).
+  See [docs/authority-budgets.md](authority-budgets.md).
 - **Compensation is best-effort, never guaranteed.** Some effects
   (irreversible ones by classification, or provider states that don't
   support cancellation, like a settled payment) honestly refuse
@@ -53,7 +57,7 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   walkthrough of all three.
 - **No rate limiting, DoS protection, or resource-exhaustion defense**
   anywhere in the CLI, API, or engine.
-- **No formal verification.** The 45 documented invariants
+- **No formal verification.** The documented invariants
   ([docs/security-model.md](security-model.md)) are backed by unit tests,
   property-based tests (Hypothesis), and adversarial-input tests — not by
   a theorem prover or model checker. Passing tests demonstrate the stated

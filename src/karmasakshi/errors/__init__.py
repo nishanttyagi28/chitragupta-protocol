@@ -275,6 +275,17 @@ class EvidenceBatchTooLargeError(EvidenceError):
     """More evidence records were submitted than the policy bound allows."""
 
 
+# --- Authority budgets (extreme-v2 Phase 12) ---------------------------------
+
+
+class AuthorityBudgetError(KarmaSakshiError):
+    """Base class for authority budget errors."""
+
+
+class AuthorityBudgetExhaustedError(AuthorityBudgetError):
+    """Requested consumption exceeds remaining budget capacity."""
+
+
 # --- Saga orchestration (extreme-v2 Phase 8) ---------------------------------
 
 

@@ -118,6 +118,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   grant stores record lineage; `engine.commit()` walks all ancestors and
   fails closed on revoked ancestors or missing lineage (invariants
   #58–#59). See [docs/delegation.md](docs/delegation.md).
+- **Atomic authority budgets** (`karmasakshi.budget`): shared monetary /
+  count ledgers bound via `ExecutionGrant.authority_budget_id`;
+  `commit()` atomically reserves/consumes (invariants #60–#63).
+  Single-process ledger only. See
+  [docs/authority-budgets.md](docs/authority-budgets.md).
 
 ## [0.1.0] - 2026-07-27
 

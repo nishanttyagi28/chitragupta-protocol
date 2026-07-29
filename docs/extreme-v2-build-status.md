@@ -49,7 +49,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 9. Independent witness quorum | **Implemented** | See below |
 | 10. Evidence quality and provenance | **Implemented** | See below |
 | 11. Deep delegation revocation | **Implemented** | Lineage walk at commit; see below |
-| 12. Authority budgets | Not started | |
+| 12. Authority budgets | **Implemented** | Single-process atomic ledger; see below |
 | 13. Durable lifecycle storage | Not started | Lifecycle state remains process-local + audit-journal-reconstructed, as in v0.1 |
 | 14. Distributed audit journal | Not started | SQLite/Redis backends are v0.1; no new distributed-consensus work |
 | 15. Transactional outbox | Not started | |
@@ -622,20 +622,47 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 12: Atomic authority budgets.** Track consumable authority
-budgets (monetary / count / resource) bound to grants with fail-closed
-exhaustion.
+**Phase 13: Durable lifecycle storage.** Persist lifecycle records beyond
+process-local memory (honest SQLite/Postgres path; no fake multi-node
+claims).
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 10 (`1ab447c`, PR #25)
-- current branch: `cursor/phase11-deep-delegation-revocation-ffca`
-- open PR: (pending)
-- latest local green commit: (pending)
-- test counts: pending full suite
-- known blockers: Redis-only skips; pip-audit pytest CVE (dev-only)
-- exact next command after Phase 11 merge: begin Phase 12 from updated `main`
-- exact next phase: 12 — Atomic authority budgets
+- last merged phase on main: Phase 11 (`739a64f`, PR #26)
+- current branch: `cursor/phase12-authority-budgets-ffca`
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/27
+- latest local green commit: `85e6d7e`
+- test counts: **641 passed, 6 skipped**; coverage **90.15%**
+- known blockers: Redis-only skips; InMemoryBudgetLedger single-process only
+- exact next command after Phase 12 merge: begin Phase 13 from updated `main`
+- exact next phase: 13 — Durable lifecycle storage
+
+## Phase 12: Atomic authority budgets
+
+**Status: implemented on branch.**
+
+### What landed
+
+- `karmasakshi.budget`: `AuthorityBudget` (monetary/count),
+  `InMemoryBudgetLedger` (atomic reserve/release/commit/consume),
+  `resolve_budget_consume_amount` / `require_budget`
+- `ExecutionGrant.authority_budget_id` signed binding; issuer + attenuation
+- `EngineContext.budget_ledger`; authorize paths bind; `commit()` reserves
+  before adapter, commits on success, releases on failure/idempotent replay
+- Invariants **#60–#63**
+- Docs: `docs/authority-budgets.md`
+
+### Design decisions
+
+- Distinct from `scope.max_amount` (per-grant attenuation vs shared ledger)
+- Monetary consume uses `manifest.estimated_cost` only — never invent amount
+- Single-process ledger only; durable multi-node deferred to Phase 13+
+- Delegation inherits parent budget; drop/swap treated as widening
+
+### Local gates
+
+**641 passed, 6 skipped**; coverage **90.19%** (`--cov-fail-under=90`);
+ruff/mypy/bandit/build/twine clean.
 
 ## Phase 11: Deep delegation revocation
 
@@ -647,6 +674,7 @@ exhaustion.
 - `assert_no_revoked_ancestors` (depth/cycle/uncertainty fail-closed)
 - Engine records lineage on authorize/delegate; commit walks ancestors
 - Invariants **#58–#59**
+- Docs: `docs/delegation.md` updated
 
 ## Phase 10: Evidence quality and provenance
 

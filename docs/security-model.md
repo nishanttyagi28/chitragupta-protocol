@@ -1,4 +1,4 @@
-# Security Model: the 59 Invariants
+# Security Model: the 63 Invariants
 
 Each invariant below is implemented in a specific, named location and
 verified by at least one named test. This list exists so a reviewer can
@@ -66,6 +66,10 @@ under a minute per row.
 | 57 | Evidence quality evaluation is deterministic and order-independent | `evaluate_evidence_quality` | `test_order_independent` |
 | 58 | A delegated grant cannot commit if any recorded ancestor is revoked (deep walk, not one-hop only) | `assert_no_revoked_ancestors` in `engine.commit()` | `test_grandparent_revocation_blocks_grandchild_commit` |
 | 59 | Missing intermediate delegation lineage fails closed (revocation uncertainty) | `assert_no_revoked_ancestors` / `DelegationLineageError` | `test_lineage_unknown_fails_closed_for_delegated_grant` |
+| 60 | A grant bound to an authority budget cannot commit when remaining capacity is insufficient | `engine.commit()` budget reserve | `test_budget_exhaustion_blocks_second_commit`, `test_shared_budget_across_two_grants_is_atomic` |
+| 61 | Concurrent budget reserves cannot oversubscribe a single-process ledger | `InMemoryBudgetLedger.reserve` lock | `test_concurrent_reserves_do_not_oversubscribe` |
+| 62 | Delegation cannot drop or swap a parent `authority_budget_id` | `assert_grant_narrower_or_equal` | `test_delegate_inherits_budget_and_rejects_swap` |
+| 63 | Binding a budget without a ledger or to an unknown id fails closed | `require_budget` / authorize + commit | `test_unknown_budget_at_authorize_fails_closed`, `test_budget_without_ledger_fails_closed`, `test_cannot_bind_budget_then_remove_ledger_at_commit` |
 
 ## What this table does not claim
 
