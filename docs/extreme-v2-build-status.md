@@ -592,6 +592,10 @@ Results at the time of this commit: `ruff check`/`ruff format --check`/
 `pip-audit` → same 1 known dev-only `pytest` CVE as prior phases
 (unresolved).
 
+### Commit SHAs / PR
+
+- `57371d7` — Phase 6: Atomic plan authorization / constrained decision envelopes
+
 ### Session baseline (this agent, before Phase 6)
 
 Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
@@ -608,8 +612,8 @@ seals/grants; distinguish compensation attempted vs verified.
 
 - last merged phase on main at session start: Phase 5 (`eb94aab`)
 - current branch: `cursor/phase6-decision-envelopes-ffca`
-- open PR: (to be filled after push)
-- latest green commit on this branch: (to be filled after commit)
+- open PR: (pending create; branch `cursor/phase6-decision-envelopes-ffca`)
+- latest green commit on this branch: `57371d7`
 - test counts: **543 passed, 6 skipped**
 - known blockers: Redis-only skips (no local Redis); pip-audit pytest CVE
   (dev-only); Docker not required for this phase
