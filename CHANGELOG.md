@@ -130,6 +130,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Distributed audit journal abstraction**: stabilized `AuditBackend`
   protocol; optional `RedisAuditBackend` with Lua sequence-checked
   append (not Raft/etcd). See [docs/audit-journal.md](docs/audit-journal.md).
+- **Production signer interfaces** (`Signer` / `LocalDevSigner` /
+  `EmulatedKmsSigner`): honest KMS-shaped local emulators; no real
+  cloud KMS. See [docs/production-signers.md](docs/production-signers.md).
 - **Transactional outbox** (`karmasakshi.outbox`): durable commit intent
   (`pending` / `confirmed` / `abandoned`) with crash-recovery wiring.
   Not exactly-once. See [docs/transactional-outbox.md](docs/transactional-outbox.md).

@@ -49,6 +49,9 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   adds a separately authorized compensation path and Compensation
   Passports ([docs/compensation-manifests.md](compensation-manifests.md));
   that path still cannot invent provider rollback that does not exist.
+- **No real cloud KMS/HSM.** Phase 16 adds `Signer` / `LocalDevSigner` /
+  `EmulatedKmsSigner` (local Ed25519 only). See
+  [docs/production-signers.md](production-signers.md).
 - **No production key management.** Dev-mode key generation writes raw
   private key bytes to a local file with best-effort file permissions.
   There's no HSM/KMS integration, no automated rotation workflow, and no
