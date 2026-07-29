@@ -218,7 +218,16 @@ def test_sqlite_outbox_edge_paths(tmp_path: Path, fixed_clock):
         "INSERT INTO commit_outbox("
         "idempotency_key, grant_id, manifest_id, manifest_hash, status, "
         "created_at, outcome_ref, schema_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        ("bad", "g", "m", "sha256:" + "e" * 64, "weird", fixed_clock.now().isoformat(), None, "1.0"),
+        (
+            "bad",
+            "g",
+            "m",
+            "sha256:" + "e" * 64,
+            "weird",
+            fixed_clock.now().isoformat(),
+            None,
+            "1.0",
+        ),
     )
     store._conn.commit()
     from karmasakshi.errors import StoreUnavailableError
