@@ -1,4 +1,4 @@
-# Security Model: the 68 Invariants
+# Security Model: the 70 Invariants
 
 Each invariant below is implemented in a specific, named location and
 verified by at least one named test. This list exists so a reviewer can
@@ -75,6 +75,8 @@ under a minute per row.
 | 66 | Effect types outside the declared adapter capability fail closed at prepare/commit/verify | `TrustedAdapterRegistry.require_effect` | `test_undeclared_effect_type_fails_closed`, `test_commit_rejects_effect_type_outside_capability` |
 | 67 | Revoked adapter registry entries fail closed until explicitly re-registered | `TrustedAdapterRegistry.revoke` | `test_revoked_adapter_fails_closed`, `test_re_register_clears_revocation_explicitly` |
 | 68 | Adapter conformance kit rejects adapters that treat `CommitResult.success` as independent verification | `AdapterConformanceKit._check_verify_before_commit` | `test_dishonest_adapter_fails_conformance`, `test_payment_simulator_passes_conformance` |
+| 69 | Cross-tenant policy or resource access fails closed when tenant context is configured | `assert_tenant_match` / `engine._enforce_policy_tenant` / `MultiTenantControlPlane.reject_cross_tenant` | `test_assert_tenant_match_fail_closed_on_uncertainty`, `test_cross_tenant_policy_bundle_blocked_at_authorize`, `test_control_plane_isolates_states` |
+| 70 | Unknown or suspended tenants fail closed | `TenantRegistry.require` | `test_unknown_and_suspended_tenant_fail_closed` |
 
 ## What this table does not claim
 

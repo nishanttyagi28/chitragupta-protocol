@@ -145,6 +145,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   contract checks including forged-success rejection before commit
   (invariant #68). Not a cloud-provider certification. See
   [docs/adapter-conformance.md](docs/adapter-conformance.md).
+- **Multi-tenant control plane** (`Tenant` / `TenantRegistry` /
+  `MultiTenantControlPlane`): process-local org isolation; policy
+  tenant binding on `EngineContext.tenant_id` (invariants #69–#70). See
+  [docs/multi-tenant.md](docs/multi-tenant.md).
 
 
 ## [0.1.0] - 2026-07-27

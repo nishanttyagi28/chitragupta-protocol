@@ -78,7 +78,10 @@ an adapter capability declaration (Phase 17 —
 [docs/trusted-adapter-registry.md](trusted-adapter-registry.md);
 `facts_from_capability()` merges registry declarations into
 `AssessmentFacts`), and a
-tenant/policy service (Phase 19, not yet implemented).
+tenant/policy service (Phase 19 —
+[docs/multi-tenant.md](multi-tenant.md); `EngineContext.tenant_id` +
+`MultiTenantControlPlane` enforce isolation; `cross_tenant` scoring
+remains advisory).
 
 ## Output: `EffectAssessment`
 

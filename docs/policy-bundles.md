@@ -37,11 +37,11 @@ content (not just the same `bundle_id`) is presented again.
   a later phase (M-of-N authorization) is what will make unmet
   requirements (approval counts, witness quorum) structurally block a
   commit.
-- **Not multi-tenant-aware in enforcement.** `PolicyBundle.tenant_id` is
-  a metadata field; nothing currently uses it to restrict which
-  tenant's grants may reference which bundles (see
-  [docs/effect-intelligence.md](effect-intelligence.md)'s note on
-  `cross_tenant` and Phase 19 in the build ledger).
+- **Not multi-tenant-aware in enforcement until Phase 19.** When
+  `EngineContext.tenant_id` is set, `PolicyBundle.tenant_id` must match
+  (fail closed on uncertainty / mismatch). See
+  [docs/multi-tenant.md](multi-tenant.md). Omitting engine tenant_id
+  preserves legacy single-tenant behaviour.
 
 ## Domain model (`karmasakshi/policy/bundle.py`)
 

@@ -40,6 +40,10 @@ class EngineContext:
     #: capability-mismatched adapters. When ``None``, callers may pass any
     #: adapter instance (v0.1 / Phases 1-16 behavior).
     adapter_registry: TrustedAdapterRegistry | None = None
+    #: Optional Phase 19 tenant binding. When set, policy bundles (and other
+    #: tenant-scoped artifacts) must present the same ``tenant_id`` or the
+    #: engine fails closed. When ``None``, legacy single-tenant behavior.
+    tenant_id: str | None = None
 
 
 __all__ = ["EngineContext"]

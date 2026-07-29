@@ -65,6 +65,7 @@ from karmasakshi.errors import (
     SeparationOfDutyViolationError,
     StaleManifestError,
     StoreUnavailableError,
+    TenantIsolationError,
     UntrustedAdapterError,
     WitnessQuorumNotMetError,
 )
@@ -100,6 +101,7 @@ from karmasakshi.saga.model import (
 )
 from karmasakshi.state_machine.record import LifecycleRecord
 from karmasakshi.state_machine.states import LifecycleState, is_revocable
+from karmasakshi.tenant.enforce import bind_engine_and_policy_tenant
 from karmasakshi.witness.model import WitnessPolicy, WitnessQuorumResult, WitnessStatement
 from karmasakshi.witness.quorum import evaluate_witness_quorum
 
@@ -305,6 +307,24 @@ class KarmaSakshiEngine:
         else:
             registry.require_effect(adapter.adapter_id, adapter.adapter_version, effect_type)
 
+    def _enforce_policy_tenant(self, policy_bundle: SealedPolicyBundle | None) -> None:
+        """Fail closed on tenant uncertainty / cross-tenant policy use (Phase 19).
+
+        When neither the engine nor the bundle declares a tenant, legacy
+        single-tenant behaviour is preserved. When either declares one, both
+        must be present and equal.
+        """
+        if policy_bundle is None and self._ctx.tenant_id is None:
+            return
+        policy_tenant = None if policy_bundle is None else policy_bundle.bundle.tenant_id
+        try:
+            bind_engine_and_policy_tenant(
+                engine_tenant_id=self._ctx.tenant_id,
+                policy_tenant_id=policy_tenant,
+            )
+        except TenantIsolationError:
+            raise
+
     # --- PREPARE --------------------------------------------------------------
 
     def prepare(self, adapter: EffectAdapter, request: Any, context: Any) -> EffectManifest:
@@ -477,6 +497,7 @@ class KarmaSakshiEngine:
                     metadata={"bundle_id": policy_bundle.bundle.bundle_id},
                 )
                 raise
+            self._enforce_policy_tenant(policy_bundle)
         policy_bundle_hash = policy_bundle.seal.bundle_hash if policy_bundle is not None else None
 
         combined_roles = base_role_assignment(
@@ -605,6 +626,7 @@ class KarmaSakshiEngine:
                     metadata={"bundle_id": policy_bundle.bundle.bundle_id},
                 )
                 raise
+            self._enforce_policy_tenant(policy_bundle)
         policy_bundle_hash = policy_bundle.seal.bundle_hash if policy_bundle is not None else None
 
         combined_roles = base_role_assignment(
@@ -728,6 +750,7 @@ class KarmaSakshiEngine:
                     metadata={"bundle_id": policy_bundle.bundle.bundle_id},
                 )
                 raise
+            self._enforce_policy_tenant(policy_bundle)
         policy_bundle_hash = policy_bundle.seal.bundle_hash if policy_bundle is not None else None
 
         combined_roles = base_role_assignment(
@@ -983,6 +1006,7 @@ class KarmaSakshiEngine:
                     metadata={"bundle_id": policy_bundle.bundle.bundle_id},
                 )
                 raise
+            self._enforce_policy_tenant(policy_bundle)
         policy_bundle_hash = policy_bundle.seal.bundle_hash if policy_bundle is not None else None
 
         try:
@@ -1194,6 +1218,23 @@ class KarmaSakshiEngine:
                             f"({policy_bundle.seal.bundle_hash}) was presented at commit time"
                         ),
                     )
+                try:
+                    self._enforce_policy_tenant(policy_bundle)
+                except TenantIsolationError as exc:
+                    deny(
+                        "tenant.policy_isolation",
+                        "blocked_tenant_isolation",
+                        exc,
+                    )
+        elif self._ctx.tenant_id is not None and policy_bundle is not None:
+            try:
+                self._enforce_policy_tenant(policy_bundle)
+            except TenantIsolationError as exc:
+                deny(
+                    "tenant.policy_isolation",
+                    "blocked_tenant_isolation",
+                    exc,
+                )
 
         if grant.decision_envelope_hash is not None:
             if decision_envelope is None:
