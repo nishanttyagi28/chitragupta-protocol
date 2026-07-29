@@ -2,11 +2,26 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from karmasakshi.gateway.models import GatewayUserRole, OrganizationStatus
+
+#: Same charset `karmasakshi.domain.common.Principal.principal_id` requires
+#: -- `user_id` doubles as the refund-journey's approving/activating
+#: Principal identity (see `karmasakshi.gateway.refunds`), so it must be
+#: constructible as one.
+PRINCIPAL_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+
+
+def validate_principal_safe_id(value: str) -> str:
+    if not value or not PRINCIPAL_SAFE_ID_RE.match(value):
+        raise ValueError(
+            "must be 1-128 chars, start alphanumeric, and contain only [A-Za-z0-9._:-]"
+        )
+    return value
 
 
 class OrganizationBootstrapIn(BaseModel):
@@ -59,6 +74,11 @@ class GatewayUserCreateIn(BaseModel):
     password: str
     role: GatewayUserRole = GatewayUserRole.MEMBER
 
+    @field_validator("user_id")
+    @classmethod
+    def _validate_user_id(cls, v: str) -> str:
+        return validate_principal_safe_id(v)
+
 
 class LoginIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -83,6 +103,7 @@ class UserListOut(BaseModel):
 
 
 __all__ = [
+    "PRINCIPAL_SAFE_ID_RE",
     "GatewayUserCreateIn",
     "GatewayUserOut",
     "LoginIn",
@@ -91,4 +112,5 @@ __all__ = [
     "OrganizationBootstrapOut",
     "OrganizationOut",
     "UserListOut",
+    "validate_principal_safe_id",
 ]

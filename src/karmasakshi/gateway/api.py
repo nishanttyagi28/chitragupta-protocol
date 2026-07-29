@@ -17,6 +17,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from karmasakshi.api.auth import require_auth
+from karmasakshi.api.state import ApiState
 from karmasakshi.errors import (
     CrossOrganizationAccessError,
     GatewayAuthenticationError,
@@ -25,6 +26,7 @@ from karmasakshi.errors import (
     OrganizationAlreadyExistsError,
     OrganizationNotFoundError,
     OrganizationSuspendedError,
+    TenantIsolationError,
 )
 from karmasakshi.gateway.models import GatewayUser, GatewayUserRole, Organization
 from karmasakshi.gateway.schemas import (
@@ -39,6 +41,8 @@ from karmasakshi.gateway.schemas import (
 )
 from karmasakshi.gateway.sessions import GatewaySessionStore
 from karmasakshi.gateway.store import GatewayStore
+from karmasakshi.tenant.control_plane import MultiTenantControlPlane
+from karmasakshi.tenant.model import Tenant
 
 router = APIRouter(prefix="/gateway", tags=["gateway"])
 
@@ -47,6 +51,12 @@ router = APIRouter(prefix="/gateway", tags=["gateway"])
 class GatewayApiState:
     store: GatewayStore
     sessions: GatewaySessionStore = field(default_factory=GatewaySessionStore)
+    #: Gives each organization its own isolated protocol engine, adapters,
+    #: grant store, and audit journal (reuses Phase 19's multi-tenant
+    #: control plane -- karmasakshi.gateway.Organization and
+    #: karmasakshi.tenant.Tenant are separate models sharing the same
+    #: org_id/tenant_id string; see docs/gateway.md).
+    control_plane: MultiTenantControlPlane = field(default_factory=MultiTenantControlPlane)
 
 
 def _state(request: Request) -> GatewayApiState:
@@ -101,13 +111,29 @@ def _assert_org_scope(request: Request, user: GatewayUser, org_id: str) -> None:
         raise HTTPException(403, str(exc)) from exc
 
 
+def resolve_org_runtime(request: Request, user: GatewayUser, org_id: str) -> ApiState:
+    """Verify ``user``'s session actually belongs to ``org_id`` (fails
+    closed, 403, otherwise), then return that organization's isolated
+    protocol engine/adapters/audit state. The single entry point every
+    org-scoped, non-Gateway-model endpoint (e.g. the refund journey in
+    `karmasakshi.gateway.refunds`) should use."""
+    _assert_org_scope(request, user, org_id)
+    state = _state(request)
+    try:
+        return state.control_plane.get_state(org_id)
+    except TenantIsolationError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
 @router.post("/organizations", dependencies=[Depends(require_auth)])
 def bootstrap_organization(
     body: OrganizationBootstrapIn, request: Request
 ) -> OrganizationBootstrapOut:
-    """Create a new organization together with its first (owner) user.
-    Platform-operator action -- gated by the control plane's own
-    dev-mode/token auth, not a Gateway session (there is no user yet)."""
+    """Create a new organization together with its first (owner) user, and
+    provision its isolated protocol engine/adapters/audit state (Phase 19
+    multi-tenant control plane). Platform-operator action -- gated by the
+    control plane's own dev-mode/token auth, not a Gateway session (there
+    is no user yet)."""
     state = _state(request)
     try:
         org = state.store.create_organization(body.org_id, body.name)
@@ -122,6 +148,12 @@ def bootstrap_organization(
     except OrganizationAlreadyExistsError as exc:
         raise HTTPException(409, str(exc)) from exc
     except GatewayUserAlreadyExistsError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    try:
+        state.control_plane.create_tenant(
+            Tenant(tenant_id=body.org_id, display_name=body.name, created_at=org.created_at)
+        )
+    except TenantIsolationError as exc:
         raise HTTPException(409, str(exc)) from exc
     return OrganizationBootstrapOut(
         organization=_organization_out(org),
@@ -207,4 +239,4 @@ def create_organization_user(
     return _user_out(created)
 
 
-__all__ = ["GatewayApiState", "require_gateway_session", "router"]
+__all__ = ["GatewayApiState", "require_gateway_session", "resolve_org_runtime", "router"]

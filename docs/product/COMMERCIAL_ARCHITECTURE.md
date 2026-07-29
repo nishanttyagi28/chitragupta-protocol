@@ -24,15 +24,26 @@
 
 ## Implementation status
 
-`karmasakshi.gateway` (see [docs/gateway.md](../gateway.md)) implements the
-durable organization + user model described above: `Organization`,
-`GatewayUser`, explicit versioned SQLite migrations, and local
-development authentication (PBKDF2, fails closed on cross-organization
-access), plus an HTTP API (`/gateway/organizations`, `/gateway/auth/login`,
-org-scoped user management with session tokens). Not yet wired to the
-refund vertical slice (agent/adapter/policy registration, the effect
-lifecycle) or the Control Center UI — see `docs/product/BUILD_STATUS.md`
-for what remains.
+`karmasakshi.gateway` (see [docs/gateway.md](../gateway.md)) implements:
+
+- The durable organization + user model: `Organization`, `GatewayUser`,
+  explicit versioned SQLite migrations, and local development
+  authentication (PBKDF2, fails closed on cross-organization access).
+- The Gateway HTTP API: `/gateway/organizations`, `/gateway/auth/login`,
+  org-scoped user management with session tokens.
+- The refund vertical slice, wired to a per-organization isolated
+  protocol engine (reusing Phase 19's `MultiTenantControlPlane`, so
+  "Organization is the isolation boundary" and "cross-tenant reads fail
+  closed" above are exercised, not just aspirational): signed
+  organization policy activation, propose → assess → approve → commit →
+  verify → passport → evidence-pack, plus honest ambiguous-outcome
+  recovery and compensation as a separate authorized effect.
+
+Not yet built: the Control Center UI, durable agent/adapter registries
+(an agent is currently just a `principal_id` string), multi-approver
+quorum, and the typed SDK. See `docs/product/BUILD_STATUS.md` for what
+remains before `docs/product/MVP_ACCEPTANCE.md` can be automated end to
+end.
 
 ## Evaluation modes
 
