@@ -123,6 +123,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `commit()` atomically reserves/consumes (invariants #60–#63).
   Single-process ledger only. See
   [docs/authority-budgets.md](docs/authority-budgets.md).
+- **Durable lifecycle storage** (`LifecycleStore`): optional SQLite
+  single-node write-through for current lifecycle state; audit remains
+  the tamper-evident record. See
+  [docs/durable-lifecycle-storage.md](docs/durable-lifecycle-storage.md).
 
 ## [0.1.0] - 2026-07-27
 

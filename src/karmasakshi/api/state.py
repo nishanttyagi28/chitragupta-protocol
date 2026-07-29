@@ -1,10 +1,11 @@
 """In-process control-plane state.
 
-This is intentionally process-local (no external database) -- the durable
-record of what happened is always the audit journal (SQLite-backed by
-default), same as the CLI. Suitable for a single control-plane instance;
-horizontal scaling would need a shared GrantStore (Redis) and a shared
-audit backend, which the engine already supports (see docs/storage-semantics.md).
+Principals, manifests, and grants held here are process-local caches.
+Durable protocol state uses SQLite under ``data_dir``: grant store,
+audit journal, and (Phase 13) lifecycle store. Suitable for a single
+control-plane instance; horizontal scaling would need shared backends
+(see docs/storage-semantics.md). The audit journal remains the
+tamper-evident record of what happened.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from karmasakshi.envelope.model import DecisionEnvelope
 from karmasakshi.grants.model import ExecutionGrant
 from karmasakshi.intelligence.model import EffectAssessment
 from karmasakshi.policy.bundle import SealedPolicyBundle
+from karmasakshi.stores.lifecycle_sqlite import SQLiteLifecycleStore
 from karmasakshi.stores.sqlite import SQLiteGrantStore
 from karmasakshi.witness.model import WitnessStatement
 
@@ -78,6 +80,7 @@ def build_default_state(data_dir: Path | None = None) -> ApiState:
             keyring=keyring,
             grant_store=SQLiteGrantStore(data_dir / "grants.db"),
             audit=AuditJournal(backend=SQLiteAuditBackend(data_dir / "audit.db")),
+            lifecycle_store=SQLiteLifecycleStore(data_dir / "lifecycle.db"),
         )
     )
 

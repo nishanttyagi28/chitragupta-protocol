@@ -50,7 +50,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 10. Evidence quality and provenance | **Implemented** | See below |
 | 11. Deep delegation revocation | **Implemented** | Lineage walk at commit; see below |
 | 12. Authority budgets | **Implemented** | Single-process atomic ledger; see below |
-| 13. Durable lifecycle storage | Not started | Lifecycle state remains process-local + audit-journal-reconstructed, as in v0.1 |
+| 13. Durable lifecycle storage | **Implemented** | SQLite single-node lifecycle store; see below |
 | 14. Distributed audit journal | Not started | SQLite/Redis backends are v0.1; no new distributed-consensus work |
 | 15. Transactional outbox | Not started | |
 | 16. Production signer interface | Not started | Ed25519 dev keys only, as in v0.1 |
@@ -622,24 +622,50 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 13: Durable lifecycle storage.** Persist lifecycle records beyond
-process-local memory (honest SQLite/Postgres path; no fake multi-node
-claims).
+**Phase 14: Distributed audit journal abstraction.** Honest multi-backend
+audit journal interface without inventing consensus.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 11 (`739a64f`, PR #26)
-- current branch: `cursor/phase12-authority-budgets-ffca`
-- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/27
-- latest local green commit: `85e6d7e`
-- test counts: **641 passed, 6 skipped**; coverage **90.15%**
-- known blockers: Redis-only skips; InMemoryBudgetLedger single-process only
-- exact next command after Phase 12 merge: begin Phase 13 from updated `main`
-- exact next phase: 13 — Durable lifecycle storage
+- last merged phase on main: Phase 12 (`504e7aa`, PR #27)
+- current branch: `cursor/phase13-durable-lifecycle-ffca`
+- open PR: (pending push)
+- latest local green: **646 passed, 6 skipped**; coverage **90.03%**;
+  ruff/mypy/bandit/build/twine clean
+- known blockers: Redis-only skips; pip-audit pytest CVE (dev-only);
+  lifecycle SQLite is single-node only
+- exact next command after Phase 13 merge: begin Phase 14 from updated `main`
+- exact next phase: 14 — Distributed audit journal abstraction
+
+## Phase 13: Durable lifecycle storage
+
+**Status: implemented on branch.**
+
+### What landed
+
+- `LifecycleStore` protocol + `InMemoryLifecycleStore` +
+  `SQLiteLifecycleStore` (`lifecycle.db`)
+- `EngineContext.lifecycle_store`; write-through on transition with
+  memory rollback on store failure; hydrate on `_get_record`
+- CLI workspace + API default state open lifecycle.db
+- Reconstruct prefers store, audit fallback for pre-Phase-13 workspaces
+- Invariant **#64**
+- Docs: `docs/durable-lifecycle-storage.md`
+
+### Design decisions
+
+- Audit journal remains tamper-evident source of truth for *what happened*
+- Lifecycle store is durable convenience state for the *next* transition
+- No Redis / multi-node lifecycle claims
+- Saga/budget/witness durability remain separate follow-ons
+
+### Local gates
+
+**646 passed, 6 skipped**; coverage **90.03%**.
 
 ## Phase 12: Atomic authority budgets
 
-**Status: implemented on branch.**
+**Status: merged to main (`504e7aa`, PR #27).**
 
 ### What landed
 
@@ -656,12 +682,12 @@ claims).
 
 - Distinct from `scope.max_amount` (per-grant attenuation vs shared ledger)
 - Monetary consume uses `manifest.estimated_cost` only — never invent amount
-- Single-process ledger only; durable multi-node deferred to Phase 13+
+- Single-process ledger only; durable multi-node deferred
 - Delegation inherits parent budget; drop/swap treated as widening
 
 ### Local gates
 
-**641 passed, 6 skipped**; coverage **90.19%** (`--cov-fail-under=90`);
+**641 passed, 6 skipped**; coverage **90.15%** (`--cov-fail-under=90`);
 ruff/mypy/bandit/build/twine clean.
 
 ## Phase 11: Deep delegation revocation
