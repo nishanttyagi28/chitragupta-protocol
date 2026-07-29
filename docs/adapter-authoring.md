@@ -92,8 +92,11 @@ The CLI's `adapter_factory.py` and the API's `ApiState.adapters` dict are
 examples of *callers* wiring up adapters; the API default state also
 installs `build_reference_registry()`.
 
-## Reference implementations
+## Conformance kit
 
-`adapters/sqlite_db.py`, `adapters/email_sandbox.py`,
-`adapters/payment_simulator.py` are complete, tested reference adapters —
-read them before writing your own.
+Third-party adapters should run
+[`run_adapter_conformance`](adapter-conformance.md) (extreme-v2 Phase 18)
+against a representative request before claiming compatibility. The kit
+checks identity binding, TOCTOU-shaped precondition behaviour, independent
+verification (forged success before commit must not match), and honest
+compensation reporting. Passing is **not** a cloud-provider certification.

@@ -55,7 +55,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 15. Transactional outbox | **Implemented** | Intent vs confirmed; see below |
 | 16. Production signer interface | **Implemented** | Signer protocol + local/emulated backends; no real KMS |
 | 17. Trusted adapter registry | **Implemented** | Versioned allow-list; fail-closed; see below |
-| 18. Adapter conformance kit | Not started | |
+| 18. Adapter conformance kit | **Implemented** | Structural contract checks; see below |
 | 19. Multi-tenant control plane | Not started | `AssessmentFacts.cross_tenant` exists as a scoring input (Phase 1) but nothing enforces tenant isolation |
 | 20. Resource/DoS protection | Not started | |
 | 21. Adversarial/fuzz testing | Partial | Phase 1's own scoring engine has adversarial + property coverage; no new coverage added for pre-existing v0.1 components beyond the baseline fix |
@@ -622,19 +622,41 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 18: Adapter conformance kit.** Deterministic conformance tests
-for EffectAdapter contract honesty (prepare/commit/verify/compensate
-invariants) against reference and third-party adapters.
+**Phase 19: Multi-tenant control plane.** Tenant isolation for
+organizations / API tokens / audit and lifecycle scoping. Fail closed on
+tenant uncertainty.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 16 (`f94c861`, PR #31)
-- current branch: `cursor/phase17-trusted-adapter-registry-ffca`
-- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/32
-- latest green commit (local): `604b6fb`
-- test counts: **683 passed, 8 skipped**; coverage **90.18%**
+- last merged phase on main: Phase 17 (`6f697ed`, PR #32)
+- current branch: `cursor/phase18-adapter-conformance-kit-ffca`
+- open PR: (pending)
+- test counts: **688 passed, 8 skipped**; coverage **90.10%**
 - quality gates: ruff / mypy / bandit / build / twine clean
-- exact next phase: 18 — Adapter conformance kit
+- exact next phase: 19 — Multi-tenant control plane
+
+## Phase 18: Adapter conformance kit
+
+**Status: implemented on branch.**
+
+### What landed
+
+- `AdapterConformanceKit` / `run_adapter_conformance` / `ConformanceScenario`
+- Checks: identity, prepare binding, preconditions/TOCTOU, forged-success
+  rejection before commit, commit shape, compensation honesty
+- Reference adapters pass; dishonest adapter fails (invariant #68)
+- Docs: `docs/adapter-conformance.md`
+
+### Design decisions
+
+- Structural in-process checks only — not a cloud-provider certification
+- Forged `CommitResult.success` before commit must not yield
+  `matched_expected=True`
+
+### Verification (this branch)
+
+- `pytest`: **688 passed, 8 skipped**; coverage **90.10%** (branch)
+- `ruff` / `mypy` / `bandit` / `build` / `twine`: clean
 
 ## Phase 17: Trusted adapter registry
 

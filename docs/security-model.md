@@ -1,4 +1,4 @@
-# Security Model: the 67 Invariants
+# Security Model: the 68 Invariants
 
 Each invariant below is implemented in a specific, named location and
 verified by at least one named test. This list exists so a reviewer can
@@ -74,6 +74,7 @@ under a minute per row.
 | 65 | Unknown or version-mismatched adapters fail closed when a trusted registry is configured | `TrustedAdapterRegistry.require` / `engine._require_trusted_adapter` | `test_unknown_adapter_fails_closed`, `test_version_pin_is_exact`, `test_prepare_and_commit_fail_closed_for_untrusted_adapter` |
 | 66 | Effect types outside the declared adapter capability fail closed at prepare/commit/verify | `TrustedAdapterRegistry.require_effect` | `test_undeclared_effect_type_fails_closed`, `test_commit_rejects_effect_type_outside_capability` |
 | 67 | Revoked adapter registry entries fail closed until explicitly re-registered | `TrustedAdapterRegistry.revoke` | `test_revoked_adapter_fails_closed`, `test_re_register_clears_revocation_explicitly` |
+| 68 | Adapter conformance kit rejects adapters that treat `CommitResult.success` as independent verification | `AdapterConformanceKit._check_verify_before_commit` | `test_dishonest_adapter_fails_conformance`, `test_payment_simulator_passes_conformance` |
 
 ## What this table does not claim
 
