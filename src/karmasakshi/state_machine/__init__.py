@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from karmasakshi.state_machine.model_check import (
+    ModelCheckFinding,
+    ModelCheckReport,
+    check_lifecycle_model,
+)
 from karmasakshi.state_machine.record import LifecycleRecord
 from karmasakshi.state_machine.states import (
     REVOCABLE_STATES,
@@ -18,7 +23,10 @@ __all__ = [
     "TRANSITIONS",
     "LifecycleRecord",
     "LifecycleState",
+    "ModelCheckFinding",
+    "ModelCheckReport",
     "assert_legal_transition",
+    "check_lifecycle_model",
     "is_legal_transition",
     "is_revocable",
     "is_terminal",
