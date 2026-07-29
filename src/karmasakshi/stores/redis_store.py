@@ -161,5 +161,33 @@ class RedisGrantStore:
                 f"redis record_idempotent_outcome() failed for key {idempotency_key}"
             ) from exc
 
+    def record_lineage(self, grant_id: str, parent_grant_id: str | None) -> None:
+        try:
+            # Sentinel distinguishes recorded root (empty) from unknown (missing key).
+            value = parent_grant_id if parent_grant_id is not None else ""
+            self._client.set(self._key(grant_id, "parent"), value)
+        except Exception as exc:
+            raise StoreUnavailableError(
+                f"redis record_lineage() failed for grant {grant_id}"
+            ) from exc
+
+    def get_parent_grant_id(self, grant_id: str) -> str | None:
+        try:
+            value = self._client.get(self._key(grant_id, "parent"))
+        except Exception as exc:
+            raise StoreUnavailableError(
+                f"redis get_parent_grant_id() failed for grant {grant_id}"
+            ) from exc
+        decoded = self._decode(value)
+        if decoded is None or decoded == "":
+            return None
+        return decoded
+
+    def has_lineage(self, grant_id: str) -> bool:
+        try:
+            return bool(self._client.exists(self._key(grant_id, "parent")))
+        except Exception as exc:
+            raise StoreUnavailableError(f"redis has_lineage() failed for grant {grant_id}") from exc
+
 
 __all__ = ["RedisGrantStore"]

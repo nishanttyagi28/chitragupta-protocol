@@ -28,6 +28,7 @@ from karmasakshi.compensation.manifest import assert_compensation_binds_original
 from karmasakshi.compensation.status import CompensationStatus
 from karmasakshi.crypto.keys import SigningKey
 from karmasakshi.delegation.attenuation import assert_grant_narrower_or_equal
+from karmasakshi.delegation.revocation import assert_no_revoked_ancestors
 from karmasakshi.domain.common import Principal
 from karmasakshi.domain.manifest import EffectManifest
 from karmasakshi.domain.seal import SealedManifest
@@ -46,6 +47,7 @@ from karmasakshi.errors import (
     AtomicPlanError,
     CompensationBindingError,
     DecisionEnvelopeMismatchError,
+    DelegationLineageError,
     EvidenceQualityError,
     GrantAudienceError,
     GrantExhaustedError,
@@ -113,6 +115,10 @@ class KarmaSakshiEngine:
         self._ctx = context
         self._records: dict[str, LifecycleRecord] = {}
         self._saga_runs: dict[str, SagaRun] = {}
+
+    def _record_grant_lineage(self, grant: ExecutionGrant) -> None:
+        """Persist parent pointer so commit can walk deep revocation (Phase 11)."""
+        self._ctx.grant_store.record_lineage(grant.grant_id, grant.parent_grant_id)
 
     @property
     def context(self) -> EngineContext:
@@ -413,6 +419,7 @@ class KarmaSakshiEngine:
                 **_role_participation_metadata(combined_roles),
             },
         )
+        self._record_grant_lineage(grant)
         return grant
 
     # --- PHASE 6: DECISION ENVELOPES / ATOMIC PLAN AUTHORIZATION ----------
@@ -963,6 +970,7 @@ class KarmaSakshiEngine:
             actor_id=issuer.principal_id,
             metadata={"parent_grant_id": parent.grant_id, "subject": subject.principal_id},
         )
+        self._record_grant_lineage(child)
         return child
 
     # --- COMMIT -----------------------------------------------------------
@@ -1155,22 +1163,32 @@ class KarmaSakshiEngine:
                 GrantRevokedError(f"grant {grant_id} is revoked"),
             )
 
-        if grant.parent_grant_id is not None and self._ctx.grant_store.is_revoked(
-            grant.parent_grant_id
-        ):
-            # One-hop revocation propagation: if the immediate parent capability was
-            # revoked, this delegated grant cannot be used even though it was never
-            # itself revoked. Deeper ancestor chains must be checked explicitly via
-            # karmasakshi.delegation.verify_delegation_chain with the full chain of
-            # grant objects -- the store only tracks revocation by grant_id, not
-            # full lineage, so we cannot walk further than one hop from here alone.
+        # Deep ancestor revocation (Phase 11): walk recorded lineage and fail
+        # closed on any revoked ancestor, missing intermediate lineage, cycles,
+        # or depth overflow. Roots (no parent) are a no-op.
+        try:
+            ancestors = assert_no_revoked_ancestors(grant, self._ctx.grant_store)
+        except (GrantRevokedError, DelegationLineageError) as exc:
             deny(
-                "grant.parent_revoked",
-                "blocked_parent_revoked",
-                GrantRevokedError(
-                    f"grant {grant_id}'s parent grant {grant.parent_grant_id} is revoked"
-                ),
+                "grant.ancestor_revoked"
+                if isinstance(exc, GrantRevokedError)
+                else "grant.lineage_uncertain",
+                "blocked_ancestor_revoked"
+                if isinstance(exc, GrantRevokedError)
+                else "blocked_lineage_uncertain",
+                exc,
             )
+        else:
+            if ancestors:
+                self._ctx.audit.record(
+                    event_type="grant.ancestor_revocation_checked",
+                    decision="ancestors_clear",
+                    manifest_id=manifest_id,
+                    manifest_hash=manifest_hash,
+                    grant_id=grant_id,
+                    actor_id=actor_id,
+                    metadata={"ancestor_count": str(len(ancestors))},
+                )
 
         if not self._ctx.grant_store.reserve(grant_id, grant.max_uses):
             deny(

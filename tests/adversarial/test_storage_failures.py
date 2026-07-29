@@ -17,8 +17,13 @@ from karmasakshi.grants.model import ScopeConstraints
 
 
 class _ExplodingGrantStore:
-    """A GrantStore stand-in where every method raises, simulating a
-    completely unreachable backend (network partition, dead database)."""
+    """A GrantStore stand-in where consumption/revocation methods raise,
+    simulating a completely unreachable backend (network partition, dead
+    database). Lineage recording stays local so authorize can complete and
+    the outage is observed at the commit-time revocation check (Phase 11)."""
+
+    def __init__(self) -> None:
+        self._lineage: dict[str, str | None] = {}
 
     def reserve(self, grant_id, max_uses):
         raise StoreUnavailableError("simulated store outage")
@@ -43,6 +48,15 @@ class _ExplodingGrantStore:
 
     def record_idempotent_outcome(self, idempotency_key, outcome_ref):
         raise StoreUnavailableError("simulated store outage")
+
+    def record_lineage(self, grant_id, parent_grant_id):
+        self._lineage[grant_id] = parent_grant_id
+
+    def get_parent_grant_id(self, grant_id):
+        return self._lineage.get(grant_id)
+
+    def has_lineage(self, grant_id):
+        return grant_id in self._lineage
 
 
 class _FailingAuditBackend:

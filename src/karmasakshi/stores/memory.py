@@ -25,6 +25,8 @@ class InMemoryGrantStore:
     def __init__(self) -> None:
         self._slots: dict[str, _Slot] = {}
         self._idempotency: dict[str, str] = {}
+        # grant_id -> parent_grant_id (None means recorded root)
+        self._lineage: dict[str, str | None] = {}
         self._lock = threading.Lock()
 
     def reserve(self, grant_id: str, max_uses: int) -> bool:
@@ -80,6 +82,18 @@ class InMemoryGrantStore:
     def record_idempotent_outcome(self, idempotency_key: str, outcome_ref: str) -> None:
         with self._lock:
             self._idempotency[idempotency_key] = outcome_ref
+
+    def record_lineage(self, grant_id: str, parent_grant_id: str | None) -> None:
+        with self._lock:
+            self._lineage[grant_id] = parent_grant_id
+
+    def get_parent_grant_id(self, grant_id: str) -> str | None:
+        with self._lock:
+            return self._lineage.get(grant_id)
+
+    def has_lineage(self, grant_id: str) -> bool:
+        with self._lock:
+            return grant_id in self._lineage
 
 
 __all__ = ["InMemoryGrantStore"]

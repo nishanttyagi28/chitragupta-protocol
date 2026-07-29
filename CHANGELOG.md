@@ -114,6 +114,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   independent ledger → witness), freshness bounds, fail-closed
   evaluation (invariants #54–#57). See
   [docs/evidence-quality.md](docs/evidence-quality.md).
+- **Deep delegation revocation** (`karmasakshi.delegation.revocation`):
+  grant stores record lineage; `engine.commit()` walks all ancestors and
+  fails closed on revoked ancestors or missing lineage (invariants
+  #58–#59). See [docs/delegation.md](docs/delegation.md).
 
 ## [0.1.0] - 2026-07-27
 

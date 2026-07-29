@@ -1,4 +1,4 @@
-# Security Model: the 57 Invariants
+# Security Model: the 59 Invariants
 
 Each invariant below is implemented in a specific, named location and
 verified by at least one named test. This list exists so a reviewer can
@@ -64,6 +64,8 @@ under a minute per row.
 | 55 | Stale evidence (`observed_at` older than `max_age_seconds`) fails closed | `evaluate_evidence_quality` | `test_stale_evidence_rejected`, `test_future_dated_observation_rejected` |
 | 56 | Unattributed evidence and digest/manifest mismatches never count; oversized batches raise | `evaluate_evidence_quality` / `EvidenceBatchTooLargeError` | `test_unattributed_rejected`, `test_digest_mismatch_rejected`, `test_swapped_manifest_hash_never_counts`, `test_batch_too_large` |
 | 57 | Evidence quality evaluation is deterministic and order-independent | `evaluate_evidence_quality` | `test_order_independent` |
+| 58 | A delegated grant cannot commit if any recorded ancestor is revoked (deep walk, not one-hop only) | `assert_no_revoked_ancestors` in `engine.commit()` | `test_grandparent_revocation_blocks_grandchild_commit` |
+| 59 | Missing intermediate delegation lineage fails closed (revocation uncertainty) | `assert_no_revoked_ancestors` / `DelegationLineageError` | `test_lineage_unknown_fails_closed_for_delegated_grant` |
 
 ## What this table does not claim
 
