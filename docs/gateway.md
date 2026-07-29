@@ -12,6 +12,9 @@ This is additive to the open-core protocol. Nothing here changes
 `karmasakshi.engine`, `karmasakshi.domain`, or any existing security
 invariant (see [docs/security-model.md](security-model.md)).
 
+A typed synchronous and asynchronous Python client for this whole HTTP
+surface ships as `karmasakshi.sdk` -- see [docs/sdk.md](sdk.md).
+
 ## What's here
 
 - `Organization` — an isolation boundary (`org_id`, `name`, `status`:

@@ -578,6 +578,7 @@ means precisely: [docs/action-passports.md](docs/action-passports.md).
 - [docs/observability.md](docs/observability.md) — neutral, advisory lifecycle events
 - [docs/agenteval-integration.md](docs/agenteval-integration.md) — regression-fixture export and the failure-memory loop
 - [docs/gateway.md](docs/gateway.md) — commercial Gateway: organizations, auth, and the AI-operated refund journey (Milestone A, in progress)
+- [docs/sdk.md](docs/sdk.md) — typed sync/async Python SDK for the Gateway HTTP API
 - [docs/limitations.md](docs/limitations.md)
 - [docs/comparison.md](docs/comparison.md)
 

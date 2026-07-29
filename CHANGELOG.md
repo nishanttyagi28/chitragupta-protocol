@@ -212,6 +212,15 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   approving/activating identity is always the authenticated Gateway
   session user, never a client-supplied identity claim. See
   [docs/gateway.md](docs/gateway.md).
+- **Typed Python SDK** (`karmasakshi.sdk`, new optional `sdk` extra):
+  `GatewayClient` (sync, `httpx.Client`) and `AsyncGatewayClient` (async,
+  `httpx.AsyncClient`) covering the full Gateway HTTP surface above.
+  Responses are typed by reusing the real server-side pydantic models
+  (`ActionPassport`, `ActionPassportV2`, `EvidencePack`,
+  `EvidencePackVerificationResult`, `AuditEvent`,
+  `karmasakshi.gateway.schemas.*`) wherever the Gateway already returns
+  one of them, rather than a hand-maintained, driftable duplicate schema.
+  See [docs/sdk.md](docs/sdk.md).
 
 
 ## [0.1.0] - 2026-07-27

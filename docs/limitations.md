@@ -199,6 +199,12 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   decision, not a configurable multi-approver quorum (Milestone B). No
   Control Center UI yet -- HTTP API only. See
   [docs/gateway.md](gateway.md).
+- **The Gateway SDK (`karmasakshi.sdk`) is a client for the Gateway
+  surface above only** -- not a general client for every protocol
+  feature (decision envelopes, causal graphs, witness quorum, ...). One
+  client instance holds at most one session token; no automatic retry,
+  backoff, rate-limit handling, or token refresh. See
+  [docs/sdk.md](sdk.md).
 
 ## What "feature-complete" means here
 
