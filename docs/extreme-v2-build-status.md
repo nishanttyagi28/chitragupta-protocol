@@ -628,7 +628,7 @@ tenant uncertainty.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 17 (PR #32; pending local fetch)
+- last merged phase on main: Phase 17 (`6f697ed`, PR #32)
 - current branch: `cursor/phase18-adapter-conformance-kit-ffca`
 - open PR: (pending)
 - test counts: **688 passed, 8 skipped**; coverage **90.10%**
