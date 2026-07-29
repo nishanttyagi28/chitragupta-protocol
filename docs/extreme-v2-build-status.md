@@ -630,8 +630,10 @@ invariants) against reference and third-party adapters.
 
 - last merged phase on main: Phase 16 (`f94c861`, PR #31)
 - current branch: `cursor/phase17-trusted-adapter-registry-ffca`
-- open PR: (pending push)
-- test counts: (pending full suite)
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/32
+- latest green commit (local): `604b6fb`
+- test counts: **683 passed, 8 skipped**; coverage **90.18%**
+- quality gates: ruff / mypy / bandit / build / twine clean
 - exact next phase: 18 — Adapter conformance kit
 
 ## Phase 17: Trusted adapter registry
@@ -652,6 +654,14 @@ invariants) against reference and third-party adapters.
 - Process-local allow-list; not multi-node consensus
 - Compensation commit checks adapter trust, not `.compensate` effect-type
   suffix (grant still binds allowed effect types)
+
+### Verification (this branch)
+
+- `pytest`: **683 passed, 8 skipped**; coverage **90.18%** (branch)
+- `ruff check` / `ruff format --check`: clean
+- `mypy src`: clean
+- `bandit -r src/karmasakshi`: clean
+- `python -m build` + `twine check`: PASS
 
 ## Phase 16: Production signer interfaces
 
