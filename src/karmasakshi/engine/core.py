@@ -64,6 +64,7 @@ from karmasakshi.errors import (
     SagaIllegalTransitionError,
     SeparationOfDutyViolationError,
     StaleManifestError,
+    StoreUnavailableError,
     WitnessQuorumNotMetError,
 )
 from karmasakshi.evidence.evaluate import evaluate_evidence_quality
@@ -142,21 +143,63 @@ class KarmaSakshiEngine:
         """Seed the in-memory lifecycle record for ``manifest_id`` to ``state``
         without performing a transition or writing an audit event.
 
-        This engine's lifecycle records are process-local; the durable
-        record of what actually happened lives in the audit journal. A
-        long-running host that reconstructs a fresh engine per invocation
+        This engine's lifecycle records are process-local by default; the
+        durable record of what actually happened lives in the audit journal.
+        A long-running host that reconstructs a fresh engine per invocation
         (the CLI, in particular) uses this to restore the correct starting
         state from the audit journal before continuing the lifecycle --
         never to fabricate a state that didn't actually happen.
+
+        When ``EngineContext.lifecycle_store`` is configured (Phase 13), the
+        seeded state is also written through to that store.
         """
         self._records[manifest_id] = LifecycleRecord(manifest_id=manifest_id, state=state)
+        store = self._ctx.lifecycle_store
+        if store is not None:
+            store.set(manifest_id, state)
 
     def _get_record(self, manifest_id: str) -> LifecycleRecord:
         record = self._records.get(manifest_id)
-        if record is None:
-            record = LifecycleRecord(manifest_id=manifest_id)
-            self._records[manifest_id] = record
+        if record is not None:
+            return record
+        store = self._ctx.lifecycle_store
+        if store is not None:
+            stored = store.get(manifest_id)
+            if stored is not None:
+                record = LifecycleRecord(manifest_id=manifest_id, state=stored)
+                self._records[manifest_id] = record
+                return record
+        record = LifecycleRecord(manifest_id=manifest_id)
+        self._records[manifest_id] = record
         return record
+
+    def _persist_lifecycle(
+        self, manifest_id: str, from_state: LifecycleState, target: LifecycleState
+    ) -> None:
+        """Write-through to the durable lifecycle store; fail closed on error."""
+        store = self._ctx.lifecycle_store
+        if store is None:
+            return
+        # First write uses expected=None only when the record was never stored.
+        expected: LifecycleState | None = from_state
+        if store.get(manifest_id) is None and from_state == LifecycleState.PROPOSED:
+            # Lazy in-memory PROPOSED has no row yet - insert as target.
+            # If a concurrent writer inserted first, retry with expected PROPOSED.
+            if not (
+                store.compare_and_set(manifest_id, None, target)
+                or store.compare_and_set(manifest_id, from_state, target)
+            ):
+                raise StoreUnavailableError(
+                    f"lifecycle store compare_and_set failed for {manifest_id} "
+                    f"({from_state.value} -> {target.value})"
+                )
+            return
+        if not store.compare_and_set(manifest_id, expected, target):
+            raise StoreUnavailableError(
+                f"lifecycle store compare_and_set failed for {manifest_id} "
+                f"({from_state.value} -> {target.value}); refuse to continue with "
+                "uncertain durable lifecycle state"
+            )
 
     def _transition(
         self,
@@ -177,6 +220,26 @@ class KarmaSakshiEngine:
             self._ctx.audit.record(
                 event_type=event_type,
                 decision="blocked_illegal_transition",
+                manifest_id=manifest_id,
+                manifest_hash=manifest_hash,
+                grant_id=grant_id,
+                actor_id=actor_id,
+                from_state=from_state.value,
+                to_state=target.value,
+                metadata=metadata or {},
+            )
+            raise
+        try:
+            self._persist_lifecycle(manifest_id, from_state, target)
+        except StoreUnavailableError:
+            # Roll back the in-memory advance so a failed durable write never
+            # leaves memory ahead of storage (fail closed).
+            self._records[manifest_id] = LifecycleRecord(
+                manifest_id=manifest_id, state=from_state, history=list(record.history[:-1])
+            )
+            self._ctx.audit.record(
+                event_type=event_type,
+                decision="blocked_lifecycle_store_unavailable",
                 manifest_id=manifest_id,
                 manifest_hash=manifest_hash,
                 grant_id=grant_id,

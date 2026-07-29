@@ -1,4 +1,4 @@
-# Security Model: the 63 Invariants
+# Security Model: the 64 Invariants
 
 Each invariant below is implemented in a specific, named location and
 verified by at least one named test. This list exists so a reviewer can
@@ -70,6 +70,7 @@ under a minute per row.
 | 61 | Concurrent budget reserves cannot oversubscribe a single-process ledger | `InMemoryBudgetLedger.reserve` lock | `test_concurrent_reserves_do_not_oversubscribe` |
 | 62 | Delegation cannot drop or swap a parent `authority_budget_id` | `assert_grant_narrower_or_equal` | `test_delegate_inherits_budget_and_rejects_swap` |
 | 63 | Binding a budget without a ledger or to an unknown id fails closed | `require_budget` / authorize + commit | `test_unknown_budget_at_authorize_fails_closed`, `test_budget_without_ledger_fails_closed`, `test_cannot_bind_budget_then_remove_ledger_at_commit` |
+| 64 | Durable lifecycle store write failure rolls back in-memory state and blocks the transition | `engine._transition` + `StoreUnavailableError` | `test_lifecycle_store_outage_rolls_back_memory` |
 
 ## What this table does not claim
 

@@ -33,8 +33,12 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   ancestor is revoked. See [docs/delegation.md](delegation.md).
 - **Authority budgets are single-process** (extreme-v2 Phase 12).
   `InMemoryBudgetLedger` provides atomic reserve/commit under a process
-  lock; there is no durable multi-node budget ledger yet (Phase 13+).
+  lock; there is no durable multi-node budget ledger yet.
   See [docs/authority-budgets.md](authority-budgets.md).
+- **Lifecycle convenience state can be SQLite-durable** (extreme-v2
+  Phase 13) via `lifecycle.db`, but remains single-node and does not
+  replace the audit hash chain. See
+  [docs/durable-lifecycle-storage.md](durable-lifecycle-storage.md).
 - **Compensation is best-effort, never guaranteed.** Some effects
   (irreversible ones by classification, or provider states that don't
   support cancellation, like a settled payment) honestly refuse

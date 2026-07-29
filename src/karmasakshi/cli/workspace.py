@@ -38,6 +38,7 @@ from karmasakshi.grants.model import ExecutionGrant
 from karmasakshi.intelligence.model import EffectAssessment
 from karmasakshi.policy.bundle import PolicyBundle, SealedPolicyBundle
 from karmasakshi.state_machine.states import LifecycleState
+from karmasakshi.stores.lifecycle_sqlite import SQLiteLifecycleStore
 from karmasakshi.stores.sqlite import SQLiteGrantStore
 from karmasakshi.witness.model import WitnessStatement
 
@@ -315,6 +316,9 @@ class Workspace:
     def open_grant_store(self) -> SQLiteGrantStore:
         return SQLiteGrantStore(self.root / "grants.db")
 
+    def open_lifecycle_store(self) -> SQLiteLifecycleStore:
+        return SQLiteLifecycleStore(self.root / "lifecycle.db")
+
     def open_audit(self) -> AuditJournal:
         return AuditJournal(backend=SQLiteAuditBackend(self.root / "audit.db"))
 
@@ -323,13 +327,23 @@ class Workspace:
             keyring=self.load_keyring(),
             grant_store=self.open_grant_store(),
             audit=self.open_audit(),
+            lifecycle_store=self.open_lifecycle_store(),
         )
         return KarmaSakshiEngine(ctx)
 
     def reconstruct_lifecycle_state(self, engine: KarmaSakshiEngine, manifest_id: str) -> None:
-        """Seed ``engine``'s in-memory lifecycle record for ``manifest_id``
-        from the durable audit journal, so a fresh per-invocation engine
-        continues from wherever a previous CLI invocation left off."""
+        """Seed ``engine``'s lifecycle record for ``manifest_id``.
+
+        Prefer the Phase 13 durable lifecycle store when it already holds a
+        state (authoritative for the next transition). Fall back to the
+        last audit ``to_state`` for workspaces that pre-date lifecycle.db.
+        """
+        store = engine.context.lifecycle_store
+        if store is not None:
+            stored = store.get(manifest_id)
+            if stored is not None:
+                engine.seed_lifecycle_state(manifest_id, stored)
+                return
         events = [e for e in engine.context.audit.events_for_manifest(manifest_id) if e.to_state]
         if not events:
             return
