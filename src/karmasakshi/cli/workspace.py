@@ -18,6 +18,7 @@ from karmasakshi.adapters.base import CommitResult, CompensationResult, OutcomeP
 from karmasakshi.approval.model import ApprovalStatement
 from karmasakshi.audit.journal import AuditJournal
 from karmasakshi.audit.sqlite_backend import SQLiteAuditBackend
+from karmasakshi.causal import CausalEffectGraph
 from karmasakshi.crypto.keyring import Keyring
 from karmasakshi.crypto.keys import (
     SigningKey,
@@ -56,6 +57,7 @@ class Workspace:
         self.grants_dir = self.root / "grants"
         self.policies_dir = self.root / "policies"
         self.approvals_dir = self.root / "approvals"
+        self.causal_graphs_dir = self.root / "causal-graphs"
 
     def ensure_initialized(self) -> None:
         for d in (
@@ -65,6 +67,7 @@ class Workspace:
             self.grants_dir,
             self.policies_dir,
             self.approvals_dir,
+            self.causal_graphs_dir,
         ):
             d.mkdir(parents=True, exist_ok=True)
 
@@ -158,6 +161,17 @@ class Workspace:
         if not path.exists():
             return None
         return EffectAssessment.model_validate_json(path.read_text(encoding="utf-8"))
+
+    # --- causal effect graphs -------------------------------------------------
+
+    def save_causal_graph(self, graph: CausalEffectGraph) -> Path:
+        path = self.causal_graphs_dir / f"{graph.graph_id}.json"
+        path.write_text(graph.model_dump_json(indent=2), encoding="utf-8")
+        return path
+
+    def load_causal_graph(self, graph_id: str) -> CausalEffectGraph:
+        path = self.causal_graphs_dir / f"{graph_id}.json"
+        return CausalEffectGraph.model_validate_json(path.read_text(encoding="utf-8"))
 
     # --- policy bundles ---------------------------------------------------------
 
