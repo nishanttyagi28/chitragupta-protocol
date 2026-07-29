@@ -92,6 +92,21 @@ def assert_grant_narrower_or_equal(child: ExecutionGrant, parent: ExecutionGrant
         child.allowed_effect_types, parent.allowed_effect_types, "allowed_effect_types"
     )
     assert_scope_narrower_or_equal(child.scope, parent.scope)
+    # Phase 12: a parent budget binding cannot be dropped or swapped for a
+    # different budget id (that would escape the parent's consumable limit).
+    # A child may *add* a budget when the parent had none (narrowing).
+    if parent.authority_budget_id is not None:
+        if child.authority_budget_id is None:
+            raise ConstraintWideningError(
+                "authority_budget_id: child is unbound but parent binds "
+                f"{parent.authority_budget_id!r}"
+            )
+        if child.authority_budget_id != parent.authority_budget_id:
+            raise ConstraintWideningError(
+                "authority_budget_id: child binds "
+                f"{child.authority_budget_id!r} but parent binds "
+                f"{parent.authority_budget_id!r}; budget swap treated as widening"
+            )
 
 
 __all__ = ["assert_grant_narrower_or_equal", "assert_scope_narrower_or_equal"]

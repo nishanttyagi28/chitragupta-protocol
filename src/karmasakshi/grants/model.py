@@ -73,6 +73,10 @@ class ExecutionGrant(BaseModel):
     #: When set alongside ``manifest_hash``, the concrete sealed effect must
     #: be a node of that graph at commit time.
     causal_graph_hash: str | None = None
+    #: Extreme-v2 Phase 12: optional shared AuthorityBudget id. Distinct from
+    #: ``scope.max_amount`` (per-grant attenuation cap). When set, ``commit()``
+    #: atomically consumes from the engine budget ledger before the adapter runs.
+    authority_budget_id: str | None = None
     issuer: Principal
     subject: Principal
     audience: tuple[str, ...]
@@ -99,6 +103,15 @@ class ExecutionGrant(BaseModel):
     def _validate_ids(cls, v: str) -> str:
         if not v or len(v) > 128:
             raise ValueError("identifier fields must be 1-128 chars")
+        return v
+
+    @field_validator("authority_budget_id")
+    @classmethod
+    def _validate_budget_id(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not v or len(v) > 128:
+            raise ValueError("authority_budget_id must be 1-128 chars")
         return v
 
     @field_validator(
@@ -174,6 +187,9 @@ class ExecutionGrant(BaseModel):
 
     def is_causal_graph_bound(self) -> bool:
         return self.causal_graph_hash is not None
+
+    def is_authority_budget_bound(self) -> bool:
+        return self.authority_budget_id is not None
 
 
 __all__ = ["ExecutionGrant", "ScopeConstraints"]

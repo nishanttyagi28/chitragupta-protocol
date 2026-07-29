@@ -23,6 +23,7 @@ from karmasakshi.adapters.base import (
 from karmasakshi.approval.model import ApprovalStatement
 from karmasakshi.approval.policy import POLICY_TYPE_APPROVAL, approval_policy_from_bundle_payload
 from karmasakshi.approval.quorum import evaluate_quorum
+from karmasakshi.budget.consume import require_budget, resolve_budget_consume_amount
 from karmasakshi.causal.graph import CausalEffectGraph
 from karmasakshi.compensation.manifest import assert_compensation_binds_original
 from karmasakshi.compensation.status import CompensationStatus
@@ -45,6 +46,8 @@ from karmasakshi.envelope.sealing import verify_decision_envelope
 from karmasakshi.errors import (
     AdapterMismatchError,
     AtomicPlanError,
+    AuthorityBudgetError,
+    AuthorityBudgetExhaustedError,
     CompensationBindingError,
     DecisionEnvelopeMismatchError,
     DelegationLineageError,
@@ -118,7 +121,15 @@ class KarmaSakshiEngine:
 
     def _record_grant_lineage(self, grant: ExecutionGrant) -> None:
         """Persist parent pointer so commit can walk deep revocation (Phase 11)."""
+        if grant.parent_grant_id is None:
+            return
         self._ctx.grant_store.record_lineage(grant.grant_id, grant.parent_grant_id)
+
+    def _assert_authority_budget_registered(self, authority_budget_id: str | None) -> None:
+        """Fail closed if a grant binds a budget the ledger does not know."""
+        if authority_budget_id is None:
+            return
+        require_budget(self._ctx.budget_ledger, authority_budget_id)
 
     @property
     def context(self) -> EngineContext:
@@ -319,6 +330,7 @@ class KarmaSakshiEngine:
         nonce: str | None = None,
         max_uses: int = 1,
         parent_grant_id: str | None = None,
+        authority_budget_id: str | None = None,
         policy_bundle: SealedPolicyBundle | None = None,
         separation_policy_bundle: SealedPolicyBundle | None = None,
         role_assignment: RoleAssignment | None = None,
@@ -346,9 +358,14 @@ class KarmaSakshiEngine:
         ``duty.enforcement.check_separation_of_duty``. A violation blocks
         grant issuance entirely (:class:`SeparationOfDutyViolationError`)
         -- see docs/separation-of-duties.md.
+
+        ``authority_budget_id`` (Phase 12) optionally binds the grant to a
+        registered shared AuthorityBudget; ``commit`` consumes that budget
+        atomically. Distinct from ``scope.max_amount``.
         """
         verify_seal(sealed, self._ctx.keyring)
         manifest_hash = sealed.seal.manifest_hash
+        self._assert_authority_budget_registered(authority_budget_id)
         if policy_bundle is not None:
             try:
                 verify_policy_bundle(policy_bundle, self._ctx.keyring, now=self._ctx.clock.now())
@@ -395,6 +412,7 @@ class KarmaSakshiEngine:
                 policy_bundle_hash=policy_bundle_hash,
                 max_uses=max_uses,
                 parent_grant_id=parent_grant_id,
+                authority_budget_id=authority_budget_id,
                 clock=self._ctx.clock,
             )
         except KarmaSakshiError:
@@ -416,6 +434,7 @@ class KarmaSakshiEngine:
             metadata={
                 "subject": subject.principal_id,
                 **({"policy_bundle_hash": policy_bundle_hash} if policy_bundle_hash else {}),
+                **({"authority_budget_id": authority_budget_id} if authority_budget_id else {}),
                 **_role_participation_metadata(combined_roles),
             },
         )
@@ -441,6 +460,7 @@ class KarmaSakshiEngine:
         nonce: str | None = None,
         max_uses: int = 1,
         parent_grant_id: str | None = None,
+        authority_budget_id: str | None = None,
         policy_bundle: SealedPolicyBundle | None = None,
         separation_policy_bundle: SealedPolicyBundle | None = None,
         role_assignment: RoleAssignment | None = None,
@@ -458,6 +478,7 @@ class KarmaSakshiEngine:
         """
         verify_seal(sealed, self._ctx.keyring)
         manifest_hash = sealed.seal.manifest_hash
+        self._assert_authority_budget_registered(authority_budget_id)
         try:
             verify_decision_envelope(envelope, self._ctx.keyring, now=self._ctx.clock.now())
             assert_manifest_fits_envelope(sealed.manifest, envelope)
@@ -520,6 +541,7 @@ class KarmaSakshiEngine:
                 decision_envelope_hash=envelope_hash,
                 max_uses=max_uses,
                 parent_grant_id=parent_grant_id,
+                authority_budget_id=authority_budget_id,
                 clock=self._ctx.clock,
             )
         except KarmaSakshiError:
@@ -565,6 +587,7 @@ class KarmaSakshiEngine:
         nonce: str | None = None,
         max_uses: int = 1,
         parent_grant_id: str | None = None,
+        authority_budget_id: str | None = None,
         policy_bundle: SealedPolicyBundle | None = None,
         separation_policy_bundle: SealedPolicyBundle | None = None,
         role_assignment: RoleAssignment | None = None,
@@ -579,6 +602,7 @@ class KarmaSakshiEngine:
         """
         verify_seal(sealed, self._ctx.keyring)
         manifest_hash = sealed.seal.manifest_hash
+        self._assert_authority_budget_registered(authority_budget_id)
         try:
             assert_manifest_in_plan(manifest_hash, graph, keyring=self._ctx.keyring)
         except KarmaSakshiError:
@@ -640,6 +664,7 @@ class KarmaSakshiEngine:
                 causal_graph_hash=graph_hash,
                 max_uses=max_uses,
                 parent_grant_id=parent_grant_id,
+                authority_budget_id=authority_budget_id,
                 clock=self._ctx.clock,
             )
         except KarmaSakshiError:
@@ -744,6 +769,7 @@ class KarmaSakshiEngine:
         nonce: str | None = None,
         max_uses: int = 1,
         parent_grant_id: str | None = None,
+        authority_budget_id: str | None = None,
         policy_bundle: SealedPolicyBundle | None = None,
         separation_policy_bundle: SealedPolicyBundle | None = None,
         role_assignment: RoleAssignment | None = None,
@@ -782,6 +808,7 @@ class KarmaSakshiEngine:
         """
         verify_seal(sealed, self._ctx.keyring)
         manifest_hash = sealed.seal.manifest_hash
+        self._assert_authority_budget_registered(authority_budget_id)
         try:
             verify_policy_bundle(
                 approval_policy_bundle,
@@ -877,6 +904,7 @@ class KarmaSakshiEngine:
                 approval_set_hash=quorum.approval_set_hash,
                 max_uses=max_uses,
                 parent_grant_id=parent_grant_id,
+                authority_budget_id=authority_budget_id,
                 clock=self._ctx.clock,
             )
         except KarmaSakshiError:
@@ -922,6 +950,7 @@ class KarmaSakshiEngine:
         expires_at: datetime | None = None,
         max_uses: int | None = None,
         manifest_hash: str | None = None,
+        authority_budget_id: str | None = None,
     ) -> ExecutionGrant:
         """Issue a child grant delegated from ``parent``.
 
@@ -950,6 +979,9 @@ class KarmaSakshiEngine:
             manifest_hash=manifest_hash,
             max_uses=max_uses if max_uses is not None else parent.max_uses,
             parent_grant_id=parent.grant_id,
+            authority_budget_id=(
+                parent.authority_budget_id if authority_budget_id is None else authority_budget_id
+            ),
             clock=self._ctx.clock,
         )
         try:
@@ -1190,7 +1222,37 @@ class KarmaSakshiEngine:
                     metadata={"ancestor_count": str(len(ancestors))},
                 )
 
+        # Phase 12: reserve authority budget before grant use / adapter commit.
+        # Idempotent replays release the reservation without consuming.
+        budget_id = grant.authority_budget_id
+        budget_amount: int | None = None
+        if budget_id is not None:
+            try:
+                budget = require_budget(self._ctx.budget_ledger, budget_id)
+                budget_amount = resolve_budget_consume_amount(budget, manifest)
+            except AuthorityBudgetError as exc:
+                deny(
+                    "authority_budget.resolve_failed",
+                    f"blocked_{type(exc).__name__}",
+                    exc,
+                )
+            assert self._ctx.budget_ledger is not None  # nosec B101 - require_budget above
+            if not self._ctx.budget_ledger.reserve(budget_id, budget_amount):
+                deny(
+                    "authority_budget.exhausted",
+                    "blocked_authority_budget_exhausted",
+                    AuthorityBudgetExhaustedError(
+                        f"authority budget {budget_id} exhausted for amount={budget_amount} "
+                        f"(remaining={self._ctx.budget_ledger.remaining(budget_id)})"
+                    ),
+                )
+
+        def release_budget() -> None:
+            if budget_id is not None and budget_amount is not None and self._ctx.budget_ledger:
+                self._ctx.budget_ledger.release(budget_id, budget_amount)
+
         if not self._ctx.grant_store.reserve(grant_id, grant.max_uses):
+            release_budget()
             deny(
                 "grant.reservation_failed",
                 "blocked_exhausted_or_inflight",
@@ -1208,16 +1270,27 @@ class KarmaSakshiEngine:
                 manifest_hash=manifest_hash,
                 grant_id=grant_id,
                 actor_id=actor_id,
+                metadata=(
+                    {
+                        "authority_budget_id": budget_id,
+                        "authority_budget_amount": str(budget_amount),
+                    }
+                    if budget_id is not None
+                    else None
+                ),
             )
         except Exception:
             # Audit failure before a consequential commit must block execution
             # (invariant #23) -- but the reservation slot must not leak forever,
             # so release it before propagating.
             self._ctx.grant_store.release(grant_id)
+            release_budget()
             raise
 
         existing_outcome = self._ctx.grant_store.get_idempotent_outcome(manifest.idempotency_key)
         if existing_outcome is not None:
+            # Already committed effect: finalize grant use, do not consume budget again.
+            release_budget()
             self._ctx.grant_store.commit(grant_id, manifest.idempotency_key, existing_outcome)
             self._transition(
                 manifest_id,
@@ -1239,6 +1312,7 @@ class KarmaSakshiEngine:
             precondition_result = adapter.validate_preconditions(manifest, context)
         except Exception as exc:
             self._ctx.grant_store.release(grant_id)
+            release_budget()
             self._transition(
                 manifest_id,
                 LifecycleState.FAILED,
@@ -1252,6 +1326,7 @@ class KarmaSakshiEngine:
 
         if not precondition_result.satisfied:
             self._ctx.grant_store.release(grant_id)
+            release_budget()
             self._transition(
                 manifest_id,
                 LifecycleState.FAILED,
@@ -1269,6 +1344,7 @@ class KarmaSakshiEngine:
             commit_result = adapter.commit(manifest, grant, context)
         except Exception as exc:
             self._ctx.grant_store.release(grant_id)
+            release_budget()
             self._transition(
                 manifest_id,
                 LifecycleState.FAILED,
@@ -1282,6 +1358,7 @@ class KarmaSakshiEngine:
 
         if not commit_result.success:
             self._ctx.grant_store.release(grant_id)
+            release_budget()
             self._transition(
                 manifest_id,
                 LifecycleState.FAILED,
@@ -1293,6 +1370,9 @@ class KarmaSakshiEngine:
             )
             return commit_result
 
+        if budget_id is not None and budget_amount is not None:
+            assert self._ctx.budget_ledger is not None  # nosec B101 - reserved above
+            self._ctx.budget_ledger.commit(budget_id, budget_amount)
         self._ctx.grant_store.commit(
             grant_id, manifest.idempotency_key, commit_result.provider_reference or "committed"
         )
@@ -1303,7 +1383,17 @@ class KarmaSakshiEngine:
             manifest_hash=manifest_hash,
             grant_id=grant_id,
             actor_id=actor_id,
-            metadata={"provider_reference": (commit_result.provider_reference or "")[:200]},
+            metadata={
+                "provider_reference": (commit_result.provider_reference or "")[:200],
+                **(
+                    {
+                        "authority_budget_id": budget_id,
+                        "authority_budget_amount": str(budget_amount),
+                    }
+                    if budget_id is not None
+                    else {}
+                ),
+            },
         )
         return commit_result
 
