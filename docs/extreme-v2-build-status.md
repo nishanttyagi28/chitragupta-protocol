@@ -56,7 +56,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 16. Production signer interface | **Implemented** | Signer protocol + local/emulated backends; no real KMS |
 | 17. Trusted adapter registry | **Implemented** | Versioned allow-list; fail-closed; see below |
 | 18. Adapter conformance kit | **Implemented** | Structural contract checks; see below |
-| 19. Multi-tenant control plane | Not started | `AssessmentFacts.cross_tenant` exists as a scoring input (Phase 1) but nothing enforces tenant isolation |
+| 19. Multi-tenant control plane | **Implemented** | Process-local isolation; see below |
 | 20. Resource/DoS protection | Not started | |
 | 21. Adversarial/fuzz testing | Partial | Phase 1's own scoring engine has adversarial + property coverage; no new coverage added for pre-existing v0.1 components beyond the baseline fix |
 | 22. State-machine model checking | Not started | v0.1's `tests/property/test_state_machine_properties.py` (BFS reachability) is unchanged |
@@ -622,22 +622,36 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 19: Multi-tenant control plane.** Tenant isolation for
-organizations / API tokens / audit and lifecycle scoping. Fail closed on
-tenant uncertainty.
+**Phase 20: Resource and DoS protection.** Bounded request sizes, rate
+limits, and fail-closed resource ceilings on API / engine paths.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 17 (`6f697ed`, PR #32)
-- current branch: `cursor/phase18-adapter-conformance-kit-ffca`
+- last merged phase on main: Phase 18 (`ea45e84`, PR #33)
+- current branch: `cursor/phase19-multi-tenant-control-plane-ffca`
 - open PR: (pending)
-- test counts: **688 passed, 8 skipped**; coverage **90.10%**
-- quality gates: ruff / mypy / bandit / build / twine clean
-- exact next phase: 19 — Multi-tenant control plane
+- test counts: (pending full suite)
+- exact next phase: 20 — Resource and DoS protection
+
+## Phase 19: Multi-tenant control plane
+
+**Status: implemented on branch.**
+
+### What landed
+
+- `Tenant` / `TenantRegistry` / `MultiTenantControlPlane`
+- `EngineContext.tenant_id` + policy-bundle tenant binding
+- Invariants #69–#70; docs: `docs/multi-tenant.md`
+
+### Design decisions
+
+- Fail closed on tenant uncertainty (one side set, other missing)
+- Process-local partitions only — not a distributed directory
+- `AssessmentFacts.cross_tenant` remains advisory scoring
 
 ## Phase 18: Adapter conformance kit
 
-**Status: implemented on branch.**
+**Status: merged to main (`ea45e84`, PR #33).**
 
 ### What landed
 

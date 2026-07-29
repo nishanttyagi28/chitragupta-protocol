@@ -433,3 +433,18 @@ class BlastRadiusExceededError(AdapterError):
 
 class RecipientNotAllowedError(AdapterError):
     """A recipient/target is not on the adapter's configured allow-list."""
+
+
+# --- Multi-tenant control plane (extreme-v2 Phase 19) -----------------------------
+
+
+class TenantError(KarmaSakshiError):
+    """Base class for tenant isolation errors."""
+
+
+class UnknownTenantError(TenantError):
+    """Referenced tenant_id is not present in the tenant registry."""
+
+
+class TenantIsolationError(TenantError):
+    """Cross-tenant access, suspended tenant, or tenant uncertainty (fail closed)."""
