@@ -53,7 +53,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 13. Durable lifecycle storage | **Implemented** | SQLite single-node lifecycle store; see below |
 | 14. Distributed audit journal | **Implemented** | AuditBackend contract + optional Redis sink; no consensus claims |
 | 15. Transactional outbox | **Implemented** | Intent vs confirmed; see below |
-| 16. Production signer interface | Not started | Ed25519 dev keys only, as in v0.1 |
+| 16. Production signer interface | **Implemented** | Signer protocol + local/emulated backends; no real KMS |
 | 17. Trusted adapter registry | Not started | |
 | 18. Adapter conformance kit | Not started | |
 | 19. Multi-tenant control plane | Not started | `AssessmentFacts.cross_tenant` exists as a scoring input (Phase 1) but nothing enforces tenant isolation |
@@ -622,15 +622,32 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 16: Production signer interfaces.** Honest KMS/HSM interfaces and
-dev emulators — no fabricated cloud provider support.
+**Phase 17: Trusted adapter registry.** Versioned adapter allow-list with
+fail-closed unknown adapters.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 14 (`2f7ad35`, PR #29)
-- current branch: `cursor/phase15-transactional-outbox-ffca`
-- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/30
-- exact next phase: 16 — Production signer interfaces
+- last merged phase on main: Phase 15 (`a5f3ae5`, PR #30)
+- current branch: `cursor/phase16-production-signers-ffca`
+- open PR: (pending)
+- test counts: **666 passed, 8 skipped**; coverage **90.01%**
+- exact next phase: 17 — Trusted adapter registry
+
+## Phase 16: Production signer interfaces
+
+**Status: implemented on branch.**
+
+### What landed
+
+- `Signer` protocol; `LocalDevSigner`; `EmulatedKmsSigner` (local only)
+- `require_signer_env` fail-closed
+- Docs: `docs/production-signers.md`
+
+### Design decisions
+
+- No AWS/GCP/HSM SDKs; emulator is local Ed25519 with a fake `kms_key_ref`
+- Existing `SigningKey` remains supported
+
 
 ## Phase 15: Transactional outbox and recovery
 
