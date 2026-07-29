@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from karmasakshi.gateway.migrations import MIGRATIONS, Migration, apply_migrations
 from karmasakshi.gateway.models import (
+    GatewayAdapterRegistration,
+    GatewayAgent,
     GatewayUser,
     GatewayUserRole,
     Organization,
@@ -21,6 +23,8 @@ from karmasakshi.gateway.store import GatewayStore, default_gateway_db_path
 __all__ = [
     "DEFAULT_SESSION_TTL",
     "MIGRATIONS",
+    "GatewayAdapterRegistration",
+    "GatewayAgent",
     "GatewaySession",
     "GatewaySessionStore",
     "GatewayStore",

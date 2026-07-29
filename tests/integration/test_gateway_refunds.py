@@ -36,7 +36,20 @@ def _bootstrap_and_login(client, org_id="acme", email="alice@acme.com", password
         "/gateway/auth/login", json={"org_id": org_id, "email": email, "password": password}
     )
     token = login.json()["session_token"]
-    return {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}"}
+    agent = client.post(
+        f"/gateway/organizations/{org_id}/agents",
+        json={"agent_id": "refund-agent-1", "display_name": "Refund Agent"},
+        headers=headers,
+    )
+    assert agent.status_code == 200
+    adapter = client.post(
+        f"/gateway/organizations/{org_id}/adapters",
+        json={"adapter_id": "payment.simulator", "adapter_version": "1.0.0"},
+        headers=headers,
+    )
+    assert adapter.status_code == 200
+    return headers
 
 
 def _propose(client, headers, *, org_id="acme", idempotency_key="idem-1", amount=50000):
@@ -54,6 +67,169 @@ def _propose(client, headers, *, org_id="acme", idempotency_key="idem-1", amount
     )
 
 
+def _approve_to_quorum(client, headers, manifest_id, *, org_id="acme", body=None):
+    response = client.post(
+        f"/gateway/organizations/{org_id}/refunds/{manifest_id}/approve",
+        json=body or {},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    return _approve_to_quorum_from_partial(
+        client,
+        headers,
+        manifest_id,
+        response,
+        org_id=org_id,
+        body=body,
+    )
+
+
+def _approve_to_quorum_from_partial(
+    client,
+    headers,
+    manifest_id,
+    response,
+    *,
+    org_id="acme",
+    body=None,
+):
+    index = 1
+    while not response.json()["authorized"]:
+        email = f"approver-{index}-{manifest_id[:8]}@example.com"
+        created = client.post(
+            f"/gateway/organizations/{org_id}/users",
+            json={
+                "user_id": f"{org_id}-approver-{index}-{manifest_id[:8]}",
+                "email": email,
+                "display_name": f"Approver {index}",
+                "password": "approval-password",
+                "role": "member",
+            },
+            headers=headers,
+        )
+        assert created.status_code == 200
+        token = client.post(
+            "/gateway/auth/login",
+            json={
+                "org_id": org_id,
+                "email": email,
+                "password": "approval-password",
+            },
+        ).json()["session_token"]
+        response = client.post(
+            f"/gateway/organizations/{org_id}/refunds/{manifest_id}/approve",
+            json=body or {},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        index += 1
+    return response
+
+
+def test_proposal_fails_closed_until_agent_and_adapter_are_registered(dev_client):
+    client, _app = dev_client
+    client.post(
+        "/gateway/organizations",
+        json={
+            "org_id": "unregistered",
+            "name": "Unregistered Corp",
+            "owner_email": "owner@unregistered.example",
+            "owner_display_name": "Owner",
+            "owner_password": "hunter2",
+        },
+    )
+    token = client.post(
+        "/gateway/auth/login",
+        json={
+            "org_id": "unregistered",
+            "email": "owner@unregistered.example",
+            "password": "hunter2",
+        },
+    ).json()["session_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    missing_agent = _propose(client, headers, org_id="unregistered")
+    assert missing_agent.status_code == 409
+    assert "agent" in missing_agent.json()["detail"]
+
+    client.post(
+        "/gateway/organizations/unregistered/agents",
+        json={"agent_id": "refund-agent-1", "display_name": "Refund Agent"},
+        headers=headers,
+    )
+    missing_adapter = _propose(client, headers, org_id="unregistered")
+    assert missing_adapter.status_code == 409
+    assert "adapter" in missing_adapter.json()["detail"]
+
+
+def test_distinct_authenticated_users_are_required_to_complete_quorum(dev_client):
+    client, _app = dev_client
+    headers = _bootstrap_and_login(client)
+    manifest_id = _propose(client, headers, idempotency_key="idem-quorum").json()["manifest_id"]
+
+    first = client.post(
+        f"/gateway/organizations/acme/refunds/{manifest_id}/approve",
+        json={},
+        headers=headers,
+    )
+    assert first.status_code == 200
+    assert first.json()["authorized"] is False
+    assert first.json()["grant_id"] is None
+    assert first.json()["completed_human_approvals"] == 1
+    assert first.json()["required_human_approvals"] > 1
+
+    duplicate = client.post(
+        f"/gateway/organizations/acme/refunds/{manifest_id}/approve",
+        json={},
+        headers=headers,
+    )
+    assert duplicate.status_code == 409
+    assert "already approved" in duplicate.json()["detail"]
+
+    final = _approve_to_quorum_from_partial(client, headers, manifest_id, first)
+    assert final.json()["authorized"] is True
+    assert final.json()["grant_id"]
+
+    detail = client.get(
+        f"/gateway/organizations/acme/refunds/{manifest_id}",
+        headers=headers,
+    ).json()
+    assert (
+        detail["policy_decision"]["completed_human_approvals"]
+        == detail["policy_decision"]["required_human_approvals"]
+    )
+
+
+def test_ambiguous_timeout_injection_uses_real_simulator_and_recovers(dev_client):
+    client, _app = dev_client
+    headers = _bootstrap_and_login(client)
+    manifest_id = _propose(client, headers, idempotency_key="idem-ambiguous").json()["manifest_id"]
+    grant_id = _approve_to_quorum(client, headers, manifest_id).json()["grant_id"]
+
+    armed = client.post(
+        "/gateway/organizations/acme/evaluation/payment-simulator/ambiguous-next",
+        headers=headers,
+    )
+    assert armed.status_code == 200
+    assert armed.json() == {"armed": True}
+
+    execute = client.post(
+        f"/gateway/organizations/acme/refunds/{manifest_id}/execute",
+        json={"grant_id": grant_id},
+        headers=headers,
+    )
+    assert execute.status_code == 200
+    assert execute.json()["success"] is False
+    assert "ambiguous" in execute.json()["detail"]
+
+    recover = client.post(
+        f"/gateway/organizations/acme/refunds/{manifest_id}/recover",
+        headers=headers,
+    )
+    assert recover.status_code == 200
+    assert recover.json()["matched_expected"] is True
+
+
 def test_full_refund_journey_happy_path(dev_client):
     client, _app = dev_client
     headers = _bootstrap_and_login(client)
@@ -63,9 +239,7 @@ def test_full_refund_journey_happy_path(dev_client):
     manifest_id = propose.json()["manifest_id"]
     assert propose.json()["assessment"]["score"] >= 0
 
-    approve = client.post(
-        f"/gateway/organizations/acme/refunds/{manifest_id}/approve", json={}, headers=headers
-    )
+    approve = _approve_to_quorum(client, headers, manifest_id)
     assert approve.status_code == 200
     grant_id = approve.json()["grant_id"]
 
@@ -117,9 +291,7 @@ def test_evidence_pack_offline_verification(dev_client):
     client, _app = dev_client
     headers = _bootstrap_and_login(client)
     manifest_id = _propose(client, headers, idempotency_key="idem-evpack").json()["manifest_id"]
-    grant_id = client.post(
-        f"/gateway/organizations/acme/refunds/{manifest_id}/approve", json={}, headers=headers
-    ).json()["grant_id"]
+    grant_id = _approve_to_quorum(client, headers, manifest_id).json()["grant_id"]
     client.post(
         f"/gateway/organizations/acme/refunds/{manifest_id}/execute",
         json={"grant_id": grant_id},
@@ -155,9 +327,7 @@ def test_policy_activation_binds_grant(dev_client):
     bundle_hash = policy.json()["bundle_hash"]
 
     manifest_id = _propose(client, headers, idempotency_key="idem-policy").json()["manifest_id"]
-    approve = client.post(
-        f"/gateway/organizations/acme/refunds/{manifest_id}/approve", json={}, headers=headers
-    )
+    approve = _approve_to_quorum(client, headers, manifest_id)
     assert approve.json()["policy_bundle_hash"] == bundle_hash
 
     execute = client.post(
@@ -173,9 +343,7 @@ def test_duplicate_execute_retry_is_prevented(dev_client):
     client, _app = dev_client
     headers = _bootstrap_and_login(client)
     manifest_id = _propose(client, headers, idempotency_key="idem-dup").json()["manifest_id"]
-    grant_id = client.post(
-        f"/gateway/organizations/acme/refunds/{manifest_id}/approve", json={}, headers=headers
-    ).json()["grant_id"]
+    grant_id = _approve_to_quorum(client, headers, manifest_id).json()["grant_id"]
 
     first = client.post(
         f"/gateway/organizations/acme/refunds/{manifest_id}/execute",
@@ -205,9 +373,7 @@ def test_grant_for_one_refund_cannot_execute_a_different_refund(dev_client):
     manifest_b = _propose(client, headers, idempotency_key="idem-b", amount=999999).json()[
         "manifest_id"
     ]
-    grant_a = client.post(
-        f"/gateway/organizations/acme/refunds/{manifest_a}/approve", json={}, headers=headers
-    ).json()["grant_id"]
+    grant_a = _approve_to_quorum(client, headers, manifest_a).json()["grant_id"]
 
     # Attempt to execute refund B (a different amount) using refund A's grant.
     cross = client.post(
@@ -222,9 +388,7 @@ def test_compensation_is_a_separate_authorized_effect(dev_client):
     client, _app = dev_client
     headers = _bootstrap_and_login(client)
     manifest_id = _propose(client, headers, idempotency_key="idem-comp").json()["manifest_id"]
-    grant_id = client.post(
-        f"/gateway/organizations/acme/refunds/{manifest_id}/approve", json={}, headers=headers
-    ).json()["grant_id"]
+    grant_id = _approve_to_quorum(client, headers, manifest_id).json()["grant_id"]
     client.post(
         f"/gateway/organizations/acme/refunds/{manifest_id}/execute",
         json={"grant_id": grant_id},
@@ -247,9 +411,7 @@ def test_ambiguous_outcome_recovered_honestly(dev_client):
     client, _app = dev_client
     headers = _bootstrap_and_login(client)
     manifest_id = _propose(client, headers, idempotency_key="idem-ambiguous").json()["manifest_id"]
-    grant_id = client.post(
-        f"/gateway/organizations/acme/refunds/{manifest_id}/approve", json={}, headers=headers
-    ).json()["grant_id"]
+    grant_id = _approve_to_quorum(client, headers, manifest_id).json()["grant_id"]
 
     org_state = _app.state.karmasakshi_gateway.control_plane.get_state("acme")
     org_state.adapters["payment.simulator"].simulator.inject_ambiguous_timeout()
@@ -404,9 +566,7 @@ def test_passport_markdown_and_html_formats(dev_client):
     client, _app = dev_client
     headers = _bootstrap_and_login(client)
     manifest_id = _propose(client, headers, idempotency_key="idem-fmt").json()["manifest_id"]
-    grant_id = client.post(
-        f"/gateway/organizations/acme/refunds/{manifest_id}/approve", json={}, headers=headers
-    ).json()["grant_id"]
+    grant_id = _approve_to_quorum(client, headers, manifest_id).json()["grant_id"]
     client.post(
         f"/gateway/organizations/acme/refunds/{manifest_id}/execute",
         json={"grant_id": grant_id},

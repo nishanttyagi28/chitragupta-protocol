@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -55,11 +56,14 @@ def create_app(
     from karmasakshi.protection import ResourceProtectionMiddleware, policy_from_env
 
     app.add_middleware(ResourceProtectionMiddleware, policy=policy_from_env())
-    app.state.karmasakshi = state or build_default_state(data_dir)
+    configured_data_dir = os.getenv("KARMASAKSHI_DATA_DIR", "").strip()
+    resolved_data_dir = data_dir or (
+        Path(configured_data_dir) if configured_data_dir else Path.cwd() / ".karmasakshi-api"
+    )
+    resolved_data_dir.mkdir(parents=True, exist_ok=True)
+    app.state.karmasakshi = state or build_default_state(resolved_data_dir)
     app.include_router(router)
 
-    resolved_data_dir = data_dir or Path.cwd() / ".karmasakshi-api"
-    resolved_data_dir.mkdir(parents=True, exist_ok=True)
     app.state.karmasakshi_gateway = gateway_state or GatewayApiState(
         store=GatewayStore(default_gateway_db_path(resolved_data_dir)),
         control_plane=MultiTenantControlPlane(data_root=resolved_data_dir / "tenants"),

@@ -12,18 +12,28 @@ wires them for a terminal walkthrough. See docs/gateway.md.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from karmasakshi.adapters.payment_simulator import PaymentRequest
+from karmasakshi.adapters.payment_simulator import PaymentRequest, PaymentSimulatorAdapter
+from karmasakshi.approval import (
+    ApprovalPolicy,
+    build_approval_policy_bundle,
+    sign_approval_statement,
+)
 from karmasakshi.compensation import build_compensation_manifest
 from karmasakshi.domain.common import Principal
 from karmasakshi.domain.enums import PrincipalType
 from karmasakshi.errors import KarmaSakshiError
-from karmasakshi.gateway.api import require_gateway_session, resolve_org_runtime
+from karmasakshi.gateway.api import (
+    require_gateway_session,
+    require_registered_refund_resources,
+    resolve_org_runtime,
+)
 from karmasakshi.gateway.models import GatewayUser
 from karmasakshi.gateway.refund_schemas import (
     RefundAssessmentOut,
@@ -52,6 +62,7 @@ from karmasakshi.portable import build_evidence_pack
 router = APIRouter(prefix="/gateway/organizations/{org_id}", tags=["gateway-refunds"])
 
 _PAYMENT_ADAPTER_ID = "payment.simulator"
+_PAYMENT_ADAPTER_VERSION = "1.0.0"
 
 
 class PolicyActivateIn(BaseModel):
@@ -167,6 +178,7 @@ def _refund_detail(state: Any, org_id: str, manifest_id: str) -> RefundDetailOut
     denied = _denial_event(state, manifest_id)
     grant_ids = state.grants_by_manifest.get(manifest_id, [])
     grant = state.grants.get(grant_ids[-1]) if grant_ids else None
+    approval_statements = state.approval_statements.get(manifest_id, [])
     lifecycle_state = state.engine.get_lifecycle_state(manifest_id).value
     decision_status = "denied" if denied is not None else ("approved" if grant else "pending")
     commit = state.commit_results.get(manifest_id)
@@ -231,7 +243,7 @@ def _refund_detail(state: Any, org_id: str, manifest_id: str) -> RefundDetailOut
             active_policy_bundle_id=state.active_policy_bundle_id,
             bound_policy_bundle_hash=None if grant is None else grant.policy_bundle_hash,
             required_human_approvals=assessment.required_human_approvals,
-            completed_human_approvals=1 if grant is not None else 0,
+            completed_human_approvals=len(approval_statements),
             required_service_approvals=assessment.required_service_approvals,
             cooling_off_period_seconds=assessment.cooling_off_period_seconds,
             required_witness_quorum=assessment.required_witness_quorum,
@@ -271,6 +283,32 @@ def _refund_summary(detail: RefundDetailOut) -> RefundSummaryOut:
         ambiguous=detail.ambiguous,
         verification_status=detail.verification_status,
     )
+
+
+@router.post("/evaluation/payment-simulator/ambiguous-next")
+def inject_payment_simulator_ambiguity(
+    org_id: str,
+    request: Request,
+    user: Annotated[GatewayUser, Depends(require_gateway_session)],
+) -> dict[str, bool]:
+    """Arm the real payment simulator's documented ambiguous-timeout mode.
+
+    This is deliberately evaluation-only and simulator-specific: the next
+    commit settles in the simulator's ledger but returns a timeout, allowing
+    buyers to exercise observation-based recovery without fabricated UI state.
+    """
+    state = resolve_org_runtime(request, user, org_id)
+    adapter = state.adapters.get(_PAYMENT_ADAPTER_ID)
+    if not isinstance(adapter, PaymentSimulatorAdapter):
+        raise HTTPException(409, "payment simulator is not available")
+    adapter.simulator.inject_ambiguous_timeout()
+    state.engine.context.audit.record(
+        event_type="evaluation.payment_simulator.ambiguous_timeout_armed",
+        decision="armed",
+        actor_id=user.user_id,
+        metadata={"adapter_id": _PAYMENT_ADAPTER_ID},
+    )
+    return {"armed": True}
 
 
 @router.post("/policy")
@@ -367,7 +405,14 @@ def propose_refund(
 ) -> dict[str, Any]:
     """Propose an exact refund effect: prepare + seal + run the
     (advisory) Effect Intelligence Engine risk assessment."""
-    state = resolve_org_runtime(request, user, org_id)
+    state = require_registered_refund_resources(
+        request,
+        user,
+        org_id,
+        agent_id=body.agent_id,
+        adapter_id=_PAYMENT_ADAPTER_ID,
+        adapter_version=_PAYMENT_ADAPTER_VERSION,
+    )
     adapter = state.adapters[_PAYMENT_ADAPTER_ID]
     payment_request = PaymentRequest(
         actor=_agent(body.agent_id),
@@ -387,6 +432,27 @@ def propose_refund(
         raise HTTPException(422, str(exc)) from exc
     state.sealed_manifests[manifest.manifest_id] = sealed
     state.assessments[manifest.manifest_id] = assessment
+    now = state.engine.context.clock.now()
+    approval_policy = build_approval_policy_bundle(
+        ApprovalPolicy(
+            policy_id=f"refund-quorum-{manifest.manifest_id}",
+            required_approvals=max(1, assessment.required_human_approvals),
+        ),
+        bundle_id=f"refund-quorum-{manifest.manifest_id}",
+        bundle_version="1.0",
+        issuer=Principal(
+            principal_id="gateway-quorum-service",
+            principal_type=PrincipalType.SERVICE,
+        ),
+        tenant_id=org_id,
+        created_at=now,
+        effective_from=now,
+    )
+    state.approval_policy_bundles[manifest.manifest_id] = seal_policy_bundle(
+        approval_policy,
+        state.signing_key,
+        clock=state.engine.context.clock,
+    )
     return {
         "manifest_id": manifest.manifest_id,
         "manifest_hash": sealed.seal.manifest_hash,
@@ -402,16 +468,27 @@ def approve_refund(
     request: Request,
     user: Annotated[GatewayUser, Depends(require_gateway_session)],
 ) -> dict[str, Any]:
-    """Human approval: issues an ExecutionGrant. The approver is the
-    authenticated session user (never a client-supplied identity claim).
-    Invariant #30 -- ``authorize()`` structurally rejects an agent
-    issuer, so the approver can never be the refund agent itself."""
+    """Record one distinct human approval and issue a quorum-bound grant.
+
+    The approver identity comes exclusively from the authenticated
+    Gateway session. No grant is issued until the assessment's required
+    human approval count is satisfied by distinct organization users.
+    """
     state = resolve_org_runtime(request, user, org_id)
     sealed = state.sealed_manifests.get(manifest_id)
     if sealed is None:
         raise HTTPException(404, "manifest not found")
     if _denial_event(state, manifest_id) is not None:
         raise HTTPException(409, "refund authorization was denied")
+    if state.grants_by_manifest.get(manifest_id):
+        raise HTTPException(409, "refund is already authorized")
+    assessment = state.assessments.get(manifest_id)
+    approval_policy_bundle = state.approval_policy_bundles.get(manifest_id)
+    if assessment is None or approval_policy_bundle is None:
+        raise HTTPException(500, "refund approval policy unavailable")
+    statements = state.approval_statements.setdefault(manifest_id, [])
+    if any(statement.approver.principal_id == user.user_id for statement in statements):
+        raise HTTPException(409, "this user already approved the refund")
     policy_bundle = None
     bundle_id = body.policy_bundle_id or state.active_policy_bundle_id
     if bundle_id is not None:
@@ -420,10 +497,52 @@ def approve_refund(
             raise HTTPException(404, f"policy bundle {bundle_id!r} not found")
     now = datetime.now(timezone.utc)
     try:
-        grant = state.engine.authorize(
+        statement = sign_approval_statement(
+            statement_id=str(uuid.uuid4()),
+            manifest_hash=sealed.seal.manifest_hash,
+            approval_policy_bundle_hash=approval_policy_bundle.seal.bundle_hash,
+            approver=_human(user.user_id),
+            decision="approve",
+            signing_key=state.signing_key,
+            expires_at=now + timedelta(seconds=body.ttl_seconds),
+            nonce=uuid.uuid4().hex,
+            clock=state.engine.context.clock,
+        )
+    except KarmaSakshiError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    statements.append(statement)
+    required = max(1, assessment.required_human_approvals)
+    state.engine.context.audit.record(
+        event_type="approval.statement_recorded",
+        decision="approve",
+        manifest_id=manifest_id,
+        manifest_hash=sealed.seal.manifest_hash,
+        actor_id=user.user_id,
+        metadata={
+            "statement_id": statement.statement_id,
+            "completed_human_approvals": str(len(statements)),
+            "required_human_approvals": str(required),
+        },
+    )
+    if len(statements) < required:
+        return {
+            "grant_id": None,
+            "policy_bundle_hash": None,
+            "completed_human_approvals": len(statements),
+            "required_human_approvals": required,
+            "authorized": False,
+        }
+    try:
+        grant = state.engine.authorize_with_quorum(
             sealed,
-            issuer=_human(user.user_id),
+            statements=tuple(statements),
+            approval_policy_bundle=approval_policy_bundle,
+            proposer=sealed.manifest.actor,
             subject=sealed.manifest.actor,
+            grant_issuer=Principal(
+                principal_id="gateway-quorum-service",
+                principal_type=PrincipalType.SERVICE,
+            ),
             audience=(_PAYMENT_ADAPTER_ID,),
             allowed_effect_types=(sealed.manifest.effect_type,),
             scope=ScopeConstraints(),
@@ -435,7 +554,13 @@ def approve_refund(
     except KarmaSakshiError as exc:
         raise HTTPException(403, str(exc)) from exc
     state.register_grant(manifest_id, grant)
-    return {"grant_id": grant.grant_id, "policy_bundle_hash": grant.policy_bundle_hash}
+    return {
+        "grant_id": grant.grant_id,
+        "policy_bundle_hash": grant.policy_bundle_hash,
+        "completed_human_approvals": len(statements),
+        "required_human_approvals": required,
+        "authorized": True,
+    }
 
 
 @router.post("/refunds/{manifest_id}/deny")

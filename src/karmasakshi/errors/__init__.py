@@ -524,6 +524,22 @@ class GatewayUserAlreadyExistsError(GatewayError):
     """A user with that org_id + email is already registered."""
 
 
+class GatewayAgentNotFoundError(GatewayError):
+    """No refund agent with that org_id + agent_id is registered."""
+
+
+class GatewayAgentAlreadyExistsError(GatewayError):
+    """A different refund-agent registration already uses this org/id."""
+
+
+class GatewayAdapterNotFoundError(GatewayError):
+    """No adapter with that org_id + adapter_id is registered."""
+
+
+class GatewayAdapterAlreadyExistsError(GatewayError):
+    """A different adapter registration already uses this org/id."""
+
+
 class GatewayAuthenticationError(GatewayError):
     """Email/password did not authenticate for the given organization."""
 

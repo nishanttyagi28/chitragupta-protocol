@@ -9,8 +9,11 @@ COPY src ./src
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir ".[api]"
 
-# Non-root user for the runtime container.
-RUN useradd --create-home --uid 1000 karmasakshi
+# Non-root user and durable application-data mount point for the runtime container.
+RUN useradd --create-home --uid 1000 karmasakshi && \
+    mkdir -p /data && \
+    chown karmasakshi:karmasakshi /data
+ENV KARMASAKSHI_DATA_DIR=/data
 USER karmasakshi
 
 EXPOSE 8000

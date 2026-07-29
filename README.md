@@ -15,21 +15,59 @@ KarmaSakshi is a system that witnesses and proves the relationship between
 an approved action and its actual external outcome — nothing more claimed
 than that.
 
-**Status: v0.1.0, feature-complete reference implementation of an explicitly
-versioned, experimental protocol.** This is not a certified, audited, or
-"production proven" system — see [Limitations](#limitations) and
-[docs/threat-model.md](docs/threat-model.md).
+**Status: v0.1.0 experimental protocol; Milestone A local evaluation
+product complete.** The AI-operated refund journey now ships with the
+Gateway, typed sync/async SDK, authenticated Control Center, explicit
+agent/adapter inventory, assessment-required human quorum, Docker
+Compose evaluation, and a 25-check buyer acceptance command.
 
-**In progress:** extreme-v2 Phases 1–25 have landed on top of v0.1 —
-including independent witness quorum, evidence quality / provenance,
-deep delegation revocation, atomic authority budgets, durable lifecycle
-storage, audit backend abstraction, a transactional outbox, a trusted
-adapter registry, a multi-tenant control plane, resource/DoS protection,
-bounded lifecycle model checking, Action Passport V2, portable Evidence
-Packs, advisory observability, and an AgentEval failure-memory loop. See
-the build ledger at
-[docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for
-exactly what's implemented vs. planned.
+This is not certified, independently audited, "production proven," or a
+real payment integration. See [Limitations](#limitations) and
+[docs/threat-model.md](docs/threat-model.md). All 25 extreme-v2 protocol
+foundation phases are also implemented; the exact ledger is
+[docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md).
+
+## Evaluate Milestone A
+
+<p align="center">
+  <img src="docs/assets/control-center/control-center-preview.gif" alt="Authenticated KarmaSakshi Control Center showing a sealed refund, exact before and after state, risk signals, and a server-enforced three-person approval quorum" width="640" />
+</p>
+
+**Real Control Center video (39s):**
+[docs/assets/control-center/control-center-demo.mp4](docs/assets/control-center/control-center-demo.mp4).
+It is recorded from the running authenticated application; the generation
+script first passes the same buyer acceptance journey used in CI.
+
+With Docker Compose v2:
+
+```bash
+docker compose up --detach --build --wait api
+docker compose --profile acceptance run --rm acceptance
+```
+
+The command prints 25 `PASS` checks plus generated local credentials.
+Open `http://127.0.0.1:8000/control-center/login`. The API is bound to
+loopback, the simulator data lives in a named volume, and the JSON report
+is written to `/data/acceptance/milestone-a.json`. When finished:
+`docker compose down --volumes`.
+
+Without Docker, run an API locally and point the packaged command at it:
+
+```bash
+# terminal 1
+KARMASAKSHI_API_DEV_MODE=1 \
+  python -m uvicorn karmasakshi.api.app:create_app --factory
+
+# terminal 2
+karmasakshi-acceptance --base-url http://127.0.0.1:8000 \
+  --report artifacts/milestone-a-acceptance.json
+```
+
+| | |
+|---|---|
+| ![Control Center overview with pending and verified refunds plus verified audit integrity](docs/assets/control-center/01-overview-dashboard.png) **Organization overview** | ![Approval inbox populated from real sealed Gateway refunds](docs/assets/control-center/02-approval-inbox.png) **Approval inbox** |
+| ![Exact before and after balances alongside structured risk signals and policy quorum](docs/assets/control-center/03-exact-effect-risk-policy.png) **Exact effect, risk, and policy** | ![Action Passport V2 viewer showing verified seal, quorum-bound grant, outcome, and audit chain](docs/assets/control-center/04-action-passport.png) **Action Passport V2** |
+| ![Organization-scoped audit explorer with a verified hash chain and manifest search](docs/assets/control-center/05-searchable-audit.png) **Searchable audit evidence** | **Reproduce:** `python scripts/capture_control_center.py` and `python scripts/record_control_center_demo.py` |
 
 ## At a glance: allowed tool call vs. verified effect
 
@@ -112,7 +150,7 @@ sourced, capability-boundary comparison against five publicly documented
 products in this space (Grantex, AgentLattice, Xybern, OpenLeash, and
 Meandr) is in [docs/comparison.md](docs/comparison.md#capability-boundary-comparison).
 
-## Try it live
+## Protocol sandbox demo
 
 <p align="center">
   <img src="docs/assets/demo/demo-preview.gif" alt="KarmaSakshi Protocol sandbox demo: an agent proposes an INR 1,500 refund, a human approves the exact sealed effect, and the payment executes exactly once with an independently verified outcome" width="640" />
@@ -577,8 +615,9 @@ means precisely: [docs/action-passports.md](docs/action-passports.md).
 - [docs/portable-evidence.md](docs/portable-evidence.md) — self-contained, offline-verifiable Evidence Packs
 - [docs/observability.md](docs/observability.md) — neutral, advisory lifecycle events
 - [docs/agenteval-integration.md](docs/agenteval-integration.md) — regression-fixture export and the failure-memory loop
-- [docs/gateway.md](docs/gateway.md) — commercial Gateway: organizations, auth, and the AI-operated refund journey (Milestone A, in progress)
+- [docs/gateway.md](docs/gateway.md) — commercial Gateway: organizations, auth, and the AI-operated refund journey
 - [docs/sdk.md](docs/sdk.md) — typed sync/async Python SDK for the Gateway HTTP API
+- [docs/product/BUYER_EVALUATION.md](docs/product/BUYER_EVALUATION.md) — Docker and standalone acceptance walkthrough
 - [docs/limitations.md](docs/limitations.md)
 - [docs/comparison.md](docs/comparison.md)
 

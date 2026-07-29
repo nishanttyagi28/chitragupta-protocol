@@ -170,4 +170,6 @@ the approver's behalf.
 - **`EffectAssessment.required_human_approvals` (Phase 1) is not yet
   wired to automatically set `ApprovalPolicy.required_approvals`.** The
   two systems compose (nothing prevents a caller from reading one and
-  configuring the other), but there is no automatic enforcement link yet.
+  configuring the other) in the core library. The Milestone A Gateway
+  refund product is an explicit higher-layer exception: it materializes
+  that count into a signed approval policy for each proposed refund.

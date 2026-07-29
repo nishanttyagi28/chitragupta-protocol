@@ -62,7 +62,39 @@ def _bootstrap_and_login(client, org_id="acme", email="alice@acme.com", password
         owner_display_name="Alice",
         owner_password=password,
     )
-    return client.login(org_id=org_id, email=email, password=password)
+    login = client.login(org_id=org_id, email=email, password=password)
+    client.register_agent(
+        org_id,
+        agent_id="refund-agent-1",
+        display_name="Refund Agent",
+    )
+    client.register_adapter(
+        org_id,
+        adapter_id="payment.simulator",
+        adapter_version="1.0.0",
+    )
+    return login
+
+
+def _approve_to_quorum(client, proposal, *, org_id="acme"):
+    credentials = []
+    for index in range(1, proposal.assessment.required_human_approvals):
+        email = f"approver-{index}-{proposal.manifest_id[:8]}@example.com"
+        password = "approval-password"
+        client.create_user(
+            org_id,
+            user_id=f"{org_id}-approver-{index}-{proposal.manifest_id[:8]}",
+            email=email,
+            display_name=f"Approver {index}",
+            password=password,
+        )
+        credentials.append((email, password))
+    result = client.approve_refund(org_id, proposal.manifest_id)
+    for email, password in credentials:
+        client.login(org_id=org_id, email=email, password=password)
+        result = client.approve_refund(org_id, proposal.manifest_id)
+    client.login(org_id=org_id, email="alice@acme.com", password="hunter2")
+    return result
 
 
 def test_full_refund_journey(base_url):
@@ -95,7 +127,7 @@ def test_full_refund_journey(base_url):
         assert detail.effect.amount_minor_units == 50000
         assert detail.decision_status == "pending"
 
-        approval = client.approve_refund("acme", proposal.manifest_id)
+        approval = _approve_to_quorum(client, proposal)
         assert approval.grant_id
         assert approval.policy_bundle_hash == policy.bundle_hash
 
@@ -150,10 +182,10 @@ def test_full_refund_journey(base_url):
             "acme", user_id="u2", email="bob@acme.com", display_name="Bob", password="password123"
         )
         assert new_user.email == "bob@acme.com"
-        assert {u.email for u in client.list_users("acme")} == {
+        assert {
             "alice@acme.com",
             "bob@acme.com",
-        }
+        } <= {u.email for u in client.list_users("acme")}
 
         org = client.get_organization("acme")
         assert org.org_id == "acme"
@@ -182,7 +214,7 @@ def test_grant_for_one_refund_cannot_execute_a_different_refund(base_url):
             reference="order-b",
             idempotency_key="idem-sync-b",
         )
-        approval_a = client.approve_refund("acme", proposal_a.manifest_id)
+        approval_a = _approve_to_quorum(client, proposal_a)
         with pytest.raises(KarmaSakshiApiError) as exc_info:
             client.execute_refund("acme", proposal_b.manifest_id, grant_id=approval_a.grant_id)
         assert exc_info.value.status_code == 409

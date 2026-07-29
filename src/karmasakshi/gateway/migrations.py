@@ -57,6 +57,33 @@ MIGRATIONS: tuple[Migration, ...] = (
             )
         """,
     ),
+    Migration(
+        id=3,
+        name="create_gateway_agents",
+        sql="""
+            CREATE TABLE gateway_agents (
+                org_id TEXT NOT NULL REFERENCES organizations(org_id),
+                agent_id TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(org_id, agent_id)
+            )
+        """,
+    ),
+    Migration(
+        id=4,
+        name="create_gateway_adapters",
+        sql="""
+            CREATE TABLE gateway_adapters (
+                org_id TEXT NOT NULL REFERENCES organizations(org_id),
+                adapter_id TEXT NOT NULL,
+                adapter_version TEXT NOT NULL,
+                effect_types_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(org_id, adapter_id)
+            )
+        """,
+    ),
 )
 
 

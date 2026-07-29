@@ -4,6 +4,10 @@ import pytest
 
 from karmasakshi.errors import (
     CrossOrganizationAccessError,
+    GatewayAdapterAlreadyExistsError,
+    GatewayAdapterNotFoundError,
+    GatewayAgentAlreadyExistsError,
+    GatewayAgentNotFoundError,
     GatewayAuthenticationError,
     GatewayUserAlreadyExistsError,
     GatewayUserNotFoundError,
@@ -234,6 +238,93 @@ def test_assert_user_belongs_to_organization_rejects_cross_org(store):
     )
     with pytest.raises(CrossOrganizationAccessError):
         store.assert_user_belongs_to_organization(user, "org-2")
+
+
+# --- evaluation resource inventory --------------------------------------------
+
+
+def test_agent_registration_is_idempotent_and_organization_scoped(store):
+    store.create_organization("org-1", "Acme Corp")
+    store.create_organization("org-2", "Beta Corp")
+
+    first = store.register_agent(
+        org_id="org-1", agent_id="refund-agent", display_name="Refund Agent"
+    )
+    repeated = store.register_agent(
+        org_id="org-1", agent_id="refund-agent", display_name="Refund Agent"
+    )
+    other = store.register_agent(
+        org_id="org-2", agent_id="refund-agent", display_name="Beta Refund Agent"
+    )
+
+    assert repeated == first
+    assert store.get_agent("org-1", "refund-agent") == first
+    assert store.list_agents("org-1") == [first]
+    assert other.org_id == "org-2"
+    assert other.display_name == "Beta Refund Agent"
+
+
+def test_agent_registration_rejects_changed_identity_and_unknown_lookup(store):
+    store.create_organization("org-1", "Acme Corp")
+    store.register_agent(org_id="org-1", agent_id="refund-agent", display_name="Refund Agent")
+
+    with pytest.raises(GatewayAgentAlreadyExistsError):
+        store.register_agent(
+            org_id="org-1",
+            agent_id="refund-agent",
+            display_name="Changed Agent",
+        )
+    with pytest.raises(GatewayAgentNotFoundError):
+        store.get_agent("org-1", "missing-agent")
+
+
+def test_adapter_registration_is_idempotent_and_organization_scoped(store):
+    store.create_organization("org-1", "Acme Corp")
+    store.create_organization("org-2", "Beta Corp")
+
+    first = store.register_adapter(
+        org_id="org-1",
+        adapter_id="payment.simulator",
+        adapter_version="1.0.0",
+        effect_types=("payment.transfer",),
+    )
+    repeated = store.register_adapter(
+        org_id="org-1",
+        adapter_id="payment.simulator",
+        adapter_version="1.0.0",
+        effect_types=("payment.transfer",),
+    )
+    other = store.register_adapter(
+        org_id="org-2",
+        adapter_id="payment.simulator",
+        adapter_version="1.0.0",
+        effect_types=("payment.transfer",),
+    )
+
+    assert repeated == first
+    assert store.get_adapter("org-1", "payment.simulator") == first
+    assert store.list_adapters("org-1") == [first]
+    assert other.org_id == "org-2"
+
+
+def test_adapter_registration_rejects_changed_version_and_unknown_lookup(store):
+    store.create_organization("org-1", "Acme Corp")
+    store.register_adapter(
+        org_id="org-1",
+        adapter_id="payment.simulator",
+        adapter_version="1.0.0",
+        effect_types=("payment.transfer",),
+    )
+
+    with pytest.raises(GatewayAdapterAlreadyExistsError):
+        store.register_adapter(
+            org_id="org-1",
+            adapter_id="payment.simulator",
+            adapter_version="2.0.0",
+            effect_types=("payment.transfer",),
+        )
+    with pytest.raises(GatewayAdapterNotFoundError):
+        store.get_adapter("org-1", "missing-adapter")
 
 
 def test_password_hash_never_equals_plaintext(store):

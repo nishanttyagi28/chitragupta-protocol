@@ -26,7 +26,8 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   if no Redis instance is reachable. In the environment this branch was
   built in, that was the case — the Redis backend's logic is implemented
   and unit-testable in isolation, but was not exercised against a live
-  Redis server as part of this build. Run `docker compose up redis` and
+  Redis server as part of this build. Run
+  `docker compose --profile redis up redis` and
   re-run `pytest -m redis` to exercise it.
 - **Multi-hop delegation revocation walks recorded lineage at commit
   time** (extreme-v2 Phase 11). Grants issued through the engine record
@@ -116,15 +117,16 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   `IntelligencePolicy` *can* now be cryptographically signed via a
   `PolicyBundle` -- see the next item -- but doing so still only pins
   *which* policy was used, not that its recommendation is enforced.)
-- **Signed policy bundles and multi-party authorization
+- **The core signed-policy and multi-party authorization APIs
   (`karmasakshi.policy`, `karmasakshi.approval`) do not read
-  `EffectAssessment` automatically.** A caller must explicitly configure
-  `IntelligencePolicy`/`ApprovalPolicy` thresholds; there is no automatic
-  link from a Phase 1 assessment's `required_human_approvals` to a Phase
-  3 `ApprovalPolicy.required_approvals`. Approval roles are self-asserted
-  (no RBAC/identity-directory check). The reference API signs every
-  approval statement with one shared service key, not a distinct key per
-  approver (the CLI does not have this limitation). See
+  `EffectAssessment` automatically.** Library callers must explicitly
+  configure `ApprovalPolicy`. The Milestone A Gateway refund route is a
+  deliberate product-layer exception: at proposal time it materializes
+  the assessment's `required_human_approvals` into a signed approval
+  policy and requires distinct authenticated organization users. It does
+  not enforce role/group eligibility, and it signs every approval
+  statement with one shared organization service key rather than a
+  distinct key per user (the CLI does not have this limitation). See
   [docs/policy-bundles.md](policy-bundles.md) and
   [docs/multi-party-authorization.md](multi-party-authorization.md).
 - **Separation-of-duty role facts beyond proposer/executor/approver are
@@ -193,13 +195,12 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   reset and user-removal endpoints do not exist yet. See
   [docs/gateway.md](gateway.md).
 - **The Gateway refund journey (`karmasakshi.gateway.refunds`) is
-  payment-simulator-only and single-approver** -- no real payment
-  provider; "agent"/"adapter registration" are not yet their own durable
-  registries (an agent is just a `principal_id` string in the propose
-  call); `approve`/`compensate` accept one authenticated session user's
-  decision, not a configurable multi-approver quorum (Milestone B). No
-  durable background worker or real provider is implied by the
-  server-rendered Control Center. See
+  payment-simulator-only** -- no real payment provider. Agent and adapter
+  inventory is durable and organization-scoped, and human approval count
+  is enforced with distinct authenticated users plus a quorum-bound
+  grant. There is still no role/group eligibility, SSO-derived approval
+  policy, per-user signing key, durable background worker, or real
+  provider implied by the server-rendered Control Center. See
   [docs/gateway.md](gateway.md) and
   [docs/control-center.md](control-center.md).
 - **The Gateway SDK (`karmasakshi.sdk`) is a client for the Gateway

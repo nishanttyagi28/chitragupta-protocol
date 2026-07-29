@@ -52,6 +52,7 @@ all = ["karmasakshi-protocol[redis,api,langgraph,sdk]"]
 
 [project.scripts]
 karmasakshi = "karmasakshi.cli.app:main"
+karmasakshi-acceptance = "karmasakshi.acceptance:main"
 
 [project.urls]
 Homepage = "https://github.com/nishanttyagi28/karmasakshi-protocol"

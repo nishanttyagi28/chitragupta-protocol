@@ -10,7 +10,11 @@ from types import TracebackType
 import httpx
 
 from karmasakshi.audit.events import AuditEvent
-from karmasakshi.gateway.models import GatewayUserRole
+from karmasakshi.gateway.models import (
+    GatewayAdapterRegistration,
+    GatewayAgent,
+    GatewayUserRole,
+)
 from karmasakshi.gateway.refund_schemas import (
     RefundDenyResult,
     RefundDetailOut,
@@ -44,6 +48,7 @@ from karmasakshi.sdk.models import (
     ExecutionResult,
     PolicyActivationResult,
     RefundProposalResult,
+    SimulatorInjectionResult,
     VerificationResult,
 )
 
@@ -203,6 +208,51 @@ class AsyncGatewayClient:
         )
         return GatewayUserOut.model_validate(response.json())
 
+    async def register_agent(
+        self, org_id: str, *, agent_id: str, display_name: str
+    ) -> GatewayAgent:
+        response = await self._request(
+            "POST",
+            f"/gateway/organizations/{org_id}/agents",
+            json={"agent_id": agent_id, "display_name": display_name},
+            headers=self._session_headers(),
+        )
+        return GatewayAgent.model_validate(response.json())
+
+    async def list_agents(self, org_id: str) -> list[GatewayAgent]:
+        response = await self._request(
+            "GET",
+            f"/gateway/organizations/{org_id}/agents",
+            headers=self._session_headers(),
+        )
+        return [GatewayAgent.model_validate(agent) for agent in response.json()["agents"]]
+
+    async def register_adapter(
+        self,
+        org_id: str,
+        *,
+        adapter_id: str,
+        adapter_version: str,
+    ) -> GatewayAdapterRegistration:
+        response = await self._request(
+            "POST",
+            f"/gateway/organizations/{org_id}/adapters",
+            json={"adapter_id": adapter_id, "adapter_version": adapter_version},
+            headers=self._session_headers(),
+        )
+        return GatewayAdapterRegistration.model_validate(response.json())
+
+    async def list_adapters(self, org_id: str) -> list[GatewayAdapterRegistration]:
+        response = await self._request(
+            "GET",
+            f"/gateway/organizations/{org_id}/adapters",
+            headers=self._session_headers(),
+        )
+        return [
+            GatewayAdapterRegistration.model_validate(adapter)
+            for adapter in response.json()["adapters"]
+        ]
+
     # --- policy -----------------------------------------------------------
 
     async def activate_policy(
@@ -228,6 +278,14 @@ class AsyncGatewayClient:
         return PolicyActivationResult.model_validate(response.json())
 
     # --- refund journey -----------------------------------------------------
+
+    async def inject_ambiguous_timeout(self, org_id: str) -> SimulatorInjectionResult:
+        response = await self._request(
+            "POST",
+            f"/gateway/organizations/{org_id}/evaluation/payment-simulator/ambiguous-next",
+            headers=self._session_headers(),
+        )
+        return SimulatorInjectionResult.model_validate(response.json())
 
     async def propose_refund(
         self,

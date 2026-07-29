@@ -33,7 +33,10 @@ _SESSION_COOKIE = "karmasakshi_cc_session"
 _LOGIN_CSRF_COOKIE = "karmasakshi_cc_login_csrf"
 _COOKIE_PATH = "/control-center"
 _NOTICES = {
-    "approved": "Approval recorded. The exact sealed effect is now authorized.",
+    "approval-recorded": (
+        "Approval recorded. The effect remains pending until the required quorum completes."
+    ),
+    "authorized": "Required approval quorum completed. The exact sealed effect is authorized.",
     "denied": "Denial recorded. This sealed effect can no longer be approved.",
     "executed": "Commit attempted through the payment simulator. Review the reported outcome.",
     "verified": "Independent provider observation completed.",
@@ -394,10 +397,11 @@ async def approve(
         return resolved
     try:
         async with _sdk(request, resolved.token) as client:
-            await client.approve_refund(resolved.user.org_id, manifest_id)
+            result = await client.approve_refund(resolved.user.org_id, manifest_id)
     except KarmaSakshiSdkError as exc:
         return _sdk_error_page(request, resolved, exc)
-    return _redirect(f"/control-center/refunds/{manifest_id}?notice=approved")
+    notice = "authorized" if result.authorized else "approval-recorded"
+    return _redirect(f"/control-center/refunds/{manifest_id}?notice={notice}")
 
 
 @control_center_router.post("/refunds/{manifest_id}/deny")

@@ -33,6 +33,8 @@ with GatewayClient("http://localhost:8000", platform_token="dev-token") as clien
         owner_password="a-real-password",
     )
     client.login(org_id="acme", email="alice@acme.com", password="a-real-password")
+    client.register_agent("acme", agent_id="refund-agent-1", display_name="Refund Agent")
+    client.register_adapter("acme", adapter_id="payment.simulator", adapter_version="1.0.0")
 
     proposal = client.propose_refund(
         "acme",
@@ -46,6 +48,9 @@ with GatewayClient("http://localhost:8000", platform_token="dev-token") as clien
     pending = client.list_refunds("acme", decision_status="pending")
     exact_effect = client.get_refund("acme", proposal.manifest_id)
     approval = client.approve_refund("acme", proposal.manifest_id)
+    # Critical-risk simulator refunds require distinct human sessions.
+    # Repeat from other registered users until approval.authorized is true.
+    assert approval.authorized and approval.grant_id is not None
     execution = client.execute_refund("acme", proposal.manifest_id, grant_id=approval.grant_id)
     verification = client.verify_refund("acme", proposal.manifest_id)
 
@@ -82,6 +87,11 @@ of sync. The Control Center refund read models are shared directly from
 `karmasakshi.sdk.models`: `RefundProposalResult`, `ApprovalResult`,
 `ExecutionResult`, `VerificationResult`, `CompensationResult`, and
 `PolicyActivationResult`.
+
+`ApprovalResult` reports `completed_human_approvals`,
+`required_human_approvals`, `authorized`, and an optional `grant_id`.
+Partial quorum is a successful, audited HTTP response with
+`authorized=False`; it is not silently converted into a grant.
 
 ## Errors
 

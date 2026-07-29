@@ -1,46 +1,75 @@
 services:
   api:
     build: .
+    image: karmasakshi-protocol:milestone-a
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
-      # Unauthenticated local-only mode -- see docs/deployment.md.
-      # Remove this and set KARMASAKSHI_API_TOKEN before exposing this
-      # beyond your own machine.
+      # Evaluation-only bootstrap mode. The port is bound to loopback so
+      # unauthenticated platform bootstrap is never exposed off-machine.
       KARMASAKSHI_API_DEV_MODE: "1"
+      KARMASAKSHI_DATA_DIR: "/data"
+    volumes:
+      - karmasakshi-data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
-      interval: 15s
+      interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 12
+      start_period: 5s
+
+  # Runs the public buyer checklist against the API, SDK, and Control
+  # Center. The JSON report remains in the named volume at
+  # /data/acceptance/milestone-a.json.
+  acceptance:
+    image: karmasakshi-protocol:milestone-a
+    profiles: ["acceptance"]
     depends_on:
-      redis:
+      api:
         condition: service_healthy
+    command:
+      - karmasakshi-acceptance
+      - --base-url
+      - http://api:8000
+      - --report
+      - /data/acceptance/milestone-a.json
+    volumes:
+      - karmasakshi-data:/data
 
   # Local dry run of the same public-demo configuration used in
-  # render.yaml -- `docker compose --profile demo up demo` -- useful for
-  # verifying the sandbox before deploying it. Does not require Redis.
+  # render.yaml. It is separate from the authenticated evaluation product.
   demo:
     build: .
     profiles: ["demo"]
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8001:8000"
     environment:
       KARMASAKSHI_PUBLIC_DEMO: "1"
       KARMASAKSHI_DEMO_TTL_SECONDS: "900"
       KARMASAKSHI_DEMO_RATE_LIMIT_PER_MINUTE: "30"
+      KARMASAKSHI_DATA_DIR: "/data"
+    volumes:
+      - karmasakshi-demo-data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
-      interval: 15s
+      interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 12
+      start_period: 5s
 
+  # Optional Redis backend for protocol storage experiments and tests.
+  # The Milestone A commercial Gateway deliberately uses durable SQLite.
   redis:
     image: redis:7-alpine
+    profiles: ["redis"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
+
+volumes:
+  karmasakshi-data:
+  karmasakshi-demo-data:

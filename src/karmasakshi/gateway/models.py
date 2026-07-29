@@ -97,7 +97,69 @@ class GatewayUser(BaseModel):
         return ensure_utc(v)
 
 
+class GatewayAgent(BaseModel):
+    """A durable organization-scoped agent inventory entry.
+
+    Milestone A registration provides explicit buyer-visible identity and
+    proposal binding. It is not a service credential or an RBAC grant.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    agent_id: str
+    org_id: str
+    display_name: str
+    created_at: datetime
+
+    @field_validator("agent_id", "org_id", "display_name")
+    @classmethod
+    def _nonempty(cls, v: str) -> str:
+        if not v or len(v) > _MAX_IDENTIFIER_LEN:
+            raise ValueError(f"must be 1-{_MAX_IDENTIFIER_LEN} chars")
+        return v
+
+    @field_validator("created_at")
+    @classmethod
+    def _tz(cls, v: datetime) -> datetime:
+        return ensure_utc(v)
+
+
+class GatewayAdapterRegistration(BaseModel):
+    """One real adapter version made available to one organization."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    adapter_id: str
+    org_id: str
+    adapter_version: str
+    effect_types: tuple[str, ...]
+    created_at: datetime
+
+    @field_validator("adapter_id", "org_id", "adapter_version")
+    @classmethod
+    def _nonempty(cls, v: str) -> str:
+        if not v or len(v) > _MAX_IDENTIFIER_LEN:
+            raise ValueError(f"must be 1-{_MAX_IDENTIFIER_LEN} chars")
+        return v
+
+    @field_validator("effect_types")
+    @classmethod
+    def _effect_types(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        if not v or len(v) > 32 or any(not item or len(item) > _MAX_IDENTIFIER_LEN for item in v):
+            raise ValueError("effect_types must contain 1-32 non-empty values")
+        if len(set(v)) != len(v):
+            raise ValueError("effect_types must not contain duplicates")
+        return v
+
+    @field_validator("created_at")
+    @classmethod
+    def _tz(cls, v: datetime) -> datetime:
+        return ensure_utc(v)
+
+
 __all__ = [
+    "GatewayAdapterRegistration",
+    "GatewayAgent",
     "GatewayUser",
     "GatewayUserRole",
     "Organization",
