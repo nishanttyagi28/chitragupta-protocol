@@ -223,6 +223,19 @@ class GatewayStore:
             raise GatewayUserNotFoundError(f"no user {email!r} in organization {org_id!r}")
         return _row_to_user(row)
 
+    def get_user_by_id(self, org_id: str, user_id: str) -> GatewayUser:
+        with self._lock:
+            try:
+                row = self._conn.execute(
+                    "SELECT * FROM gateway_users WHERE org_id = ? AND user_id = ?",
+                    (org_id, user_id),
+                ).fetchone()
+            except sqlite3.Error as exc:
+                raise StoreUnavailableError(f"get_user_by_id({user_id!r}) failed") from exc
+        if row is None:
+            raise GatewayUserNotFoundError(f"no user {user_id!r} in organization {org_id!r}")
+        return _row_to_user(row)
+
     def list_users(self, org_id: str) -> list[GatewayUser]:
         self.require_active_organization(org_id)
         with self._lock:
