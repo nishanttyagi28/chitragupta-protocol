@@ -22,7 +22,11 @@ surface ships as `karmasakshi.sdk` -- see [docs/sdk.md](sdk.md).
 - `GatewayUser` — a team member of one organization (`user_id`,
   `org_id`, `email`, `display_name`, `role`). Never carries password
   material.
-- `GatewayStore` — SQLite-backed CRUD for both, plus `authenticate()`.
+- `GatewayAgent` and `GatewayAdapterRegistration` are durable, listable,
+  organization-scoped inventory. A proposal fails closed unless its
+  agent and the exact trusted payment-adapter version are registered.
+- `GatewayStore` provides SQLite-backed CRUD for organizations, users,
+  agents, adapters, plus `authenticate()`.
 
 ```python
 from karmasakshi.gateway import GatewayStore, GatewayUserRole
@@ -88,6 +92,10 @@ one process exposing both. See `karmasakshi.gateway.api`.
 | GET | `/gateway/organizations/{org_id}` | Gateway session (same org) | Fetch organization details |
 | GET | `/gateway/organizations/{org_id}/users` | Gateway session (same org) | List an organization's users |
 | POST | `/gateway/organizations/{org_id}/users` | Gateway session (same org) | Register an additional user in that organization |
+| POST | `/gateway/organizations/{org_id}/agents` | Gateway session (same org) | Idempotently register an organization refund agent |
+| GET | `/gateway/organizations/{org_id}/agents` | Gateway session (same org) | List registered refund agents |
+| POST | `/gateway/organizations/{org_id}/adapters` | Gateway session (same org) | Register an exact adapter version already trusted by the runtime |
+| GET | `/gateway/organizations/{org_id}/adapters` | Gateway session (same org) | List registered adapter capabilities |
 
 Organization *creation* is deliberately gated by the **platform**
 auth check (the same `KARMASAKSHI_API_DEV_MODE` / `KARMASAKSHI_API_TOKEN`
@@ -126,7 +134,7 @@ scoped to one organization.
 | POST | `/gateway/organizations/{org_id}/refunds/propose` | Prepare + seal + (advisory) risk-assess an exact refund effect |
 | GET | `/gateway/organizations/{org_id}/refunds` | List typed refund summaries (`?decision_status=pending\|approved\|denied`) |
 | GET | `/gateway/organizations/{org_id}/refunds/{id}` | Full Control Center read model: exact effect, risk signals, policy requirements, lifecycle, outcome, timeline |
-| POST | `/gateway/organizations/{org_id}/refunds/{id}/approve` | Human approval: issue an `ExecutionGrant` |
+| POST | `/gateway/organizations/{org_id}/refunds/{id}/approve` | Record one distinct session-authenticated signed approval; issue an `ExecutionGrant` only when required quorum is satisfied |
 | POST | `/gateway/organizations/{org_id}/refunds/{id}/deny` | Record an authenticated human denial that blocks later approval |
 | POST | `/gateway/organizations/{org_id}/refunds/{id}/execute` | Commit exactly once through the payment simulator |
 | POST | `/gateway/organizations/{org_id}/refunds/{id}/verify` | Independent post-commit observation |
@@ -155,6 +163,10 @@ in-process runtime directly. See [docs/control-center.md](control-center.md).
   *different* refund's manifest with another refund's grant fails `409`.
 - *Duplicate retry prevented*: executing the same grant twice fails
   `409` the second time (invariants #4/#5).
+- *Required quorum enforced*: the assessment's human-approval count is
+  materialized as a signed approval policy. Duplicate approvals from one
+  user fail `409`; partial sets remain sealed/pending; the final grant
+  binds the accepted statements through `approval_set_hash`.
 - *Ambiguous timeout recovered honestly*: `PaymentSimulator.inject_ambiguous_timeout()`
   forces the next commit to raise `TimeoutError` internally while still
   settling the payment; `execute` reports `success=False` with an
@@ -184,18 +196,14 @@ every adversarial case exercised end to end through HTTP.
   revokes the current session, but there is not yet an administrator UI
   for revoking every session belonging to another user.
 - **The refund journey is payment-simulator-only** -- no real payment
-  provider, and "agent registration" / "adapter registration" are not
-  yet their own durable, listable resources: an agent is just a
-  `principal_id` string named in the `propose` call, and the payment
-  simulator is wired automatically by `build_default_state()` for every
-  organization (there is no `POST .../agents` or `POST .../adapters`
-  endpoint yet). A future slice could make both explicit, durable,
-  org-scoped registries if buyer evaluation needs that visibility.
-- **`approve`/`compensate` do not yet enforce multi-approver quorum** --
-  a single authenticated session user's approval is sufficient (the
-  protocol's `authorize_with_quorum()` exists and is unaffected; wiring
-  configurable required-approver-count into the Gateway is Milestone B's
-  "approval groups").
+  provider. Agent and adapter registrations are explicit and durable,
+  but adapter registration can select only a concrete version already
+  wired into and trusted by this Gateway runtime.
+- **Quorum has no role/group policy in Milestone A.** The Gateway enforces
+  the assessment's distinct-human count and binds the accepted set
+  cryptographically, but any authenticated member of the organization
+  may contribute. Owner-only decisions, finance/security groups, SSO
+  claims, and per-user signing keys remain Milestone B work.
 - The Control Center is a server-rendered Milestone A UI with no
   client-side SPA build. Role-based decision permissions remain deferred
   with the RBAC limitation above.

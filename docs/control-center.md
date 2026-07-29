@@ -22,6 +22,9 @@ store, and audit journal as a remote SDK client.
   policy recommendation, and approval/verification requirements.
 - Approve and deny actions. The acting identity always comes from the
   server-side Gateway session, never a hidden form field.
+- Assessment-required human quorum: distinct authenticated organization
+  users create signed approval statements; a partial set remains pending,
+  and only a satisfied set issues a quorum-bound execution grant.
 - Commit, independent verify, and ambiguous-outcome recovery actions
   against the real payment simulator lifecycle.
 - Per-effect audit timeline.
@@ -69,13 +72,18 @@ silently supplies development credentials.
 ## Authorization boundary
 
 Milestone A permits any authenticated team member in the same
-organization to approve or deny a refund. Authorization is nevertheless
-server-side: the session must be live, must belong to the URL
-organization, and supplies the immutable audit actor/approval issuer.
+organization to approve or deny a refund. Authorization is server-side:
+the session must be live, must belong to the URL organization, and
+supplies the immutable approval principal. One user cannot count twice.
+The risk assessment's required human count is sealed into an approval
+policy; only distinct signed statements satisfying that count produce a
+grant whose `approval_set_hash` binds the counted set.
 
-Role-based approval permissions, approval groups, and multi-approver
-quorum remain Milestone B work. The Control Center does not infer those
-features from the existing `owner`/`member` role metadata.
+Role-based decision permissions and named approval groups remain
+Milestone B work. The Control Center does not infer those features from
+the existing `owner`/`member` role metadata. Approval statements are
+signed by the Gateway's organization service key on behalf of the
+session-authenticated human; per-user cryptographic keys are not shipped.
 
 ## Tests
 
@@ -84,7 +92,7 @@ Gateway API, async SDK, protocol state, and templates. It covers:
 
 - safe login/session/logout behavior and security headers;
 - real overview, approval inbox, before/after, risk, and policy output;
-- approve -> execute -> verify -> Action Passport;
+- partial and completed quorum -> execute -> verify -> Action Passport;
 - denial and prevention of later approval;
 - CSRF rejection without lifecycle mutation;
 - audit search and hash-chain status;

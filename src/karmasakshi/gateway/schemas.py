@@ -7,7 +7,12 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from karmasakshi.gateway.models import GatewayUserRole, OrganizationStatus
+from karmasakshi.gateway.models import (
+    GatewayAdapterRegistration,
+    GatewayAgent,
+    GatewayUserRole,
+    OrganizationStatus,
+)
 
 #: Same charset `karmasakshi.domain.common.Principal.principal_id` requires
 #: -- `user_id` doubles as the refund-journey's approving/activating
@@ -108,8 +113,43 @@ class UserListOut(BaseModel):
     users: list[GatewayUserOut]
 
 
+class GatewayAgentRegisterIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    agent_id: str
+    display_name: str
+
+    @field_validator("agent_id")
+    @classmethod
+    def _validate_agent_id(cls, v: str) -> str:
+        return validate_principal_safe_id(v)
+
+
+class GatewayAgentListOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    agents: list[GatewayAgent]
+
+
+class GatewayAdapterRegisterIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    adapter_id: str
+    adapter_version: str
+
+
+class GatewayAdapterListOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    adapters: list[GatewayAdapterRegistration]
+
+
 __all__ = [
     "PRINCIPAL_SAFE_ID_RE",
+    "GatewayAdapterListOut",
+    "GatewayAdapterRegisterIn",
+    "GatewayAgentListOut",
+    "GatewayAgentRegisterIn",
     "GatewayUserCreateIn",
     "GatewayUserOut",
     "LoginIn",

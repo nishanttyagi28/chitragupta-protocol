@@ -1,0 +1,136 @@
+{
+  "format": "karmasakshi.milestone_a_acceptance.v1",
+  "base_url": "http://127.0.0.1:8765",
+  "org_id": "control-center-demo",
+  "started_at": "2026-07-29T18:13:57.199195+00:00",
+  "completed_at": "2026-07-29T18:14:04.291679+00:00",
+  "passed": true,
+  "checks": [
+    {
+      "name": "Organization created",
+      "passed": true,
+      "detail": "durable organization 'control-center-demo' created"
+    },
+    {
+      "name": "Authenticated team member",
+      "passed": true,
+      "detail": "session bound to 'control-center-demo-owner'"
+    },
+    {
+      "name": "Refund agent registered",
+      "passed": true,
+      "detail": "durable org-scoped agent 'refund-agent-1'"
+    },
+    {
+      "name": "Payment simulator adapter registered",
+      "passed": true,
+      "detail": "trusted payment.simulator@1.0.0 bound to payment.transfer"
+    },
+    {
+      "name": "Signed organization policy activated",
+      "passed": true,
+      "detail": "active bundle hash sha256:0e80bda077b982f4a8c5ab3a30fd0be809832a2393f88ad834890909c8eb8d60"
+    },
+    {
+      "name": "Exact refund effect proposed",
+      "passed": true,
+      "detail": "manifest 901f0200-1e8c-4f97-af39-26acbd2dbe33 binds amount, recipient, and before/after"
+    },
+    {
+      "name": "Risk assessment displayed",
+      "passed": true,
+      "detail": "score=87, recommendation=block"
+    },
+    {
+      "name": "Control Center login available",
+      "passed": true,
+      "detail": "authenticated buyer UI rendered"
+    },
+    {
+      "name": "Safe UI session established",
+      "passed": true,
+      "detail": "server issued an HttpOnly session cookie and redirect"
+    },
+    {
+      "name": "Human approval requested",
+      "passed": true,
+      "detail": "sealed refund appeared in the real approval inbox"
+    },
+    {
+      "name": "Risk and exact effect displayed",
+      "passed": true,
+      "detail": "Control Center rendered exact effect, structured risk, and policy decision"
+    },
+    {
+      "name": "Human approval recorded",
+      "passed": true,
+      "detail": "3 authenticated UI approval actions recorded"
+    },
+    {
+      "name": "Required quorum completed",
+      "passed": true,
+      "detail": "3/3 required human approvals"
+    },
+    {
+      "name": "Modified amount or recipient rejected",
+      "passed": true,
+      "detail": "grant for the original manifest failed against a changed effect"
+    },
+    {
+      "name": "Effect committed exactly once",
+      "passed": true,
+      "detail": "payment simulator reference order-1001"
+    },
+    {
+      "name": "Duplicate retry prevented",
+      "passed": true,
+      "detail": "second execution attempt failed closed with HTTP 409"
+    },
+    {
+      "name": "Independent ledger observation",
+      "passed": true,
+      "detail": "provider status: settled"
+    },
+    {
+      "name": "Signed Action Passport generated",
+      "passed": true,
+      "detail": "passport hash sha256:9fff18bf4d9592f9e562b08041b3ef0485929944340ee1dd117c73bdae87d7c5"
+    },
+    {
+      "name": "Audit trail searchable",
+      "passed": true,
+      "detail": "12 manifest-scoped events returned"
+    },
+    {
+      "name": "Ambiguous timeout armed",
+      "passed": true,
+      "detail": "real simulator will settle then return a timeout"
+    },
+    {
+      "name": "Ambiguous timeout recovered honestly",
+      "passed": true,
+      "detail": "provider status: settled"
+    },
+    {
+      "name": "Compensation handled as a separate authorized effect",
+      "passed": true,
+      "detail": "separate manifest 1379b44e-6aea-4dd7-be05-a940bbd7088d; succeeded=False"
+    },
+    {
+      "name": "Offline passport and audit verification successful",
+      "passed": true,
+      "detail": "seal, grant, passport hash, keys, and audit slice verified locally"
+    },
+    {
+      "name": "Cross-tenant access rejected",
+      "passed": true,
+      "detail": "second organization's valid session received HTTP 403"
+    },
+    {
+      "name": "Organization audit chain verified",
+      "passed": true,
+      "detail": "full organization journal hash chain is intact"
+    }
+  ],
+  "error": null
+}

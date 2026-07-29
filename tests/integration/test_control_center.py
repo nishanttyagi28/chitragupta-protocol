@@ -109,6 +109,18 @@ def _propose(
     amount: int = 50_000,
     beneficiary: str = "customer-acct-1",
 ) -> dict[str, Any]:
+    agent = client.post(
+        f"/gateway/organizations/{org_id}/agents",
+        json={"agent_id": "refund-agent-1", "display_name": "Refund Agent"},
+        headers=_headers(token),
+    )
+    assert agent.status_code == 200
+    adapter = client.post(
+        f"/gateway/organizations/{org_id}/adapters",
+        json={"adapter_id": "payment.simulator", "adapter_version": "1.0.0"},
+        headers=_headers(token),
+    )
+    assert adapter.status_code == 200
     response = client.post(
         f"/gateway/organizations/{org_id}/refunds/propose",
         json={
@@ -123,6 +135,67 @@ def _propose(
     )
     assert response.status_code == 200
     return cast(dict[str, Any], response.json())
+
+
+def _ui_approve_to_quorum(
+    client: TestClient,
+    owner_token: str,
+    manifest_id: str,
+    *,
+    org_id: str = "acme",
+) -> dict[str, Any]:
+    detail = client.get(
+        f"/gateway/organizations/{org_id}/refunds/{manifest_id}",
+        headers=_headers(owner_token),
+    ).json()
+    required = int(detail["policy_decision"]["required_human_approvals"])
+    csrf = _hidden_csrf(client.get(f"/control-center/refunds/{manifest_id}").text)
+    response = client.post(
+        f"/control-center/refunds/{manifest_id}/approve",
+        data={"csrf_token": csrf},
+    )
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("notice=approval-recorded")
+    for index in range(1, required):
+        email = f"approver-{index}-{manifest_id[:8]}@example.com"
+        password = "approval-password"
+        created = client.post(
+            f"/gateway/organizations/{org_id}/users",
+            json={
+                "user_id": f"{org_id}-approver-{index}-{manifest_id[:8]}",
+                "email": email,
+                "display_name": f"Approver {index}",
+                "password": password,
+                "role": "member",
+            },
+            headers=_headers(owner_token),
+        )
+        assert created.status_code == 200
+        approver_token = _api_login(
+            client,
+            org_id=org_id,
+            email=email,
+            password=password,
+        )
+        client.cookies.delete(_SESSION_COOKIE, path="/control-center")
+        client.cookies.set(_SESSION_COOKIE, approver_token, path="/control-center")
+        csrf = _hidden_csrf(client.get(f"/control-center/refunds/{manifest_id}").text)
+        response = client.post(
+            f"/control-center/refunds/{manifest_id}/approve",
+            data={"csrf_token": csrf},
+        )
+        assert response.status_code == 303
+        expected_notice = "authorized" if index == required - 1 else "approval-recorded"
+        assert response.headers["location"].endswith(f"notice={expected_notice}")
+    client.cookies.delete(_SESSION_COOKIE, path="/control-center")
+    client.cookies.set(_SESSION_COOKIE, owner_token, path="/control-center")
+    return cast(
+        dict[str, Any],
+        client.get(
+            f"/gateway/organizations/{org_id}/refunds/{manifest_id}",
+            headers=_headers(owner_token),
+        ).json(),
+    )
 
 
 def test_login_uses_safe_cookie_and_protected_pages_fail_closed(
@@ -227,19 +300,13 @@ def test_approve_execute_verify_and_passport_use_real_lifecycle(
     token = _ui_login(client)
     proposal = _propose(client, token)
     manifest_id = proposal["manifest_id"]
-    csrf = _hidden_csrf(client.get(f"/control-center/refunds/{manifest_id}").text)
-
-    approved = client.post(
-        f"/control-center/refunds/{manifest_id}/approve",
-        data={"csrf_token": csrf},
+    detail = _ui_approve_to_quorum(client, token, manifest_id)
+    assert detail["authorized_by"] == "gateway-quorum-service"
+    assert (
+        detail["policy_decision"]["completed_human_approvals"]
+        == detail["policy_decision"]["required_human_approvals"]
     )
-    assert approved.status_code == 303
-    detail = client.get(
-        f"/gateway/organizations/acme/refunds/{manifest_id}",
-        headers=_headers(token),
-    ).json()
-    assert detail["authorized_by"] == "acme-owner"
-    assert detail["policy_decision"]["completed_human_approvals"] == 1
+    csrf = _hidden_csrf(client.get(f"/control-center/refunds/{manifest_id}").text)
 
     executed = client.post(
         f"/control-center/refunds/{manifest_id}/execute",
@@ -378,12 +445,7 @@ def test_ambiguous_outcome_is_visible_then_recovered_by_observation(
     _bootstrap(client)
     token = _ui_login(client)
     manifest_id = _propose(client, token)["manifest_id"]
-    approved = client.post(
-        f"/gateway/organizations/acme/refunds/{manifest_id}/approve",
-        json={},
-        headers=_headers(token),
-    )
-    assert approved.status_code == 200
+    _ui_approve_to_quorum(client, token, manifest_id)
 
     state = app.state.karmasakshi_gateway.control_plane.get_state("acme")
     adapter = state.adapters["payment.simulator"]

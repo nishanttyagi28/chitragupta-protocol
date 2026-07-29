@@ -18,6 +18,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import hmac
+import json
 import secrets
 import sqlite3
 import threading
@@ -26,6 +27,10 @@ from pathlib import Path
 
 from karmasakshi.errors import (
     CrossOrganizationAccessError,
+    GatewayAdapterAlreadyExistsError,
+    GatewayAdapterNotFoundError,
+    GatewayAgentAlreadyExistsError,
+    GatewayAgentNotFoundError,
     GatewayAuthenticationError,
     GatewayUserAlreadyExistsError,
     GatewayUserNotFoundError,
@@ -36,6 +41,8 @@ from karmasakshi.errors import (
 )
 from karmasakshi.gateway.migrations import apply_migrations
 from karmasakshi.gateway.models import (
+    GatewayAdapterRegistration,
+    GatewayAgent,
     GatewayUser,
     GatewayUserRole,
     Organization,
@@ -72,6 +79,25 @@ def _row_to_user(row: sqlite3.Row) -> GatewayUser:
         email=row["email"],
         display_name=row["display_name"],
         role=GatewayUserRole(row["role"]),
+        created_at=datetime.fromisoformat(row["created_at"]),
+    )
+
+
+def _row_to_agent(row: sqlite3.Row) -> GatewayAgent:
+    return GatewayAgent(
+        agent_id=row["agent_id"],
+        org_id=row["org_id"],
+        display_name=row["display_name"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+    )
+
+
+def _row_to_adapter(row: sqlite3.Row) -> GatewayAdapterRegistration:
+    return GatewayAdapterRegistration(
+        adapter_id=row["adapter_id"],
+        org_id=row["org_id"],
+        adapter_version=row["adapter_version"],
+        effect_types=tuple(json.loads(row["effect_types_json"])),
         created_at=datetime.fromisoformat(row["created_at"]),
     )
 
@@ -282,6 +308,153 @@ class GatewayStore:
             raise CrossOrganizationAccessError(
                 f"user {user.user_id!r} belongs to organization {user.org_id!r}, not {org_id!r}"
             )
+
+    # --- evaluation resource inventory ---------------------------------------
+
+    def register_agent(self, *, org_id: str, agent_id: str, display_name: str) -> GatewayAgent:
+        """Idempotently register an organization-scoped refund agent.
+
+        Repeating the exact registration returns the durable existing
+        record. Reusing the id with different attributes fails closed.
+        """
+        self.require_active_organization(org_id)
+        agent = GatewayAgent(
+            agent_id=agent_id,
+            org_id=org_id,
+            display_name=display_name,
+            created_at=datetime.now(timezone.utc),
+        )
+        with self._lock:
+            try:
+                self._conn.execute(
+                    "INSERT INTO gateway_agents(org_id, agent_id, display_name, created_at) "
+                    "VALUES (?, ?, ?, ?)",
+                    (org_id, agent_id, display_name, agent.created_at.isoformat()),
+                )
+                self._conn.commit()
+            except sqlite3.IntegrityError as exc:
+                _safe_rollback(self._conn)
+                row = self._conn.execute(
+                    "SELECT * FROM gateway_agents WHERE org_id = ? AND agent_id = ?",
+                    (org_id, agent_id),
+                ).fetchone()
+                if row is not None and row["display_name"] == display_name:
+                    return _row_to_agent(row)
+                raise GatewayAgentAlreadyExistsError(
+                    f"agent {agent_id!r} already exists in organization {org_id!r}"
+                ) from exc
+            except sqlite3.Error as exc:
+                _safe_rollback(self._conn)
+                raise StoreUnavailableError(f"register_agent({agent_id!r}) failed") from exc
+        return agent
+
+    def get_agent(self, org_id: str, agent_id: str) -> GatewayAgent:
+        self.require_active_organization(org_id)
+        with self._lock:
+            try:
+                row = self._conn.execute(
+                    "SELECT * FROM gateway_agents WHERE org_id = ? AND agent_id = ?",
+                    (org_id, agent_id),
+                ).fetchone()
+            except sqlite3.Error as exc:
+                raise StoreUnavailableError(f"get_agent({agent_id!r}) failed") from exc
+        if row is None:
+            raise GatewayAgentNotFoundError(f"no agent {agent_id!r} in organization {org_id!r}")
+        return _row_to_agent(row)
+
+    def list_agents(self, org_id: str) -> list[GatewayAgent]:
+        self.require_active_organization(org_id)
+        with self._lock:
+            try:
+                rows = self._conn.execute(
+                    "SELECT * FROM gateway_agents WHERE org_id = ? ORDER BY agent_id",
+                    (org_id,),
+                ).fetchall()
+            except sqlite3.Error as exc:
+                raise StoreUnavailableError(f"list_agents({org_id!r}) failed") from exc
+        return [_row_to_agent(row) for row in rows]
+
+    def register_adapter(
+        self,
+        *,
+        org_id: str,
+        adapter_id: str,
+        adapter_version: str,
+        effect_types: tuple[str, ...],
+    ) -> GatewayAdapterRegistration:
+        """Idempotently register one concrete adapter version/capability set."""
+        self.require_active_organization(org_id)
+        normalized_effect_types = tuple(sorted(effect_types))
+        registration = GatewayAdapterRegistration(
+            adapter_id=adapter_id,
+            org_id=org_id,
+            adapter_version=adapter_version,
+            effect_types=normalized_effect_types,
+            created_at=datetime.now(timezone.utc),
+        )
+        effect_types_json = json.dumps(normalized_effect_types, separators=(",", ":"))
+        with self._lock:
+            try:
+                self._conn.execute(
+                    "INSERT INTO gateway_adapters("
+                    "org_id, adapter_id, adapter_version, effect_types_json, created_at"
+                    ") VALUES (?, ?, ?, ?, ?)",
+                    (
+                        org_id,
+                        adapter_id,
+                        adapter_version,
+                        effect_types_json,
+                        registration.created_at.isoformat(),
+                    ),
+                )
+                self._conn.commit()
+            except sqlite3.IntegrityError as exc:
+                _safe_rollback(self._conn)
+                row = self._conn.execute(
+                    "SELECT * FROM gateway_adapters WHERE org_id = ? AND adapter_id = ?",
+                    (org_id, adapter_id),
+                ).fetchone()
+                if (
+                    row is not None
+                    and row["adapter_version"] == adapter_version
+                    and row["effect_types_json"] == effect_types_json
+                ):
+                    return _row_to_adapter(row)
+                raise GatewayAdapterAlreadyExistsError(
+                    f"adapter {adapter_id!r} already exists in organization {org_id!r}"
+                ) from exc
+            except sqlite3.Error as exc:
+                _safe_rollback(self._conn)
+                raise StoreUnavailableError(f"register_adapter({adapter_id!r}) failed") from exc
+        return registration
+
+    def get_adapter(self, org_id: str, adapter_id: str) -> GatewayAdapterRegistration:
+        self.require_active_organization(org_id)
+        with self._lock:
+            try:
+                row = self._conn.execute(
+                    "SELECT * FROM gateway_adapters WHERE org_id = ? AND adapter_id = ?",
+                    (org_id, adapter_id),
+                ).fetchone()
+            except sqlite3.Error as exc:
+                raise StoreUnavailableError(f"get_adapter({adapter_id!r}) failed") from exc
+        if row is None:
+            raise GatewayAdapterNotFoundError(
+                f"no adapter {adapter_id!r} in organization {org_id!r}"
+            )
+        return _row_to_adapter(row)
+
+    def list_adapters(self, org_id: str) -> list[GatewayAdapterRegistration]:
+        self.require_active_organization(org_id)
+        with self._lock:
+            try:
+                rows = self._conn.execute(
+                    "SELECT * FROM gateway_adapters WHERE org_id = ? ORDER BY adapter_id",
+                    (org_id,),
+                ).fetchall()
+            except sqlite3.Error as exc:
+                raise StoreUnavailableError(f"list_adapters({org_id!r}) failed") from exc
+        return [_row_to_adapter(row) for row in rows]
 
 
 def default_gateway_db_path(data_dir: Path) -> Path:

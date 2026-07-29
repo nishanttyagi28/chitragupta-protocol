@@ -30,8 +30,11 @@ class RefundProposalResult(BaseModel):
 class ApprovalResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    grant_id: str
+    grant_id: str | None = None
     policy_bundle_hash: str | None = None
+    completed_human_approvals: int
+    required_human_approvals: int
+    authorized: bool
 
 
 class ExecutionResult(BaseModel):
@@ -72,6 +75,12 @@ class AuditVerificationResult(BaseModel):
     verified: bool
 
 
+class SimulatorInjectionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    armed: bool
+
+
 __all__ = [
     "ApprovalResult",
     "AuditVerificationResult",
@@ -80,5 +89,6 @@ __all__ = [
     "PolicyActivationResult",
     "RefundAssessment",
     "RefundProposalResult",
+    "SimulatorInjectionResult",
     "VerificationResult",
 ]

@@ -57,6 +57,7 @@ class ApiState:
     compensation_results: dict[str, CompensationResult] = field(default_factory=dict)
     assessments: dict[str, EffectAssessment] = field(default_factory=dict)
     policy_bundles: dict[str, SealedPolicyBundle] = field(default_factory=dict)
+    approval_policy_bundles: dict[str, SealedPolicyBundle] = field(default_factory=dict)
     approval_statements: dict[str, list[ApprovalStatement]] = field(default_factory=dict)
     witness_statements: dict[str, list[WitnessStatement]] = field(default_factory=dict)
     causal_graphs: dict[str, CausalEffectGraph] = field(default_factory=dict)

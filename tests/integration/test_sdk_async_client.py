@@ -41,7 +41,39 @@ async def _bootstrap_and_login(client, org_id="acme", email="alice@acme.com", pa
         owner_display_name="Alice",
         owner_password=password,
     )
-    return await client.login(org_id=org_id, email=email, password=password)
+    login = await client.login(org_id=org_id, email=email, password=password)
+    await client.register_agent(
+        org_id,
+        agent_id="refund-agent-1",
+        display_name="Refund Agent",
+    )
+    await client.register_adapter(
+        org_id,
+        adapter_id="payment.simulator",
+        adapter_version="1.0.0",
+    )
+    return login
+
+
+async def _approve_to_quorum(client, proposal, *, org_id="acme"):
+    credentials = []
+    for index in range(1, proposal.assessment.required_human_approvals):
+        email = f"approver-{index}-{proposal.manifest_id[:8]}@example.com"
+        password = "approval-password"
+        await client.create_user(
+            org_id,
+            user_id=f"{org_id}-approver-{index}-{proposal.manifest_id[:8]}",
+            email=email,
+            display_name=f"Approver {index}",
+            password=password,
+        )
+        credentials.append((email, password))
+    result = await client.approve_refund(org_id, proposal.manifest_id)
+    for email, password in credentials:
+        await client.login(org_id=org_id, email=email, password=password)
+        result = await client.approve_refund(org_id, proposal.manifest_id)
+    await client.login(org_id=org_id, email="alice@acme.com", password="hunter2")
+    return result
 
 
 async def test_full_refund_journey(client):
@@ -74,7 +106,7 @@ async def test_full_refund_journey(client):
         assert detail.effect.amount_minor_units == 50000
         assert detail.decision_status == "pending"
 
-        approval = await client.approve_refund("acme", proposal.manifest_id)
+        approval = await _approve_to_quorum(client, proposal)
         assert approval.grant_id
         assert approval.policy_bundle_hash == policy.bundle_hash
 
@@ -113,7 +145,7 @@ async def test_full_refund_journey(client):
         assert compensation.succeeded is False
 
         users = await client.list_users("acme")
-        assert {u.email for u in users} == {"alice@acme.com"}
+        assert "alice@acme.com" in {u.email for u in users}
 
         new_user = await client.create_user(
             "acme",
@@ -161,7 +193,7 @@ async def test_duplicate_execute_raises_api_error(client):
             reference="order-dup",
             idempotency_key="idem-async-dup",
         )
-        approval = await client.approve_refund("acme", proposal.manifest_id)
+        approval = await _approve_to_quorum(client, proposal)
         await client.execute_refund("acme", proposal.manifest_id, grant_id=approval.grant_id)
         with pytest.raises(KarmaSakshiApiError) as exc_info:
             await client.execute_refund("acme", proposal.manifest_id, grant_id=approval.grant_id)
@@ -230,7 +262,7 @@ async def test_verify_evidence_pack_works_without_a_session(client, transport):
             reference="order-ep",
             idempotency_key="idem-async-ep",
         )
-        approval = await client.approve_refund("acme", proposal.manifest_id)
+        approval = await _approve_to_quorum(client, proposal)
         await client.execute_refund("acme", proposal.manifest_id, grant_id=approval.grant_id)
         pack = await client.get_evidence_pack("acme", proposal.manifest_id)
 

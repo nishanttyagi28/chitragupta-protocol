@@ -111,8 +111,38 @@ jobs:
       - run: python -c "import karmasakshi; print(karmasakshi.__version__)"
       - run: karmasakshi version
       - run: karmasakshi --help
+      - run: karmasakshi-acceptance --help
       - run: karmasakshi doctor || true  # workspace not initialized yet; exercises the command path
       - run: karmasakshi demo --all
+
+  compose-acceptance:
+    name: Docker Compose buyer acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose --profile acceptance config --quiet
+      - name: Build and run the real buyer journey
+        run: |
+          docker compose up --detach --build --wait api
+          docker compose --profile acceptance run --rm acceptance
+      - name: Export acceptance report
+        if: always()
+        run: |
+          mkdir -p artifacts
+          docker compose --profile acceptance run --rm --no-deps \
+            --entrypoint cat acceptance \
+            /data/acceptance/milestone-a.json \
+            > artifacts/milestone-a-acceptance.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: milestone-a-acceptance
+          path: artifacts/milestone-a-acceptance.json
+          if-no-files-found: warn
+      - name: Tear down evaluation environment
+        if: always()
+        run: docker compose --profile acceptance down --volumes
 
   docs-check:
     name: Documentation checks
@@ -128,7 +158,9 @@ jobs:
                    docs/threat-model.md docs/security-model.md docs/storage-semantics.md \
                    docs/crash-recovery.md docs/adapter-authoring.md docs/langgraph-integration.md \
                    docs/agenteval-integration.md docs/action-passports.md docs/api.md docs/cli.md \
-                   docs/deployment.md docs/limitations.md docs/comparison.md; do
+                   docs/deployment.md docs/limitations.md docs/comparison.md \
+                   docs/control-center.md docs/gateway.md docs/sdk.md \
+                   docs/product/BUYER_EVALUATION.md docs/product/MVP_ACCEPTANCE.md; do
             if [ ! -f "$f" ]; then echo "Missing required doc: $f"; exit 1; fi
           done
           echo "All required documentation files present."

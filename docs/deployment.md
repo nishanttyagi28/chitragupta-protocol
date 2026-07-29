@@ -26,6 +26,7 @@ Environment variables:
 | `KARMASAKSHI_HOME` | Override the CLI's default `.karmasakshi` workspace path |
 | `KARMASAKSHI_API_DEV_MODE` | Set to `1` to disable API/console authentication for **local development only** |
 | `KARMASAKSHI_API_TOKEN` | Bearer token required for API/console access outside dev mode |
+| `KARMASAKSHI_DATA_DIR` | Directory for API/Gateway SQLite data (container default: `/data`; local default: `.karmasakshi-api`) |
 | `KARMASAKSHI_PUBLIC_DEMO` | Set to `1` to mount the safe, unauthenticated `/demo/*` sandbox (see below). Refuses to start if combined with `KARMASAKSHI_API_DEV_MODE=1`. |
 | `KARMASAKSHI_DEMO_TTL_SECONDS` | How long the shared public-demo sandbox lives before auto-resetting (default `900` = 15 minutes) |
 | `KARMASAKSHI_DEMO_RATE_LIMIT_PER_MINUTE` | Per-IP request cap on `/demo/*` routes (default `30`) |
@@ -91,20 +92,37 @@ set `KARMASAKSHI_PUBLIC_DEMO=1`, and leave dev-mode/token unset.
 
 ```bash
 docker build -t karmasakshi-protocol .
-docker run -p 8000:8000 -e KARMASAKSHI_API_DEV_MODE=1 karmasakshi-protocol
+docker run -p 127.0.0.1:8000:8000 \
+  -e KARMASAKSHI_API_DEV_MODE=1 \
+  -v karmasakshi-data:/data \
+  karmasakshi-protocol
 ```
 
-`docker-compose.yml` brings up the API alongside a Redis instance for
-exercising the distributed grant store:
+`docker-compose.yml` is the Milestone A buyer evaluation environment:
 
 ```bash
-docker compose up
+docker compose up --detach --build --wait api
+docker compose --profile acceptance run --rm acceptance
 ```
 
-This starts the control plane in dev mode (unauthenticated, local-only —
-never use this compose file's default configuration on a network-reachable
-host) plus a Redis container. Set `KARMASAKSHI_API_TOKEN` and remove
-`KARMASAKSHI_API_DEV_MODE` for anything beyond local experimentation.
+The API is bound to `127.0.0.1:8000`, persists single-node data in a named
+volume mounted at `/data`, and stays running so the generated evaluation
+credentials can be used at `/control-center/login`. The acceptance
+profile waits for API health and drives the real API, SDK, and UI. It
+writes `/data/acceptance/milestone-a.json`.
+
+This Compose configuration deliberately enables unauthenticated
+platform bootstrap for loopback-only evaluation. Never expose it on a
+network-reachable host. For any other deployment, remove
+`KARMASAKSHI_API_DEV_MODE`, configure `KARMASAKSHI_API_TOKEN`, use HTTPS,
+and account for all limitations below.
+
+Redis is optional and unrelated to the commercial Gateway's default
+SQLite path:
+
+```bash
+docker compose --profile redis up redis
+```
 
 ## Signing keys in production
 

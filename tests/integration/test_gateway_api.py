@@ -82,6 +82,20 @@ def test_bootstrap_requires_platform_auth(monkeypatch, tmp_path):
     assert ok.status_code == 200
 
 
+def test_data_directory_can_be_configured_for_container_volume(monkeypatch, tmp_path):
+    data_dir = tmp_path / "container-data"
+    monkeypatch.setenv(DEV_MODE_ENV, "1")
+    monkeypatch.setenv("KARMASAKSHI_DATA_DIR", str(data_dir))
+
+    app = create_app()
+    client = TestClient(app)
+    assert client.get("/health").status_code == 200
+    _bootstrap(client)
+
+    assert (data_dir / "gateway.db").is_file()
+    assert (data_dir / "tenants").is_dir()
+
+
 def test_login_succeeds_with_correct_credentials(dev_client):
     _bootstrap(dev_client)
     resp = _login(dev_client)
@@ -245,6 +259,82 @@ def test_list_users_rejects_cross_org_session(dev_client):
     ]
     resp = dev_client.get("/gateway/organizations/acme/users", headers=_auth_headers(token))
     assert resp.status_code == 403
+
+
+def test_register_and_list_agents_and_adapters(dev_client):
+    _bootstrap(dev_client)
+    token = _login(dev_client).json()["session_token"]
+    headers = _auth_headers(token)
+
+    agent = dev_client.post(
+        "/gateway/organizations/acme/agents",
+        json={"agent_id": "refund-agent-1", "display_name": "Refund Agent"},
+        headers=headers,
+    )
+    assert agent.status_code == 200
+    assert agent.json()["org_id"] == "acme"
+    assert dev_client.get("/gateway/organizations/acme/agents", headers=headers).json()[
+        "agents"
+    ] == [agent.json()]
+
+    adapter = dev_client.post(
+        "/gateway/organizations/acme/adapters",
+        json={"adapter_id": "payment.simulator", "adapter_version": "1.0.0"},
+        headers=headers,
+    )
+    assert adapter.status_code == 200
+    assert adapter.json()["effect_types"] == ["payment.transfer"]
+    assert dev_client.get("/gateway/organizations/acme/adapters", headers=headers).json()[
+        "adapters"
+    ] == [adapter.json()]
+
+
+def test_resource_inventory_rejects_cross_organization_session(dev_client):
+    _bootstrap(dev_client, org_id="acme")
+    _bootstrap(
+        dev_client,
+        org_id="beta",
+        owner_email="bob@beta.com",
+        owner_password="password123",
+    )
+    token = _login(
+        dev_client,
+        org_id="beta",
+        email="bob@beta.com",
+        password="password123",
+    ).json()["session_token"]
+    headers = _auth_headers(token)
+
+    assert (
+        dev_client.post(
+            "/gateway/organizations/acme/agents",
+            json={"agent_id": "intruder", "display_name": "Intruder"},
+            headers=headers,
+        ).status_code
+        == 403
+    )
+    assert (
+        dev_client.get("/gateway/organizations/acme/adapters", headers=headers).status_code == 403
+    )
+
+
+def test_adapter_registration_rejects_unknown_id_and_version(dev_client):
+    _bootstrap(dev_client)
+    headers = _auth_headers(_login(dev_client).json()["session_token"])
+
+    unknown = dev_client.post(
+        "/gateway/organizations/acme/adapters",
+        json={"adapter_id": "payment.fake", "adapter_version": "1.0.0"},
+        headers=headers,
+    )
+    assert unknown.status_code == 404
+
+    wrong_version = dev_client.post(
+        "/gateway/organizations/acme/adapters",
+        json={"adapter_id": "payment.simulator", "adapter_version": "9.9.9"},
+        headers=headers,
+    )
+    assert wrong_version.status_code == 409
 
 
 def test_expired_session_is_rejected(monkeypatch, tmp_path):

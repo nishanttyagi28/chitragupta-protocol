@@ -21,6 +21,10 @@ from karmasakshi.api.auth import require_auth
 from karmasakshi.api.state import ApiState
 from karmasakshi.errors import (
     CrossOrganizationAccessError,
+    GatewayAdapterAlreadyExistsError,
+    GatewayAdapterNotFoundError,
+    GatewayAgentAlreadyExistsError,
+    GatewayAgentNotFoundError,
     GatewayAuthenticationError,
     GatewayUserAlreadyExistsError,
     KarmaSakshiError,
@@ -28,9 +32,20 @@ from karmasakshi.errors import (
     OrganizationNotFoundError,
     OrganizationSuspendedError,
     TenantIsolationError,
+    UntrustedAdapterError,
 )
-from karmasakshi.gateway.models import GatewayUser, GatewayUserRole, Organization
+from karmasakshi.gateway.models import (
+    GatewayAdapterRegistration,
+    GatewayAgent,
+    GatewayUser,
+    GatewayUserRole,
+    Organization,
+)
 from karmasakshi.gateway.schemas import (
+    GatewayAdapterListOut,
+    GatewayAdapterRegisterIn,
+    GatewayAgentListOut,
+    GatewayAgentRegisterIn,
     GatewayUserCreateIn,
     GatewayUserOut,
     LoginIn,
@@ -112,8 +127,13 @@ def _assert_org_scope(request: Request, user: GatewayUser, org_id: str) -> None:
     state = _state(request)
     try:
         state.store.assert_user_belongs_to_organization(user, org_id)
+        state.store.require_active_organization(org_id)
     except CrossOrganizationAccessError as exc:
         raise HTTPException(403, str(exc)) from exc
+    except OrganizationSuspendedError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except OrganizationNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 def resolve_org_runtime(request: Request, user: GatewayUser, org_id: str) -> ApiState:
@@ -128,6 +148,34 @@ def resolve_org_runtime(request: Request, user: GatewayUser, org_id: str) -> Api
         return state.control_plane.get_state(org_id)
     except TenantIsolationError as exc:
         raise HTTPException(404, str(exc)) from exc
+
+
+def require_registered_refund_resources(
+    request: Request,
+    user: GatewayUser,
+    org_id: str,
+    *,
+    agent_id: str,
+    adapter_id: str,
+    adapter_version: str,
+) -> ApiState:
+    """Resolve an org runtime only when the proposal's agent and concrete
+    adapter version are present in that organization's durable inventory."""
+    runtime = resolve_org_runtime(request, user, org_id)
+    store = _state(request).store
+    try:
+        store.get_agent(org_id, agent_id)
+    except GatewayAgentNotFoundError as exc:
+        raise HTTPException(409, f"refund agent {agent_id!r} is not registered") from exc
+    try:
+        registration = store.get_adapter(org_id, adapter_id)
+    except GatewayAdapterNotFoundError as exc:
+        raise HTTPException(409, f"adapter {adapter_id!r} is not registered") from exc
+    if registration.adapter_version != adapter_version:
+        raise HTTPException(409, "registered adapter version does not match the runtime")
+    if "payment.transfer" not in registration.effect_types:
+        raise HTTPException(409, "registered adapter does not allow payment.transfer")
+    return runtime
 
 
 @router.post("/organizations", dependencies=[Depends(require_auth)])
@@ -261,4 +309,75 @@ def create_organization_user(
     return _user_out(created)
 
 
-__all__ = ["GatewayApiState", "require_gateway_session", "resolve_org_runtime", "router"]
+@router.post("/organizations/{org_id}/agents")
+def register_organization_agent(
+    org_id: str,
+    body: GatewayAgentRegisterIn,
+    request: Request,
+    user: Annotated[GatewayUser, Depends(require_gateway_session)],
+) -> GatewayAgent:
+    _assert_org_scope(request, user, org_id)
+    try:
+        return _state(request).store.register_agent(
+            org_id=org_id,
+            agent_id=body.agent_id,
+            display_name=body.display_name,
+        )
+    except GatewayAgentAlreadyExistsError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/organizations/{org_id}/agents")
+def list_organization_agents(
+    org_id: str,
+    request: Request,
+    user: Annotated[GatewayUser, Depends(require_gateway_session)],
+) -> GatewayAgentListOut:
+    _assert_org_scope(request, user, org_id)
+    return GatewayAgentListOut(agents=_state(request).store.list_agents(org_id))
+
+
+@router.post("/organizations/{org_id}/adapters")
+def register_organization_adapter(
+    org_id: str,
+    body: GatewayAdapterRegisterIn,
+    request: Request,
+    user: Annotated[GatewayUser, Depends(require_gateway_session)],
+) -> GatewayAdapterRegistration:
+    runtime = resolve_org_runtime(request, user, org_id)
+    adapter = runtime.adapters.get(body.adapter_id)
+    if adapter is None:
+        raise HTTPException(404, "adapter is not available in this Gateway runtime")
+    if adapter.adapter_version != body.adapter_version:
+        raise HTTPException(409, "adapter version does not match the running adapter")
+    try:
+        capability = runtime.adapter_registry.require(body.adapter_id, body.adapter_version)
+        return _state(request).store.register_adapter(
+            org_id=org_id,
+            adapter_id=body.adapter_id,
+            adapter_version=body.adapter_version,
+            effect_types=capability.supported_effect_types,
+        )
+    except UntrustedAdapterError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except GatewayAdapterAlreadyExistsError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/organizations/{org_id}/adapters")
+def list_organization_adapters(
+    org_id: str,
+    request: Request,
+    user: Annotated[GatewayUser, Depends(require_gateway_session)],
+) -> GatewayAdapterListOut:
+    _assert_org_scope(request, user, org_id)
+    return GatewayAdapterListOut(adapters=_state(request).store.list_adapters(org_id))
+
+
+__all__ = [
+    "GatewayApiState",
+    "require_gateway_session",
+    "require_registered_refund_resources",
+    "resolve_org_runtime",
+    "router",
+]
