@@ -52,6 +52,26 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   /policy/approval-bundles`, `/manifests/{id}/approvals[/evaluate]`,
   `/manifests/{id}/approve-with-quorum`). See
   [docs/multi-party-authorization.md](docs/multi-party-authorization.md).
+- **Separation of duties** (`karmasakshi.duty`): an explicit, closed set
+  of protocol roles (`ProtocolRole`: proposer, resolver, assessor,
+  sealer, approver, executor, verifier, witness, compensator, auditor), a
+  structural per-manifest `RoleAssignment`, and a versioned, signable
+  forbidden-role-pair matrix (`SeparationOfDutyPolicy`, wrapped in the
+  same signed `PolicyBundle` envelope as the other policy types,
+  `policy_type="separation.v1"`). `KarmaSakshiEngine.authorize()` and
+  `.authorize_with_quorum()` take optional `separation_policy_bundle` and
+  `role_assignment` arguments; a violation raises
+  `SeparationOfDutyViolationError` before a grant is ever issued
+  (invariant #37), and evaluation is deterministic and order-independent
+  (invariant #38). Additive: omitting `separation_policy_bundle` leaves
+  both entry points behaving exactly as before this phase. The Action
+  Passport gained a `role_participation` field, populated automatically
+  from the audit trail. Integrated into the CLI (`karmasakshi policy
+  create-separation`, `--separation-policy-bundle-id`/`--role` on `grant
+  issue`/`grant issue-with-quorum`) and the API (`POST
+  /policy/separation-bundles`, the same two optional fields on
+  `/approve` and `/approve-with-quorum`). See
+  [docs/separation-of-duties.md](docs/separation-of-duties.md).
 
 ## [0.1.0] - 2026-07-27
 

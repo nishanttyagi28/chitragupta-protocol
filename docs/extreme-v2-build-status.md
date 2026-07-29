@@ -41,7 +41,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 1. Effect Intelligence | **Implemented** (advisory only) | See below |
 | 2. Signed policy bundles | **Implemented** | See below |
 | 3. Multi-party (M-of-N) authorization | **Implemented** | See below |
-| 4. Separation of duties (explicit roles) | Not started | |
+| 4. Separation of duties (explicit roles) | **Implemented** | See below |
 | 5. Causal effect graphs | Not started | `parent_manifest_id` remains a single unsigned string field, unchanged from v0.1 |
 | 6. Atomic plan authorization / decision envelopes | Not started | |
 | 7. Compensation manifests | Not started | Compensation remains the v0.1 `CompensationResult` model (best-effort, honestly reported) |
@@ -381,32 +381,159 @@ commit: `ruff check`/`ruff format --check`/`mypy src`/`bandit` all clean;
 - `459bc5c` — Phase 3: Multi-Party (M-of-N) Authorization implementation, tests, docs
 - PR [#17](https://github.com/nishanttyagi28/karmasakshi-protocol/pull/17) — merged (`ffdf015`), all 14 CI checks green
 
+## Phase 4: Separation of Duties
+
+**Status: implemented.**
+
+### Files changed
+
+- Added: `src/karmasakshi/duty/{__init__,roles,policy,enforcement}.py`
+- Added: `docs/separation-of-duties.md`
+- Added: `tests/unit/test_separation_of_duty.py`,
+  `tests/property/test_separation_of_duty_properties.py`,
+  `tests/adversarial/test_separation_of_duty_gaming.py`
+- Modified: `src/karmasakshi/errors/__init__.py` (`SeparationOfDutyError`,
+  `SeparationOfDutyViolationError`, `RoleAssignmentError`),
+  `src/karmasakshi/engine/core.py` (`authorize()`/`authorize_with_quorum()`
+  gain `separation_policy_bundle`/`role_assignment`;
+  `_enforce_separation_of_duty()` helper shared by both;
+  `_role_participation_metadata()` flattens role facts into
+  `grant.issued` audit metadata), `src/karmasakshi/passports/{model,generator}.py`
+  (`role_participation` field, reconstructed from the audit trail
+  automatically), `src/karmasakshi/passports/render.py` (new passport
+  section), `src/karmasakshi/cli/{policy_cmd,grant_cmd}.py`
+  (`policy create-separation`, `--separation-policy-bundle-id`/`--role`
+  on `grant issue`/`grant issue-with-quorum`),
+  `src/karmasakshi/api/{schemas,routes}.py` (`/policy/separation-bundles`,
+  the same two optional fields on `/approve` and `/approve-with-quorum`)
+- Docs updated: `docs/security-model.md` (invariants #37-#38, title
+  corrected to "38 Invariants"), `docs/threat-model.md` (extended the
+  Phase 2/3 trusted-component section), `docs/execution-grants.md`,
+  `docs/action-passports.md`, `docs/limitations.md`, `docs/cli.md`,
+  `docs/api.md`, `README.md` (invariant count corrected in two more
+  places), `CHANGELOG.md`
+
+### Tests added
+
+- 26 unit tests (`test_separation_of_duty.py`): `RoleAssignment`
+  structural validation (malformed hash, unknown role, empty/duplicate
+  principal, oversized batch), `principals_for`/`merge`/
+  `as_role_participation`, `base_role_assignment`, `SeparationOfDutyPolicy`
+  validation (self-paired role, duplicate order-independent pair,
+  oversized matrix), policy-hash order-independence, bundle payload
+  round trip, agent-issuer rejection, and `check_separation_of_duty`
+  coverage (no violation, single violation, one-violation-per-offending-pair,
+  multi-approver overlap, empty matrix never violates).
+- 4 Hypothesis property tests (`test_separation_of_duty_properties.py`):
+  the check result is independent of role-assignment entry order and of
+  forbidden-pair order; an empty matrix is always satisfied; adding more
+  forbidden pairs is monotonic (never turns a violation into satisfied).
+- 5 adversarial tests (`test_separation_of_duty_gaming.py`): a
+  role_assignment bound to the wrong manifest hash is rejected before
+  any grant work happens; a tampered separation policy bundle is
+  rejected; a custom (non-default) forbidden pair is actually enforced,
+  not silently ignored; a blocked `authorize()` call leaves the
+  lifecycle state and grant store completely untouched; a single
+  conflicted approver among several clean ones under quorum still
+  blocks (not diluted by majority).
+- Engine integration tests (`test_engine.py`, 9 new): `authorize()`
+  blocked when issuer==proposer under the default matrix; succeeds when
+  roles are cleanly separated; blocked by an explicit additional-role
+  conflict (sealer==approver); fully additive when no bundle is given
+  (a real conflict passes through untouched); `authorize_with_quorum()`
+  blocked when one counted approver overlaps the proposer (via an
+  explicit extra role, isolating Phase 4's check from Phase 3's own
+  proposer-exclusion); succeeds with disjoint roles; wrong `policy_type`
+  bundle rejected (`PolicyBundleTypeMismatchError`); `grant.issued`
+  audit metadata carries `role:<role>` entries even with no bundle bound.
+- API integration tests (`test_api.py`, 4 new): create/verify a
+  separation bundle; agent-issuer rejection; `/approve` with a bound
+  bundle succeeds and the passport's `role_participation` reflects it;
+  `/approve` with a genuine proposer==approver conflict returns `403`.
+- CLI integration tests (`test_cli.py`, 2 new): full `policy
+  create-separation` -> `policy sign` -> `grant issue` -> `execute` ->
+  `passport --format json` cycle against the sqlite adapter, asserting
+  `role_participation`; a role conflict blocking `grant issue` with a
+  non-zero exit code.
+- Full existing suite remains green throughout (509 passed, 6 skipped --
+  no regressions across all four phases).
+
+### Security invariants added
+
+- **#37**: A grant issued via `authorize()`/`authorize_with_quorum()`
+  with a bound separation-of-duty policy cannot exist if any principal
+  holds both roles of a forbidden pair.
+- **#38**: Separation-of-duty evaluation is deterministic and
+  order-independent.
+
+### Design decisions
+
+- **Auto-derived base roles, caller-supplied extras.** The engine
+  derives `proposer`/`executor`/`approver` itself (from parameters it
+  already has); anything beyond that (`sealer`, `witness`, etc.) is an
+  explicit, caller-supplied `RoleAssignment`, merged in and validated
+  against the same manifest hash. This mirrors the trust level already
+  extended to `issuer`/`subject`/`proposer` elsewhere -- no new trust
+  model introduced.
+- **No persisted grant field, no commit()-time re-verification.** Unlike
+  `policy_bundle_hash`/`approval_set_hash`, separation of duty has
+  nothing bound onto `ExecutionGrant` -- it's a one-time
+  authorization-time gate, not a swappable, re-editable artifact.
+  Documented explicitly (docs/separation-of-duties.md, docs/execution-grants.md)
+  so this reads as a deliberate choice, not a gap.
+- **Passport role_participation is read from the audit trail
+  automatically**, not threaded through every call site -- `grant.issued`
+  audit metadata always carries the combined role assignment (`role:<role>`
+  keys), so `build_passport()` reconstructs it with zero extra plumbing
+  required from CLI/API callers, while still accepting an explicit
+  `role_assignment` override for callers that already have one in hand.
+
+### Verification commands
+
+Same procedure as Phases 1-3. Results at the time of this commit:
+`ruff check`/`ruff format --check`/`mypy src`/`bandit` all clean;
+`pytest -q` → **509 passed, 6 skipped**; `pytest --cov=karmasakshi` →
+**90.98%** total; `build`/`twine check` clean; `pip-audit` → the same 1
+known dev-only vulnerability as Phases 1-3 (unchanged, unresolved).
+
+### Commit SHAs / PR
+
+Recorded after this slice's PR is opened and merged, matching the
+pattern established for Phases 1-3.
+
 ## Exact next executable step
 
-**Phase 4: Separation of Duties.** Concretely:
+**Phase 5: Causal Effect Graphs.** Concretely:
 
-1. Introduce explicit protocol roles as a first-class concept
-   (`proposer`, `resolver`, `assessor`, `sealer`, `approver`, `executor`,
-   `verifier`, `witness`, `compensator`, `auditor`) -- Phase 3 already
-   has *ad hoc* versions of `proposer`/`subject`(executor)/`approver`
-   scattered through `authorize_with_quorum()`'s parameters; Phase 4's
-   job is to formalize these into a reusable `RoleAssignment`
-   record-keeping structure and a `SeparationOfDutyPolicy` (which role
-   pairs may never be held by the same principal for a given manifest,
-   e.g. "the sealer may not also be an approver" for high-risk effects).
-2. This is a natural extension of `ApprovalPolicy` rather than a wholly
-   separate system: `forbid_proposer_as_approver`/
-   `forbid_subject_as_approver` in Phase 3 are exactly two hard-coded
-   instances of a general separation-of-duty rule. Phase 4 should
-   generalize that into a configurable N-role separation matrix bound
-   into the same signed `PolicyBundle` envelope (a third `policy_type`),
-   rather than duplicating Phase 3's evaluation logic.
-3. Record role participation inside the Action Passport (a new
-   passport field, e.g. `role_participation: dict[str, str]` mapping
-   role name to principal_id, populated from the audit trail -- every
-   engine method that already records `actor_id` in its audit events is
-   a source for this).
-4. Extend the CLI/API only as needed to expose role-assignment
-   inspection; avoid introducing a parallel authorization mechanism --
-   separation-of-duty should be a *constraint checked during* `authorize()`/
-   `authorize_with_quorum()`, not a new gate that runs after them.
+1. Today `EffectManifest.parent_manifest_id` is a single unsigned string
+   field -- no verification that a claimed parent actually exists, was
+   sealed, or that the claimed causal link is real. Phase 5 should
+   introduce a signed `CausalLink` (or similar) binding a child
+   manifest's hash to its parent's hash, verified the same way a `Seal`
+   is verified, so a chain of manifests can be walked and independently
+   proven, not just asserted.
+2. Model the graph structure explicitly: a `CausalEffectGraph` type
+   (nodes = manifest hashes, edges = signed causal links) with cycle
+   detection (a manifest can never causally depend on its own effect)
+   and a bound on graph size/depth (resource protection, consistent with
+   `ApprovalPolicy.max_statements_considered` and
+   `RoleAssignment.MAX_ROLE_ASSIGNMENTS`).
+3. Decide and document precisely what a causal link changes about
+   authorization/execution -- e.g. should a parent's revocation
+   propagate to children automatically (this would generalize the
+   existing one-hop delegation-revocation propagation in `commit()` to
+   the causal-graph case), or is Phase 5 initially just a verifiable
+   *record* of causality (PROVE-time value) without new enforcement
+   (mirroring how Phase 1's Effect Intelligence Engine started
+   advisory-only)? The honest, incremental choice is likely the latter
+   first, enforcement later -- state this explicitly rather than
+   quietly deciding one way.
+4. Extend the Action Passport to include the causal chain (parent
+   hashes, verified or not) so a full multi-step operation (e.g. "refund
+   -> compensating ledger adjustment") can be proven as one coherent
+   causal story, not just as isolated individually-verified effects.
+5. CLI/API surface: likely a read-only `karmasakshi manifest graph
+   <manifest_id>` inspection command and a `GET
+   /manifests/{id}/causal-graph` endpoint; avoid adding new write paths
+   beyond what's needed to record a signed causal link at `prepare()`/
+   `seal()` time.

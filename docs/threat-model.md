@@ -56,13 +56,15 @@ automatically yet -- a caller must still explicitly configure
 `IntelligencePolicy`/`ApprovalPolicy` thresholds; nothing derives one
 from the other's output today.
 
-## New trusted components: signed policy bundles and multi-party authorization
+## New trusted components: signed policy bundles, multi-party authorization, and separation of duties
 
-`karmasakshi.policy` (see [docs/policy-bundles.md](policy-bundles.md)) and
+`karmasakshi.policy` (see [docs/policy-bundles.md](policy-bundles.md)),
 `karmasakshi.approval` (see
-[docs/multi-party-authorization.md](multi-party-authorization.md)) add two
-real structural security properties, unlike the advisory Effect
-Intelligence Engine above:
+[docs/multi-party-authorization.md](multi-party-authorization.md)), and
+`karmasakshi.duty` (see
+[docs/separation-of-duties.md](separation-of-duties.md)) add real
+structural security properties, unlike the advisory Effect Intelligence
+Engine above:
 
 - **A grant bound to a policy bundle cannot commit against a different,
   missing, tampered, or expired one** (invariant #31). This *does* change
@@ -75,18 +77,27 @@ Intelligence Engine above:
   (invariant #33), with hard-coded exclusions for agent approvers,
   self-approval by the proposer, and approval by the executing subject
   (invariants #34, #35).
+- **A grant issued with a bound separation-of-duty policy is structurally
+  impossible to obtain if any principal holds both roles of a forbidden
+  pair** (invariant #37) -- e.g. the same principal sealing and approving
+  one manifest. The check is a set intersection over the combined role
+  assignment, not a tally: adding compliant approvers alongside a
+  conflicted one does not dilute the violation (invariant #38 covers its
+  determinism).
 
-Both remain **additive**: the original single-issuer `authorize()`/
-`commit()` path (with no policy bundle, no approval set) is unchanged and
-still fully supported -- these are opt-in stronger guarantees, not a
-replacement for the base protocol. New trust assumptions this introduces:
+All three remain **additive**: the original single-issuer `authorize()`/
+`commit()` path (with no policy bundle, no approval set, no separation
+policy) is unchanged and still fully supported -- these are opt-in
+stronger guarantees, not a replacement for the base protocol. New trust
+assumptions this introduces:
 
 - Whoever holds a signing key trusted for `policy_type="approval.v1"`
   bundles can set arbitrarily loose quorum rules (e.g.
   `required_approvals=1` with no role requirements) -- the cryptographic
   binding proves *which* policy was used, not that the policy itself was
-  wise. Reviewing who is authorized to sign approval policy bundles is a
-  deployment responsibility, same as for Effect Intelligence policies.
+  wise. Reviewing who is authorized to sign approval (and separation-of-duty)
+  policy bundles is a deployment responsibility, same as for Effect
+  Intelligence policies.
 - The reference API's approval-statement endpoint signs every submitted
   statement with the control plane's own single service key rather than a
   distinct per-approver key -- see docs/multi-party-authorization.md's
@@ -94,9 +105,15 @@ replacement for the base protocol. New trust assumptions this introduces:
   this limitation.
 - Approval roles (`ApprovalStatement.role`) are self-asserted by the
   signer, not checked against any external identity/role directory --
-  there is no RBAC system in this protocol version (planned: Phase 4,
-  separation of duties, and the commercial roadmap's enterprise approval
-  groups).
+  there is no RBAC system in this protocol version (the commercial
+  roadmap's enterprise "approval groups" is the planned identity-backed
+  successor).
+- Separation-of-duty role facts beyond proposer/executor/approver (e.g.
+  `sealer`, `witness`) are entirely caller-supplied
+  (`role_assignment`), with the same trust level already extended to
+  `issuer`/`subject`/`proposer` -- there is no cryptographic proof that
+  the principal named as `sealer` actually performed the sealing action
+  (see docs/separation-of-duties.md's Known limitations).
 
 ## Explicitly out of scope
 
@@ -125,7 +142,7 @@ replacement for the base protocol. New trust assumptions this introduces:
   across processes/machines sharing one Redis instance; it does not
   implement Raft/Paxos-style consensus, leader election, or partition
   tolerance beyond what Redis itself offers.
-- **Formal verification.** The 30 invariants in
+- **Formal verification.** The 38 invariants in
   [docs/security-model.md](security-model.md) are tested (unit,
   property-based, adversarial), not proven with a theorem prover or model
   checker.

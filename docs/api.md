@@ -47,16 +47,17 @@ without authentication — see `karmasakshi.api.auth.require_auth` and
 | GET | `/manifests/{id}` | Inspect one manifest + its seal + grant ids |
 | POST | `/manifests/{id}/assess` | Run the Effect Intelligence Engine, record `EffectAssessment` (advisory only -- see docs/effect-intelligence.md) |
 | GET | `/manifests/{id}/assessment` | Fetch the most recent assessment recorded for a manifest |
-| POST | `/manifests/{id}/approve` | Issue an `ExecutionGrant` (invariant #30 still enforced); optional `policy_bundle_id` binds a signed policy bundle's hash into the grant |
+| POST | `/manifests/{id}/approve` | Issue an `ExecutionGrant` (invariant #30 still enforced); optional `policy_bundle_id` binds a signed policy bundle's hash into the grant; optional `separation_policy_bundle_id`/`roles` enforce separation of duties (`403` on violation) |
 | POST | `/manifests/{id}/deny` | Audit-log a denial; never issues a grant |
 | POST | `/policy/bundles` | Build, sign, and store a policy bundle (see docs/policy-bundles.md) |
 | GET | `/policy/bundles/{id}` | Fetch a stored sealed policy bundle |
 | POST | `/policy/bundles/{id}/verify` | Re-verify a stored bundle's signature/integrity/window |
 | POST | `/policy/approval-bundles` | Build, sign, and store an approval (quorum) policy bundle (see docs/multi-party-authorization.md) |
+| POST | `/policy/separation-bundles` | Build, sign, and store a separation-of-duty policy bundle (see docs/separation-of-duties.md) |
 | POST | `/manifests/{id}/approvals` | Record one approval/dissent statement (signed by the control plane's own key -- see the "Honesty note" in docs/multi-party-authorization.md) |
 | GET | `/manifests/{id}/approvals` | List statements recorded for a manifest |
 | POST | `/manifests/{id}/approvals/evaluate` | Dry-run quorum evaluation, does not issue a grant |
-| POST | `/manifests/{id}/approve-with-quorum` | Issue a grant if quorum is met (`403` if not) |
+| POST | `/manifests/{id}/approve-with-quorum` | Issue a grant if quorum is met (`403` if not); same optional `separation_policy_bundle_id`/`roles` fields as `/approve` |
 | POST | `/grants/{id}/revoke` | Revoke a grant |
 | POST | `/manifests/{id}/execute` | Commit (blocked with `503` if the kill switch is engaged); if the grant is policy-bundle-bound, the same `policy_bundle_id` must be supplied or the commit fails closed |
 | POST | `/manifests/{id}/verify` | Independently verify the outcome |

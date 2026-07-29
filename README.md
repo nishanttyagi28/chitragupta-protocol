@@ -23,13 +23,16 @@ versioned, experimental protocol.** This is not a certified, audited, or
 **In progress:** a deterministic Effect Intelligence Engine (advisory risk
 scoring, not yet an enforcement gate), signed policy bundles (a policy
 edit after approval can no longer silently alter what a grant
-authorizes), and multi-party (M-of-N) authorization (a grant can now
+authorizes), multi-party (M-of-N) authorization (a grant can now
 require a quorum of independently signed approvals, with hard-coded
-no-self-approval and no-agent-approver rules) have landed on top of v0.1
-— see [docs/effect-intelligence.md](docs/effect-intelligence.md),
+no-self-approval and no-agent-approver rules), and separation of duties
+(a signed forbidden-role-pair matrix -- e.g. the same principal can never
+be both the sealer and the approver of one manifest) have landed on top
+of v0.1 — see [docs/effect-intelligence.md](docs/effect-intelligence.md),
 [docs/policy-bundles.md](docs/policy-bundles.md),
 [docs/multi-party-authorization.md](docs/multi-party-authorization.md),
-and the build ledger at
+[docs/separation-of-duties.md](docs/separation-of-duties.md), and the
+build ledger at
 [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for
 exactly what's implemented vs. planned.
 
@@ -327,7 +330,7 @@ the [live sandbox](#try-it-live) or run `karmasakshi demo --all`.
 
 ## Core security invariants
 
-30 invariants are implemented and tested. The **primary differentiators**
+38 invariants are implemented and tested. The **primary differentiators**
 — the specific claims that distinguish KarmaSakshi Protocol from a
 tool-permission layer, IAM system, or credential broker — are:
 
@@ -368,7 +371,7 @@ exist to bound *who may approve what, for how long* — they are necessary,
 but the manifest-sealing/TOCTOU/exactly-once/verification chain above is
 what actually proves the effect happened as approved.
 
-Full list of all 30 invariants, each mapped to its enforcing code and the
+Full list of all 38 invariants, each mapped to its enforcing code and the
 test that verifies it: [docs/security-model.md](docs/security-model.md).
 
 ## Exactly-once execution and TOCTOU protection
@@ -551,7 +554,7 @@ means precisely: [docs/action-passports.md](docs/action-passports.md).
 - [docs/delegation.md](docs/delegation.md) — attenuation rules with worked examples
 - [docs/state-machine.md](docs/state-machine.md) — full transition table
 - [docs/threat-model.md](docs/threat-model.md) — what is and isn't defended against
-- [docs/security-model.md](docs/security-model.md) — the 30 invariants
+- [docs/security-model.md](docs/security-model.md) — the 38 invariants
 - [docs/storage-semantics.md](docs/storage-semantics.md) — memory/SQLite/Redis backends
 - [docs/crash-recovery.md](docs/crash-recovery.md) — ambiguous-outcome recovery
 - [docs/adapter-authoring.md](docs/adapter-authoring.md) — writing a new adapter
@@ -564,6 +567,7 @@ means precisely: [docs/action-passports.md](docs/action-passports.md).
 - [docs/effect-intelligence.md](docs/effect-intelligence.md) — deterministic risk-scoring engine (advisory only)
 - [docs/policy-bundles.md](docs/policy-bundles.md) — signed, versioned policy bundles bound into authorization
 - [docs/multi-party-authorization.md](docs/multi-party-authorization.md) — M-of-N approval quorum
+- [docs/separation-of-duties.md](docs/separation-of-duties.md) — signed forbidden-role-pair matrix
 - [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) — build ledger for work beyond v0.1.0
 - [docs/limitations.md](docs/limitations.md)
 - [docs/comparison.md](docs/comparison.md)

@@ -37,6 +37,7 @@ karmasakshi policy create <bundle_id> --issuer-id ID [--issuer-type human|servic
     [--review-threshold N] [--restricted-effect-type TEXT ...] [--sensitive-target-pattern REGEX ...]
 karmasakshi policy create-approval <bundle_id> --issuer-id ID [--required-approvals N]
     [--required-role TEXT ...] [--cooling-off-seconds N]
+karmasakshi policy create-separation <bundle_id> --issuer-id ID [--forbidden-pair "role_a:role_b" ...]
 karmasakshi policy sign <bundle_id> --key-id ID
 karmasakshi policy verify <bundle_id>
 
@@ -44,9 +45,11 @@ karmasakshi approve <manifest_id> --approver-id ID --key-id ID --approval-policy
     [--approver-type human|service] [--role TEXT] [--decision approve|dissent] [--reason TEXT]
 karmasakshi approvals inspect <manifest_id> --approval-policy-bundle-id ID --proposer-id ID --subject-id ID
 
-karmasakshi grant issue <manifest_id> --issuer-id ID --subject-id ID --key-id ID [--audience ...] [--max-uses N] [--policy-bundle-id ID]
+karmasakshi grant issue <manifest_id> --issuer-id ID --subject-id ID --key-id ID [--audience ...] [--max-uses N]
+    [--policy-bundle-id ID] [--separation-policy-bundle-id ID] [--role "role_name:principal_id" ...]
 karmasakshi grant issue-with-quorum <manifest_id> --approval-policy-bundle-id ID --grant-issuer-id ID
     --proposer-id ID --subject-id ID --key-id ID [--audience ...] [--policy-bundle-id ID]
+    [--separation-policy-bundle-id ID] [--role "role_name:principal_id" ...]
 karmasakshi grant verify <grant_id>
 karmasakshi grant delegate <parent_grant_id> --issuer-id ID --subject-id ID --key-id ID [--max-uses N] [--ttl-seconds N]
 karmasakshi grant revoke <grant_id> [--manifest-id ID]
@@ -125,6 +128,19 @@ sign`/`policy verify` on it -- they're generic across bundle types);
 `grant issue-with-quorum` issues a grant only if the statements submitted
 so far satisfy the bound policy's quorum, failing closed
 (`QuorumNotMetError`, non-zero exit) otherwise.
+
+## `policy create-separation`, `--separation-policy-bundle-id`/`--role` on `grant issue*`
+
+Separation of duties (see
+[docs/separation-of-duties.md](separation-of-duties.md)):
+`policy create-separation` builds a forbidden-role-pair matrix bundle
+(default matrix if `--forbidden-pair` is omitted; reuse `policy
+sign`/`policy verify` on it). `--separation-policy-bundle-id` on `grant
+issue`/`grant issue-with-quorum` enforces that matrix against the
+auto-derived proposer/executor/approver(s) plus any `--role
+role_name:principal_id` entries, failing closed
+(`SeparationOfDutyViolationError`, non-zero exit) if any principal holds
+two forbidden roles.
 
 ## `doctor`
 

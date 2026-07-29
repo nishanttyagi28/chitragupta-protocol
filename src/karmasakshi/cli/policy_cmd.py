@@ -10,6 +10,7 @@ from karmasakshi.cli.common import emit, run_guarded
 from karmasakshi.cli.workspace import Workspace
 from karmasakshi.domain.common import Principal
 from karmasakshi.domain.enums import PrincipalType
+from karmasakshi.duty import SeparationOfDutyPolicy, build_separation_of_duty_policy_bundle
 from karmasakshi.intelligence import IntelligencePolicy
 from karmasakshi.intelligence.policy import build_policy_bundle
 from karmasakshi.policy import seal_policy_bundle, verify_policy_bundle
@@ -127,6 +128,66 @@ def create_approval(
             {"bundle_id": bundle_id, "policy_hash": bundle.canonical_hash(), "path": str(path)},
             as_json=as_json,
             human=f"Created unsigned approval policy bundle [bold]{bundle_id}[/bold] -> {path}",
+        )
+
+    run_guarded(as_json, _do)
+
+
+@policy_app.command("create-separation")
+def create_separation(
+    ctx: typer.Context,
+    bundle_id: Annotated[str, typer.Argument()],
+    issuer_id: Annotated[str, typer.Option()],
+    issuer_type: Annotated[PrincipalType, typer.Option()] = PrincipalType.HUMAN,
+    bundle_version: Annotated[str, typer.Option()] = "1.0",
+    effective_seconds: Annotated[int, typer.Option()] = 30 * 24 * 3600,
+    tenant_id: Annotated[str | None, typer.Option()] = None,
+    forbidden_pair: Annotated[
+        list[str],
+        typer.Option(
+            "--forbidden-pair",
+            help="repeatable, format 'role_a:role_b' (e.g. 'sealer:approver'); "
+            "if none given, uses the built-in default matrix",
+        ),
+    ] = [],  # noqa: B006
+) -> None:
+    """Build an unsigned separation-of-duty policy bundle -- a
+    ``SeparationOfDutyPolicy`` (a forbidden role-pair matrix) wrapped in
+    the same signed ``PolicyBundle`` envelope as the other policy types
+    (``policy_type == "separation.v1"``). Sign it with `policy sign` and
+    verify it with `policy verify`, exactly like the others."""
+    workspace: Workspace = ctx.obj["workspace"]
+    as_json: bool = ctx.obj["json"]
+
+    def _do() -> None:
+        workspace.ensure_initialized()
+        now = datetime.now(timezone.utc)
+        pairs: list[tuple[str, str]] = []
+        for entry in forbidden_pair:
+            role_a, sep, role_b = entry.partition(":")
+            if not sep:
+                raise typer.BadParameter(f"--forbidden-pair must be 'role_a:role_b', got {entry!r}")
+            pairs.append((role_a, role_b))
+        policy = (
+            SeparationOfDutyPolicy(forbidden_role_pairs=tuple(pairs))
+            if pairs
+            else SeparationOfDutyPolicy()
+        )
+        bundle = build_separation_of_duty_policy_bundle(
+            policy,
+            bundle_id=bundle_id,
+            bundle_version=bundle_version,
+            issuer=Principal(principal_id=issuer_id, principal_type=issuer_type),
+            created_at=now,
+            effective_from=now,
+            effective_until=now + timedelta(seconds=effective_seconds),
+            tenant_id=tenant_id,
+        )
+        path = workspace.save_unsigned_policy_bundle(bundle)
+        emit(
+            {"bundle_id": bundle_id, "policy_hash": bundle.canonical_hash(), "path": str(path)},
+            as_json=as_json,
+            human=f"Created unsigned separation-of-duty policy bundle [bold]{bundle_id}[/bold] -> {path}",  # noqa: E501
         )
 
     run_guarded(as_json, _do)

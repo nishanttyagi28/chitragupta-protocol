@@ -11,7 +11,12 @@ structured facts.
   `manifest_hash`, `effect_type`, `actor`, `principal`, `target_resource`,
   `proposed_parameters`, `risk`, `reversibility`.
 - **Who/what authorized it, and when it was valid**: `grant_id`,
-  `authorized_by`, `authorization_valid_from`/`_until`, `was_revoked`.
+  `authorized_by`, `authorization_valid_from`/`_until`,
+  `authorization_policy_bundle_hash`, `authorization_approval_set_hash`,
+  `was_revoked`, `role_participation` (separation-of-duty role facts,
+  e.g. `{"proposer": "agent-1", "approver": "user-a,user-b"}` --
+  populated automatically from the audit trail, `None` if no grant was
+  issued; see [separation-of-duties.md](separation-of-duties.md)).
 - **What was executed**: `commit_attempted`, `commit_success`,
   `provider_reference`, `commit_detail`.
 - **What was observed afterward**: `observed_matched_expected`,

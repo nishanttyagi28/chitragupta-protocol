@@ -40,6 +40,8 @@ class ApproveIn(BaseModel):
     max_uses: int = 1
     ttl_seconds: int = 300
     policy_bundle_id: str | None = None
+    separation_policy_bundle_id: str | None = None
+    roles: list[str] = []
 
 
 class DenyIn(BaseModel):
@@ -86,6 +88,18 @@ class ApprovalPolicyBundleCreateIn(BaseModel):
     cooling_off_seconds: int = 0
 
 
+class SeparationOfDutyPolicyBundleCreateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bundle_id: str
+    bundle_version: str = "1.0"
+    issuer: PrincipalIn
+    tenant_id: str | None = None
+    effective_seconds: int = 30 * 24 * 3600
+    #: Each entry "role_a:role_b"; empty uses the built-in default matrix.
+    forbidden_role_pairs: list[str] = []
+
+
 class ApprovalStatementIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -116,6 +130,8 @@ class QuorumGrantIn(BaseModel):
     max_uses: int = 1
     ttl_seconds: int = 300
     policy_bundle_id: str | None = None
+    separation_policy_bundle_id: str | None = None
+    roles: list[str] = []
 
 
 class AssessIn(BaseModel):
@@ -158,4 +174,5 @@ __all__ = [
     "PrincipalIn",
     "QuorumEvaluateIn",
     "QuorumGrantIn",
+    "SeparationOfDutyPolicyBundleCreateIn",
 ]

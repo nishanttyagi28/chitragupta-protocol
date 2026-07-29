@@ -1,4 +1,4 @@
-# Security Model: the 30 Invariants
+# Security Model: the 38 Invariants
 
 Each invariant below is implemented in a specific, named location and
 verified by at least one named test. This list exists so a reviewer can
@@ -43,6 +43,8 @@ under a minute per row.
 | 34 | An agent principal can never satisfy approval quorum, and can never sign an approval statement | `sign_approval_statement()` raises `ApprovalIssuerNotAuthorizedError`; `evaluate_quorum()` independently rejects any agent-typed approver even if a statement arrived from another source | `test_agent_cannot_sign_approval_statement`, `test_agent_approver_always_rejected_even_if_policy_permissive` |
 | 35 | The proposer of a manifest and the subject/executor of a grant can never satisfy that grant's approval quorum (when the policy requires it, the default) | `evaluate_quorum()`'s `forbid_proposer_as_approver`/`forbid_subject_as_approver` checks | `test_proposer_cannot_approve_own_proposal`, `test_subject_cannot_satisfy_quorum`, `test_quorum_cannot_be_satisfied_by_statements_from_only_forbidden_identities` |
 | 36 | Quorum evaluation is deterministic and order-independent: the same statement set always yields the same verdict and `approval_set_hash`, regardless of submission order, including when one approver submitted conflicting statements (latest `signed_at` wins) | `evaluate_quorum()`'s freshness tie-break over grouped-by-approver statements | `tests/property/test_approval_quorum_properties.py`, `test_a_later_dissent_overrides_an_earlier_approval_from_the_same_approver` |
+| 37 | A grant issued via `authorize()`/`authorize_with_quorum()` with a bound separation-of-duty policy cannot exist if any principal holds both roles of a forbidden pair (e.g. sealer and approver) -- checked structurally, never a tally an attacker can outvote | `KarmaSakshiEngine._enforce_separation_of_duty()` raises `SeparationOfDutyViolationError` before `issue_grant()` is ever called | `test_authorize_blocked_when_issuer_is_also_proposer`, `test_authorize_with_quorum_blocked_when_an_approver_is_also_the_proposer`, `tests/adversarial/test_separation_of_duty_gaming.py::test_one_conflicting_approver_among_several_still_blocks` |
+| 38 | Separation-of-duty evaluation is deterministic and order-independent: the same role assignment and forbidden-pair matrix always yield the same verdict, regardless of entry order on either side | `check_separation_of_duty()` computes set intersections per forbidden pair, order has no effect | `tests/property/test_separation_of_duty_properties.py` |
 
 ## What this table does not claim
 

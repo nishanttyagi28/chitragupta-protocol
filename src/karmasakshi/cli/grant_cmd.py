@@ -10,10 +10,25 @@ from karmasakshi.cli.common import emit, run_guarded
 from karmasakshi.cli.workspace import Workspace
 from karmasakshi.domain.common import Principal
 from karmasakshi.domain.enums import PrincipalType
+from karmasakshi.duty.roles import RoleAssignment
 from karmasakshi.grants.model import ScopeConstraints
 from karmasakshi.grants.verifier import verify_grant
 
 grant_app = typer.Typer(help="Issue, verify, delegate, revoke, and inspect Execution Grants.")
+
+
+def _parse_role_assignment(manifest_hash: str, role_entries: list[str]) -> RoleAssignment | None:
+    """Parse repeatable ``--role role_name:principal_id`` CLI options into
+    a :class:`RoleAssignment`, or ``None`` if none were given."""
+    if not role_entries:
+        return None
+    assignments: list[tuple[str, str]] = []
+    for entry in role_entries:
+        role, sep, principal_id = entry.partition(":")
+        if not sep:
+            raise typer.BadParameter(f"--role must be 'role_name:principal_id', got {entry!r}")
+        assignments.append((role, principal_id))
+    return RoleAssignment(manifest_hash=manifest_hash, assignments=tuple(assignments))
 
 
 @grant_app.command("issue")
@@ -38,6 +53,22 @@ def issue(
             "the same bundle must be presented again at `execute` time",
         ),
     ] = None,
+    separation_policy_bundle_id: Annotated[
+        str | None,
+        typer.Option(
+            "--separation-policy-bundle-id",
+            help="A sealed separation-of-duty policy bundle (from `policy create-separation` "
+            "+ `policy sign`) to enforce during this authorization",
+        ),
+    ] = None,
+    role: Annotated[
+        list[str],
+        typer.Option(
+            "--role",
+            help="repeatable 'role_name:principal_id' (e.g. 'sealer:user:alice') -- "
+            "additional roles beyond the auto-derived proposer/executor/approver",
+        ),
+    ] = [],  # noqa: B006
 ) -> None:
     """Issue an ExecutionGrant bound to a sealed manifest (invariant #30:
     issuer must be human or service, never the agent itself)."""
@@ -55,6 +86,12 @@ def issue(
             if policy_bundle_id is not None
             else None
         )
+        separation_policy_bundle = (
+            workspace.load_sealed_policy_bundle(separation_policy_bundle_id)
+            if separation_policy_bundle_id is not None
+            else None
+        )
+        role_assignment = _parse_role_assignment(sealed.seal.manifest_hash, role)
         grant = engine.authorize(
             sealed,
             issuer=Principal(principal_id=issuer_id, principal_type=issuer_type),
@@ -67,6 +104,8 @@ def issue(
             signing_key=signing_key,
             max_uses=max_uses,
             policy_bundle=policy_bundle,
+            separation_policy_bundle=separation_policy_bundle,
+            role_assignment=role_assignment,
         )
         path = workspace.save_grant(grant)
         emit(
@@ -103,6 +142,17 @@ def issue_with_quorum(
     max_uses: Annotated[int, typer.Option()] = 1,
     ttl_seconds: Annotated[int, typer.Option()] = 300,
     policy_bundle_id: Annotated[str | None, typer.Option("--policy-bundle-id")] = None,
+    separation_policy_bundle_id: Annotated[
+        str | None, typer.Option("--separation-policy-bundle-id")
+    ] = None,
+    role: Annotated[
+        list[str],
+        typer.Option(
+            "--role",
+            help="repeatable 'role_name:principal_id' -- additional roles beyond the "
+            "auto-derived proposer/executor/approver(s)",
+        ),
+    ] = [],  # noqa: B006
 ) -> None:
     """Issue an ExecutionGrant only if the approval statements already
     submitted for this manifest (via `karmasakshi approve`) satisfy the
@@ -125,6 +175,12 @@ def issue_with_quorum(
             if policy_bundle_id is not None
             else None
         )
+        separation_policy_bundle = (
+            workspace.load_sealed_policy_bundle(separation_policy_bundle_id)
+            if separation_policy_bundle_id is not None
+            else None
+        )
+        role_assignment = _parse_role_assignment(sealed.seal.manifest_hash, role)
         grant = engine.authorize_with_quorum(
             sealed,
             statements=statements,
@@ -140,6 +196,8 @@ def issue_with_quorum(
             signing_key=signing_key,
             max_uses=max_uses,
             policy_bundle=policy_bundle,
+            separation_policy_bundle=separation_policy_bundle,
+            role_assignment=role_assignment,
         )
         path = workspace.save_grant(grant)
         emit(
