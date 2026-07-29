@@ -5,28 +5,20 @@ forming a chain: mutating or deleting any past event breaks every
 subsequent hash, which :meth:`AuditJournal.verify_chain` detects
 deterministically (invariant #22).
 
-The in-memory backend here is the default and is what the core engine uses
-directly. A durable (SQLite) backend is added in ``stores/`` and can be
-plugged in via the same :class:`AuditBackend` protocol.
+Backends implement :class:`~karmasakshi.audit.base.AuditBackend`. The
+in-memory backend is the default; SQLite and Redis (optional) backends
+plug in via the same protocol. See docs/audit-journal.md.
 """
 
 from __future__ import annotations
 
 import threading
-from typing import Protocol
 
+from karmasakshi.audit.base import AuditBackend
 from karmasakshi.audit.events import AuditEvent
 from karmasakshi.canonical.serialize import canonical_hash
 from karmasakshi.config.clock import SYSTEM_CLOCK, Clock
 from karmasakshi.errors import AuditTamperedError, AuditWriteError
-
-
-class AuditBackend(Protocol):
-    def append(self, event: AuditEvent) -> None: ...
-
-    def all_events(self) -> list[AuditEvent]: ...
-
-    def last_event(self) -> AuditEvent | None: ...
 
 
 class InMemoryAuditBackend:
@@ -48,7 +40,13 @@ def _event_hash(event: AuditEvent) -> str:
 
 
 class AuditJournal:
-    """Thread-safe wrapper that maintains the hash chain over a backend."""
+    """Thread-safe wrapper that maintains the hash chain over a backend.
+
+    The process-local lock serializes callers in one process. Cross-process
+    safety requires a backend that rejects conflicting appends (SQLite
+    primary-key / Redis Lua sequence check). The journal lock alone is
+    not a distributed lock.
+    """
 
     def __init__(self, backend: AuditBackend | None = None, clock: Clock = SYSTEM_CLOCK) -> None:
         self._backend = backend or InMemoryAuditBackend()
@@ -90,6 +88,8 @@ class AuditJournal:
             event = event.model_copy(update={"event_hash": _event_hash(event)})
             try:
                 self._backend.append(event)
+            except AuditWriteError:
+                raise
             except Exception as exc:
                 raise AuditWriteError(
                     f"failed to durably write audit event {event.event_id}"

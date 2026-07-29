@@ -51,7 +51,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 11. Deep delegation revocation | **Implemented** | Lineage walk at commit; see below |
 | 12. Authority budgets | **Implemented** | Single-process atomic ledger; see below |
 | 13. Durable lifecycle storage | **Implemented** | SQLite single-node lifecycle store; see below |
-| 14. Distributed audit journal | Not started | SQLite/Redis backends are v0.1; no new distributed-consensus work |
+| 14. Distributed audit journal | **Implemented** | AuditBackend contract + optional Redis sink; no consensus claims |
 | 15. Transactional outbox | Not started | |
 | 16. Production signer interface | Not started | Ed25519 dev keys only, as in v0.1 |
 | 17. Trusted adapter registry | Not started | |
@@ -622,50 +622,48 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 14: Distributed audit journal abstraction.** Honest multi-backend
-audit journal interface without inventing consensus.
+**Phase 15: Transactional outbox and recovery.** Honest outbox pattern
+for durable intent vs provider confirmation.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 12 (`504e7aa`, PR #27)
-- current branch: `cursor/phase13-durable-lifecycle-ffca`
-- open PR: (pending push)
-- latest local green: **646 passed, 6 skipped**; coverage **90.03%**;
-  ruff/mypy/bandit/build/twine clean
-- known blockers: Redis-only skips; pip-audit pytest CVE (dev-only);
-  lifecycle SQLite is single-node only
-- exact next command after Phase 13 merge: begin Phase 14 from updated `main`
-- exact next phase: 14 — Distributed audit journal abstraction
+- last merged phase on main: Phase 13 (pending confirm after rebase)
+- current branch: `cursor/phase14-audit-journal-ffca`
+- open PR: (pending)
+- known blockers: Redis-only skips; Redis audit is Lua atomicity not consensus
+- exact next phase: 15 — Transactional outbox and recovery
 
-## Phase 13: Durable lifecycle storage
+## Phase 14: Distributed audit journal abstraction
 
 **Status: implemented on branch.**
 
 ### What landed
 
-- `LifecycleStore` protocol + `InMemoryLifecycleStore` +
-  `SQLiteLifecycleStore` (`lifecycle.db`)
-- `EngineContext.lifecycle_store`; write-through on transition with
-  memory rollback on store failure; hydrate on `_get_record`
-- CLI workspace + API default state open lifecycle.db
-- Reconstruct prefers store, audit fallback for pre-Phase-13 workspaces
-- Invariant **#64**
-- Docs: `docs/durable-lifecycle-storage.md`
+- `AuditBackend` extracted to `audit/base.py` (`runtime_checkable`)
+- Optional `RedisAuditBackend` (Lua `LLEN+1 == sequence` then RPUSH)
+- Docs: `docs/audit-journal.md`; storage-semantics + limitations updated
+- Tests: protocol/SQLite conflict unit tests; Redis tests skip without Redis
 
 ### Design decisions
 
-- Audit journal remains tamper-evident source of truth for *what happened*
-- Lifecycle store is durable convenience state for the *next* transition
-- No Redis / multi-node lifecycle claims
-- Saga/budget/witness durability remain separate follow-ons
+- No Raft/etcd claims — Redis EVAL atomicity only
+- Journal process lock remains process-local
+- CLI/API defaults stay on SQLite
 
-### Local gates
 
-**646 passed, 6 skipped**; coverage **90.03%**.
+## Phase 13: Durable lifecycle storage
+
+**Status: merged to main (`bee60d8`, PR #28).**
+
+### What landed
+
+- `LifecycleStore` protocol + memory/SQLite backends; engine write-through
+- CLI/API `lifecycle.db`; invariant #64
+- Docs: `docs/durable-lifecycle-storage.md`
 
 ## Phase 12: Atomic authority budgets
 
-**Status: merged to main (`504e7aa`, PR #27).**
+**Status: implemented on branch.**
 
 ### What landed
 
@@ -682,12 +680,12 @@ audit journal interface without inventing consensus.
 
 - Distinct from `scope.max_amount` (per-grant attenuation vs shared ledger)
 - Monetary consume uses `manifest.estimated_cost` only — never invent amount
-- Single-process ledger only; durable multi-node deferred
+- Single-process ledger only; durable multi-node deferred to Phase 13+
 - Delegation inherits parent budget; drop/swap treated as widening
 
 ### Local gates
 
-**641 passed, 6 skipped**; coverage **90.15%** (`--cov-fail-under=90`);
+**641 passed, 6 skipped**; coverage **90.19%** (`--cov-fail-under=90`);
 ruff/mypy/bandit/build/twine clean.
 
 ## Phase 11: Deep delegation revocation

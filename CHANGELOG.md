@@ -127,6 +127,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   single-node write-through for current lifecycle state; audit remains
   the tamper-evident record. See
   [docs/durable-lifecycle-storage.md](docs/durable-lifecycle-storage.md).
+- **Distributed audit journal abstraction**: stabilized `AuditBackend`
+  protocol; optional `RedisAuditBackend` with Lua sequence-checked
+  append (not Raft/etcd). See [docs/audit-journal.md](docs/audit-journal.md).
 
 ## [0.1.0] - 2026-07-27
 
