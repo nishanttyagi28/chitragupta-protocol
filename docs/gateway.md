@@ -84,6 +84,7 @@ one process exposing both. See `karmasakshi.gateway.api`.
 | POST | `/gateway/organizations` | Platform (`require_auth`: dev-mode/token) | Bootstrap an organization + its first (owner) user in one call |
 | POST | `/gateway/auth/login` | None (this *is* the auth step) | Authenticate `org_id` + `email` + `password`, issue a session token |
 | GET | `/gateway/auth/me` | Gateway session | Resolve the bearer token to its authenticated user |
+| POST | `/gateway/auth/logout` | Gateway session | Revoke exactly the authenticated session token |
 | GET | `/gateway/organizations/{org_id}` | Gateway session (same org) | Fetch organization details |
 | GET | `/gateway/organizations/{org_id}/users` | Gateway session (same org) | List an organization's users |
 | POST | `/gateway/organizations/{org_id}/users` | Gateway session (same org) | Register an additional user in that organization |
@@ -123,14 +124,17 @@ scoped to one organization.
 |---|---|---|
 | POST | `/gateway/organizations/{org_id}/policy` | Build, sign, and activate a risk-scoring policy bundle for the organization (bound into every subsequent grant unless overridden) |
 | POST | `/gateway/organizations/{org_id}/refunds/propose` | Prepare + seal + (advisory) risk-assess an exact refund effect |
+| GET | `/gateway/organizations/{org_id}/refunds` | List typed refund summaries (`?decision_status=pending\|approved\|denied`) |
+| GET | `/gateway/organizations/{org_id}/refunds/{id}` | Full Control Center read model: exact effect, risk signals, policy requirements, lifecycle, outcome, timeline |
 | POST | `/gateway/organizations/{org_id}/refunds/{id}/approve` | Human approval: issue an `ExecutionGrant` |
+| POST | `/gateway/organizations/{org_id}/refunds/{id}/deny` | Record an authenticated human denial that blocks later approval |
 | POST | `/gateway/organizations/{org_id}/refunds/{id}/execute` | Commit exactly once through the payment simulator |
 | POST | `/gateway/organizations/{org_id}/refunds/{id}/verify` | Independent post-commit observation |
 | POST | `/gateway/organizations/{org_id}/refunds/{id}/recover` | Re-observe and honestly resolve an ambiguous commit outcome |
 | POST | `/gateway/organizations/{org_id}/refunds/{id}/compensate` | Compensation as a separate, separately-authorized effect |
 | GET | `/gateway/organizations/{org_id}/refunds/{id}/passport` | Action Passport (`?version=v1\|v2&fmt=json\|markdown\|html`) |
 | GET | `/gateway/organizations/{org_id}/refunds/{id}/evidence-pack` | Portable, offline-verifiable Evidence Pack (Phase 24) |
-| GET | `/gateway/organizations/{org_id}/audit` | Full audit trail, optionally filtered to one manifest (`?manifest_id=`) |
+| GET | `/gateway/organizations/{org_id}/audit` | Search audit by manifest, free text, exact event type, or decision (`?manifest_id=&q=&event_type=&decision=`) |
 | GET | `/gateway/organizations/{org_id}/audit/verify` | Verify the hash chain |
 
 Every endpoint above requires a Gateway session for that exact `org_id`
@@ -139,6 +143,10 @@ in the Gateway). The approving/activating identity is always the
 **authenticated session user** (`user.user_id`), never a client-supplied
 identity claim in the request body -- closing an obvious spoofing gap
 ("I approved as someone else").
+
+The browser Control Center at `/control-center/` consumes this surface
+through `AsyncGatewayClient`; it does not read the organization's
+in-process runtime directly. See [docs/control-center.md](control-center.md).
 
 **What this demonstrates, concretely:**
 
@@ -172,8 +180,9 @@ every adversarial case exercised end to end through HTTP.
   again). Horizontally scaling the Gateway across multiple processes
   would need a shared session backend (Redis or similar); that is
   explicitly deferred to Milestone B.
-- No endpoint yet to revoke a session (logout), rotate/reset a password,
-  or remove a user.
+- No endpoint yet to rotate/reset a password or remove a user. Logout
+  revokes the current session, but there is not yet an administrator UI
+  for revoking every session belonging to another user.
 - **The refund journey is payment-simulator-only** -- no real payment
   provider, and "agent registration" / "adapter registration" are not
   yet their own durable, listable resources: an agent is just a
@@ -187,5 +196,6 @@ every adversarial case exercised end to end through HTTP.
   protocol's `authorize_with_quorum()` exists and is unaffected; wiring
   configurable required-approver-count into the Gateway is Milestone B's
   "approval groups").
-- No Control Center UI yet -- this is an HTTP API only. See
-  `docs/product/BUILD_STATUS.md` for what's next.
+- The Control Center is a server-rendered Milestone A UI with no
+  client-side SPA build. Role-based decision permissions remain deferred
+  with the RBAC limitation above.

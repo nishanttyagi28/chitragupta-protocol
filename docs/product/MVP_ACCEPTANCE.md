@@ -26,4 +26,8 @@ A commercial MVP is **not claimed** until this checklist passes as an automated 
 
 ## Status
 
-**Not yet MVP.** Protocol phases 1–7 are on `main`; Phase 8 is in PR. Commercial Gateway/Control Center refund journey and acceptance automation are unfinished.
+**Not yet MVP.** All 25 protocol-foundation phases and the commercial
+Gateway, typed sync/async SDK, and real Control Center refund journey are
+implemented. The dedicated buyer-facing end-to-end acceptance command,
+Docker Compose evaluation path, and real Control Center screenshots/demo
+recording are still required before this checklist may be checked off.

@@ -38,12 +38,19 @@
   organization policy activation, propose → assess → approve → commit →
   verify → passport → evidence-pack, plus honest ambiguous-outcome
   recovery and compensation as a separate authorized effect.
+- The typed synchronous and asynchronous Python SDK for the complete
+  Gateway organization/auth/refund surface.
+- The authenticated Control Center at `/control-center/`: a
+  server-rendered backend-for-frontend that uses the async SDK against
+  the real Gateway API for overview, approvals, exact effect review,
+  lifecycle, passports, and audit search. Browser sessions are
+  HttpOnly/SameSite, mutating forms are CSRF-protected, and organization
+  scope comes from the authenticated user.
 
-Not yet built: the Control Center UI, durable agent/adapter registries
-(an agent is currently just a `principal_id` string), multi-approver
-quorum, and the typed SDK. See `docs/product/BUILD_STATUS.md` for what
-remains before `docs/product/MVP_ACCEPTANCE.md` can be automated end to
-end.
+Not yet built: durable agent/adapter registries (an agent is currently
+just a `principal_id` string) and multi-approver quorum. Docker Compose,
+buyer-facing acceptance automation, and real UI media remain before
+Milestone A can be claimed complete. See `docs/product/BUILD_STATUS.md`.
 
 ## Evaluation modes
 

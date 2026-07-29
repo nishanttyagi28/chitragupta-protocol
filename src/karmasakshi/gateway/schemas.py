@@ -96,6 +96,12 @@ class LoginOut(BaseModel):
     user: GatewayUserOut
 
 
+class LogoutOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    logged_out: bool
+
+
 class UserListOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -108,6 +114,7 @@ __all__ = [
     "GatewayUserOut",
     "LoginIn",
     "LoginOut",
+    "LogoutOut",
     "OrganizationBootstrapIn",
     "OrganizationBootstrapOut",
     "OrganizationOut",

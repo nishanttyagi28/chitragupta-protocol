@@ -11,9 +11,16 @@ import httpx
 
 from karmasakshi.audit.events import AuditEvent
 from karmasakshi.gateway.models import GatewayUserRole
+from karmasakshi.gateway.refund_schemas import (
+    RefundDenyResult,
+    RefundDetailOut,
+    RefundListOut,
+    RefundSummaryOut,
+)
 from karmasakshi.gateway.schemas import (
     GatewayUserOut,
     LoginOut,
+    LogoutOut,
     OrganizationBootstrapOut,
     OrganizationOut,
 )
@@ -152,6 +159,14 @@ class AsyncGatewayClient:
         response = await self._request("GET", "/gateway/auth/me", headers=self._session_headers())
         return GatewayUserOut.model_validate(response.json())
 
+    async def logout(self) -> LogoutOut:
+        response = await self._request(
+            "POST", "/gateway/auth/logout", headers=self._session_headers()
+        )
+        result = LogoutOut.model_validate(response.json())
+        self.session_token = None
+        return result
+
     async def get_organization(self, org_id: str) -> OrganizationOut:
         response = await self._request(
             "GET", f"/gateway/organizations/{org_id}", headers=self._session_headers()
@@ -244,6 +259,28 @@ class AsyncGatewayClient:
         )
         return RefundProposalResult.model_validate(response.json())
 
+    async def list_refunds(
+        self, org_id: str, *, decision_status: str | None = None
+    ) -> list[RefundSummaryOut]:
+        params: dict[str, str | int | float | bool | None] | None = (
+            {"decision_status": decision_status} if decision_status is not None else None
+        )
+        response = await self._request(
+            "GET",
+            f"/gateway/organizations/{org_id}/refunds",
+            params=params,
+            headers=self._session_headers(),
+        )
+        return RefundListOut.model_validate(response.json()).refunds
+
+    async def get_refund(self, org_id: str, manifest_id: str) -> RefundDetailOut:
+        response = await self._request(
+            "GET",
+            f"/gateway/organizations/{org_id}/refunds/{manifest_id}",
+            headers=self._session_headers(),
+        )
+        return RefundDetailOut.model_validate(response.json())
+
     async def approve_refund(
         self,
         org_id: str,
@@ -259,6 +296,15 @@ class AsyncGatewayClient:
             headers=self._session_headers(),
         )
         return ApprovalResult.model_validate(response.json())
+
+    async def deny_refund(self, org_id: str, manifest_id: str, *, reason: str) -> RefundDenyResult:
+        response = await self._request(
+            "POST",
+            f"/gateway/organizations/{org_id}/refunds/{manifest_id}/deny",
+            json={"reason": reason},
+            headers=self._session_headers(),
+        )
+        return RefundDenyResult.model_validate(response.json())
 
     async def execute_refund(
         self, org_id: str, manifest_id: str, *, grant_id: str
@@ -338,14 +384,28 @@ class AsyncGatewayClient:
         )
         return EvidencePackVerificationResult.model_validate(response.json())
 
-    async def get_audit(self, org_id: str, *, manifest_id: str | None = None) -> list[AuditEvent]:
-        params: dict[str, str | int | float | bool | None] | None = (
-            {"manifest_id": manifest_id} if manifest_id is not None else None
-        )
+    async def get_audit(
+        self,
+        org_id: str,
+        *,
+        manifest_id: str | None = None,
+        query: str | None = None,
+        event_type: str | None = None,
+        decision: str | None = None,
+    ) -> list[AuditEvent]:
+        params: dict[str, str | int | float | bool | None] = {}
+        if manifest_id is not None:
+            params["manifest_id"] = manifest_id
+        if query is not None:
+            params["q"] = query
+        if event_type is not None:
+            params["event_type"] = event_type
+        if decision is not None:
+            params["decision"] = decision
         response = await self._request(
             "GET",
             f"/gateway/organizations/{org_id}/audit",
-            params=params,
+            params=params or None,
             headers=self._session_headers(),
         )
         return [AuditEvent.model_validate(e) for e in response.json()["events"]]

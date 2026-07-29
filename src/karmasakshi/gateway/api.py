@@ -11,6 +11,7 @@ organization. See docs/gateway.md.
 
 from __future__ import annotations
 
+import secrets
 from dataclasses import dataclass, field
 from typing import Annotated
 
@@ -34,6 +35,7 @@ from karmasakshi.gateway.schemas import (
     GatewayUserOut,
     LoginIn,
     LoginOut,
+    LogoutOut,
     OrganizationBootstrapIn,
     OrganizationBootstrapOut,
     OrganizationOut,
@@ -51,6 +53,9 @@ router = APIRouter(prefix="/gateway", tags=["gateway"])
 class GatewayApiState:
     store: GatewayStore
     sessions: GatewaySessionStore = field(default_factory=GatewaySessionStore)
+    control_center_csrf_key: bytes = field(
+        default_factory=lambda: secrets.token_bytes(32), repr=False
+    )
     #: Gives each organization its own isolated protocol engine, adapters,
     #: grant store, and audit journal (reuses Phase 19's multi-tenant
     #: control plane -- karmasakshi.gateway.Organization and
@@ -184,6 +189,23 @@ def login(body: LoginIn, request: Request) -> LoginOut:
 @router.get("/auth/me")
 def me(user: Annotated[GatewayUser, Depends(require_gateway_session)]) -> GatewayUserOut:
     return _user_out(user)
+
+
+@router.post("/auth/logout")
+def logout(
+    request: Request,
+    user: Annotated[GatewayUser, Depends(require_gateway_session)],
+    authorization: str = Header(),
+) -> LogoutOut:
+    """Revoke exactly the authenticated bearer session.
+
+    ``user`` is intentionally retained as a dependency even though the
+    response does not need it: an unknown or expired token must not be
+    reported as a successful logout.
+    """
+    del user
+    _state(request).sessions.revoke(authorization.removeprefix("Bearer "))
+    return LogoutOut(logged_out=True)
 
 
 @router.get("/organizations/{org_id}")

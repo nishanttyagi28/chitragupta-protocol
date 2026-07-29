@@ -87,6 +87,13 @@ def test_full_refund_journey(base_url):
         )
         assert proposal.manifest_id
         assert 0 <= proposal.assessment.score <= 100
+        assert proposal.assessment.signals
+
+        pending = client.list_refunds("acme", decision_status="pending")
+        assert [refund.manifest_id for refund in pending] == [proposal.manifest_id]
+        detail = client.get_refund("acme", proposal.manifest_id)
+        assert detail.effect.amount_minor_units == 50000
+        assert detail.decision_status == "pending"
 
         approval = client.approve_refund("acme", proposal.manifest_id)
         assert approval.grant_id
@@ -118,6 +125,23 @@ def test_full_refund_journey(base_url):
         assert len(events) > 0
         assert client.verify_audit("acme") is True
 
+        denied_proposal = client.propose_refund(
+            "acme",
+            agent_id="refund-agent-1",
+            requested_by="customer-2",
+            beneficiary="customer-acct-2",
+            amount_minor_units=1000,
+            reference="order-denied",
+            idempotency_key="idem-sync-denied",
+        )
+        denial = client.deny_refund(
+            "acme",
+            denied_proposal.manifest_id,
+            reason="Duplicate customer request",
+        )
+        assert denial.denied_by == "acme-owner"
+        assert client.get_refund("acme", denied_proposal.manifest_id).decision_status == "denied"
+
         compensation = client.compensate_refund("acme", proposal.manifest_id)
         assert compensation.attempted is True
         assert compensation.succeeded is False
@@ -133,6 +157,8 @@ def test_full_refund_journey(base_url):
 
         org = client.get_organization("acme")
         assert org.org_id == "acme"
+        assert client.logout().logged_out is True
+        assert client.session_token is None
 
 
 def test_grant_for_one_refund_cannot_execute_a_different_refund(base_url):

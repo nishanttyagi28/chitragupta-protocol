@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Approval inbox · KarmaSakshi Control Center{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><div class="eyebrow">Human checkpoint</div><h1>Approval inbox</h1><p class="muted">Each row is an exact sealed effect awaiting a server-authorized decision.</p></div>
+  <span class="chip warn">{{ refunds|length }} pending</span>
+</header>
+{% if refunds %}
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Requested</th><th>Reference</th><th>Beneficiary</th><th>Exact amount</th><th>Risk / policy</th><th></th></tr></thead>
+    <tbody>
+    {% for refund in refunds %}
+      <tr>
+        <td>{{ refund.created_at.strftime("%Y-%m-%d") }}<br><span class="muted small">{{ refund.created_at.strftime("%H:%M:%S UTC") }}</span></td>
+        <td><strong>{{ refund.reference }}</strong><br><span class="mono muted small">{{ refund.manifest_id[:12] }}</span></td>
+        <td class="mono">{{ refund.beneficiary }}</td>
+        <td>{{ refund.currency }} {{ "%.2f"|format(refund.amount_minor_units / 100) }}</td>
+        <td><span class="chip {% if refund.risk_level in ['high','critical'] %}bad{% else %}warn{% endif %}">{{ refund.risk_score }} · {{ refund.recommendation }}</span></td>
+        <td><a class="button primary" href="/control-center/refunds/{{ refund.manifest_id }}">Review exact effect</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}<div class="empty"><strong>No decisions waiting.</strong><br>New sealed refund effects will appear here.</div>{% endif %}
+{% endblock %}

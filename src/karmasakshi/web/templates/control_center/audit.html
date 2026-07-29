@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Audit explorer · KarmaSakshi Control Center{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><div class="eyebrow">Append-only evidence</div><h1>Audit explorer</h1><p class="muted">Search only within your authenticated organization’s hash-chained journal.</p></div>
+  <span class="chip {{ 'good' if verified else 'bad' }}">{{ "Chain verified" if verified else "Verification failed" }}</span>
+</header>
+<form class="card grid" method="get" action="/control-center/audit" style="grid-template-columns:2fr 1fr 1fr auto;align-items:end;">
+  <div><label for="q">Search manifest, actor, event, metadata</label><input id="q" name="q" value="{{ q }}" maxlength="200" placeholder="e.g. authorization_denied"></div>
+  <div><label for="event_type">Exact event type</label><input id="event_type" name="event_type" value="{{ event_type }}" maxlength="256" placeholder="effect.verified"></div>
+  <div><label for="decision">Exact decision</label><input id="decision" name="decision" value="{{ decision }}" maxlength="256" placeholder="allowed"></div>
+  <button class="primary" type="submit">Search</button>
+</form>
+<section class="section">
+{% if events %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Sequence / time</th><th>Event</th><th>Decision</th><th>Manifest / actor</th><th>Transition</th></tr></thead>
+      <tbody>
+      {% for event in events %}
+        <tr>
+          <td><strong>#{{ event.sequence }}</strong><br><span class="muted small">{{ event.timestamp.strftime("%Y-%m-%d %H:%M:%S") }}</span></td>
+          <td><strong>{{ event.event_type }}</strong><br><span class="mono muted small">{{ event.event_hash[:20] }}…</span></td>
+          <td><span class="chip {% if event.decision in ['allowed','matched','success'] %}good{% elif 'denied' in event.decision or 'blocked' in event.decision or 'failed' in event.decision %}bad{% else %}neutral{% endif %}">{{ event.decision }}</span></td>
+          <td><span class="mono">{{ (event.manifest_id or "—")[:12] }}</span><br><span class="muted small">{{ event.actor_id or "system" }}</span></td>
+          <td>{{ event.from_state or "—" }}{% if event.to_state %} → {{ event.to_state }}{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}<div class="empty">No audit events matched this organization-scoped search.</div>{% endif %}
+</section>
+{% endblock %}

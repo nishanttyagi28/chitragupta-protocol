@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Request blocked · KarmaSakshi Control Center{% endblock %}
+{% block content %}
+<div style="max-width:680px;margin:12vh auto;">
+  <div class="eyebrow">Fail closed · {{ status_code }}</div>
+  <h1>Request not completed</h1>
+  <p class="muted">{{ message }}</p>
+  <a class="button" href="/control-center/">Return to overview</a>
+</div>
+{% endblock %}

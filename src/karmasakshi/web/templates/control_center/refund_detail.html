@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ refund.effect.reference }} · KarmaSakshi Control Center{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <div class="eyebrow">Refund effect · {{ refund.effect.reference }}</div>
+    <h1>{{ refund.effect.currency }} {{ "%.2f"|format(refund.effect.amount_minor_units / 100) }} to {{ refund.effect.beneficiary }}</h1>
+    <p class="mono muted small">{{ refund.manifest_id }}<br>{{ refund.manifest_hash }}</p>
+  </div>
+  <div><span class="chip {% if refund.decision_status == 'approved' %}good{% elif refund.decision_status == 'denied' %}bad{% else %}warn{% endif %}">{{ refund.decision_status }}</span></div>
+</header>
+{% if notice %}<div class="notice">{{ notice }}</div>{% endif %}
+
+<section class="card">
+  <div class="section-head"><h2>Exact before and after</h2><span class="chip neutral">Bound by manifest hash</span></div>
+  <div class="grid" style="grid-template-columns:minmax(0,1fr) 42px minmax(0,1fr);">
+    <div class="card" style="background:#091310;">
+      <div class="eyebrow">Before</div>
+      <dl>
+        <div class="fact"><dt>Source account</dt><dd class="mono">{{ refund.effect.source_account }}</dd></div>
+        <div class="fact"><dt>Source balance</dt><dd>{{ refund.effect.currency }} {{ "%.2f"|format(refund.effect.source_balance_before_minor_units / 100) }}</dd></div>
+        <div class="fact"><dt>Beneficiary credit from this effect</dt><dd>{{ refund.effect.currency }} {{ "%.2f"|format(refund.effect.beneficiary_credit_before_minor_units / 100) }}</dd></div>
+      </dl>
+    </div>
+    <div class="effect-arrow" aria-hidden="true">→</div>
+    <div class="card" style="background:#0d1d19;border-color:#28644f;">
+      <div class="eyebrow">Expected after</div>
+      <dl>
+        <div class="fact"><dt>Source balance</dt><dd>{{ refund.effect.currency }} {{ "%.2f"|format(refund.effect.source_balance_expected_after_minor_units / 100) }}</dd></div>
+        <div class="fact"><dt>Beneficiary</dt><dd class="mono">{{ refund.effect.beneficiary }}</dd></div>
+        <div class="fact"><dt>Exact credit</dt><dd style="color:var(--mint);">+ {{ refund.effect.currency }} {{ "%.2f"|format(refund.effect.beneficiary_credit_expected_after_minor_units / 100) }}</dd></div>
+      </dl>
+    </div>
+  </div>
+  <p class="muted small" style="margin:14px 0 0;">Fee: {{ refund.effect.currency }} {{ "%.2f"|format(refund.effect.fee_minor_units / 100) }} · Idempotency key: <span class="mono">{{ refund.effect.idempotency_key }}</span></p>
+</section>
+
+<section class="grid grid-2 section">
+  <div class="card">
+    <div class="section-head"><h2>Risk assessment</h2><span class="chip {% if refund.assessment.risk_level in ['high','critical'] %}bad{% elif refund.assessment.risk_level == 'medium' %}warn{% else %}good{% endif %}">{{ refund.assessment.score }}/100 · {{ refund.assessment.risk_level }}</span></div>
+    {% for signal in refund.assessment.signals %}
+      <div class="signal"><div><strong>{{ signal.name|replace('_',' ') }}</strong><div class="muted small">{{ signal.detail }}</div></div><span class="chip neutral">+{{ signal.weight }}</span></div>
+    {% endfor %}
+    <p class="muted small" style="margin-top:14px;">{{ refund.assessment.explanation }}</p>
+  </div>
+  <div class="card">
+    <div class="section-head"><h2>Policy decision</h2><span class="chip {% if refund.policy_decision.recommendation == 'allow' %}good{% elif refund.policy_decision.recommendation == 'block' %}bad{% else %}warn{% endif %}">{{ refund.policy_decision.recommendation }}</span></div>
+    <dl>
+      <div class="fact"><dt>Policy</dt><dd>{{ refund.policy_decision.policy_id }} · v{{ refund.policy_decision.policy_version }}</dd></div>
+      <div class="fact"><dt>Human approvals</dt><dd>{{ refund.policy_decision.completed_human_approvals }} / {{ refund.policy_decision.required_human_approvals }} completed</dd></div>
+      <div class="fact"><dt>Required verification</dt><dd>{{ refund.policy_decision.required_verification_strength }}</dd></div>
+      <div class="fact"><dt>Active policy bundle</dt><dd class="mono small">{{ refund.policy_decision.active_policy_bundle_id or "None activated" }}</dd></div>
+      <div class="fact"><dt>Bound bundle hash</dt><dd class="mono small">{{ refund.policy_decision.bound_policy_bundle_hash or "Not yet bound" }}</dd></div>
+    </dl>
+  </div>
+</section>
+
+{% if refund.can_approve %}
+<section class="card section">
+  <div class="section-head"><div><h2>Human decision</h2><p class="muted small">Your authenticated server-side identity will be recorded. It cannot be supplied or changed by this form.</p></div></div>
+  <form class="inline" method="post" action="/control-center/refunds/{{ refund.manifest_id }}/approve">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="primary" type="submit">Approve exact effect</button>
+  </form>
+  <form method="post" action="/control-center/refunds/{{ refund.manifest_id }}/deny" style="display:inline-grid;grid-template-columns:minmax(220px,360px) auto;gap:8px;margin-left:8px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input name="reason" aria-label="Denial reason" placeholder="Required denial reason" maxlength="200" required>
+    <button class="danger" type="submit">Deny</button>
+  </form>
+</section>
+{% elif refund.decision_status == "denied" %}
+<section class="card section" style="border-color:#643431;"><h2>Authorization denied</h2><p>{{ refund.denial_reason }}</p><p class="muted small">Recorded by {{ refund.denied_by }}. This effect remains uncommitted and cannot be approved.</p></section>
+{% endif %}
+
+<section class="grid grid-2 section">
+  <div class="card">
+    <div class="section-head"><h2>Outcome status</h2><span class="chip {% if refund.verification_status == 'verified_match' %}good{% elif refund.ambiguous or refund.verification_status in ['failed','verified_mismatch'] %}bad{% else %}neutral{% endif %}">{{ refund.verification_status|replace('_',' ') }}</span></div>
+    <dl>
+      <div class="fact"><dt>Lifecycle</dt><dd>{{ refund.lifecycle_state }}</dd></div>
+      <div class="fact"><dt>Commit result</dt><dd>{% if refund.commit_attempted %}{{ "success" if refund.commit_success else "not confirmed" }}{% else %}not attempted{% endif %}</dd></div>
+      <div class="fact"><dt>Provider reference</dt><dd class="mono">{{ refund.provider_reference or "—" }}</dd></div>
+      <div class="fact"><dt>Observed after-state digest</dt><dd class="mono small">{{ refund.effect.observed_after_state_digest or "Awaiting independent observation" }}</dd></div>
+      {% if refund.commit_detail %}<div class="fact"><dt>Commit detail</dt><dd>{{ refund.commit_detail }}</dd></div>{% endif %}
+      {% if refund.verification_detail %}<div class="fact"><dt>Verification detail</dt><dd>{{ refund.verification_detail }}</dd></div>{% endif %}
+    </dl>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
+      {% if refund.decision_status == "approved" and not refund.commit_attempted %}
+      <form method="post" action="/control-center/refunds/{{ refund.manifest_id }}/execute"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="primary" type="submit">Commit exact effect</button></form>
+      {% endif %}
+      {% if refund.commit_attempted and refund.verification_status in ["pending","failed"] and not refund.ambiguous %}
+      <form method="post" action="/control-center/refunds/{{ refund.manifest_id }}/verify"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Independently verify</button></form>
+      {% endif %}
+      {% if refund.ambiguous %}
+      <form method="post" action="/control-center/refunds/{{ refund.manifest_id }}/recover"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="danger" type="submit">Recover by observation</button></form>
+      {% endif %}
+      <a class="button" href="/control-center/refunds/{{ refund.manifest_id }}/passport">View Action Passport</a>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Effect lifecycle</h2>
+    <ol class="timeline">
+    {% for event in refund.timeline %}
+      <li>
+        <time>{{ event.timestamp.strftime("%H:%M:%S") }}</time>
+        <span class="dot"></span>
+        <div><strong>{{ event.event_type|replace('.',' · ') }}</strong><div class="muted small">{{ event.decision }}{% if event.actor_id %} · {{ event.actor_id }}{% endif %}{% if event.from_state %} · {{ event.from_state }} → {{ event.to_state }}{% endif %}</div></div>
+      </li>
+    {% endfor %}
+    </ol>
+  </div>
+</section>
+{% endblock %}

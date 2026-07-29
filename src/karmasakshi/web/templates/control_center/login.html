@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Sign in · KarmaSakshi Control Center{% endblock %}
+{% block anonymous %}
+<main style="max-width: 460px; margin: 8vh auto; padding: 24px;">
+  <div class="brand"><span>Karma</span>Sakshi</div>
+  <div class="eyebrow">Control Center</div>
+  <div class="card" style="margin-top: 28px; padding: 28px;">
+    <h1 style="font-size: 2rem;">Witness every refund.</h1>
+    <p class="muted">Sign in to review exact effects, authorize decisions, and inspect independent evidence.</p>
+    {% if error %}<div class="notice" style="border-color:#643431;background:var(--red-soft);color:#ffd0cc;">{{ error }}</div>{% endif %}
+    <form method="post" action="/control-center/login">
+      <input type="hidden" name="csrf_token" value="{{ login_csrf }}">
+      <div style="margin-bottom: 14px;">
+        <label for="org_id">Organization ID</label>
+        <input id="org_id" name="org_id" value="{{ org_id }}" autocomplete="organization" required>
+      </div>
+      <div style="margin-bottom: 14px;">
+        <label for="email">Email</label>
+        <input id="email" type="email" name="email" value="{{ email }}" autocomplete="username" required>
+      </div>
+      <div style="margin-bottom: 20px;">
+        <label for="password">Password</label>
+        <input id="password" type="password" name="password" autocomplete="current-password" required>
+      </div>
+      <button class="primary" type="submit" style="width:100%;">Enter Control Center</button>
+    </form>
+  </div>
+  <p class="muted small" style="margin-top: 16px;">Session credentials stay in an HttpOnly browser cookie and are never exposed to page scripts.</p>
+</main>
+{% endblock %}

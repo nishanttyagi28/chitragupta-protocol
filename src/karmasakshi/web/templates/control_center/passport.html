@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Action Passport · KarmaSakshi Control Center{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><div class="eyebrow">Cryptographic evidence</div><h1>Action Passport</h1><p class="mono muted small">{{ passport.manifest_id }}</p></div>
+  <a class="button" href="/control-center/refunds/{{ passport.manifest_id }}">Back to refund</a>
+</header>
+<section class="grid grid-4">
+  <div class="card metric"><span class="muted small">Outcome</span><strong style="font-size:1rem;"><span class="chip {% if passport.outcome_status.value == 'verified_match' %}good{% elif passport.outcome_status.value in ['ambiguous','failed','verified_mismatch'] %}bad{% else %}warn{% endif %}">{{ passport.outcome_status.value|replace('_',' ') }}</span></strong></div>
+  <div class="card metric"><span class="muted small">Seal</span><strong style="font-size:1rem;"><span class="chip {{ 'good' if passport.verification.seal_verified else 'bad' }}">{{ "verified" if passport.verification.seal_verified else "failed" }}</span></strong></div>
+  <div class="card metric"><span class="muted small">Grant</span><strong style="font-size:1rem;"><span class="chip {{ 'good' if passport.verification.grant_verified else 'bad' }}">{{ "verified" if passport.verification.grant_verified else "not verified" }}</span></strong></div>
+  <div class="card metric"><span class="muted small">Audit chain</span><strong style="font-size:1rem;"><span class="chip {{ 'good' if passport.verification.audit_chain_verified else 'bad' }}">{{ "verified" if passport.verification.audit_chain_verified else "failed" }}</span></strong></div>
+</section>
+<section class="grid grid-2 section">
+  <div class="card">
+    <h2>Passport facts</h2>
+    <dl>
+      <div class="fact"><dt>Format</dt><dd>{{ passport.passport_format }} · schema {{ passport.schema_version }}</dd></div>
+      <div class="fact"><dt>Tenant</dt><dd class="mono">{{ passport.tenant_id }}</dd></div>
+      <div class="fact"><dt>Authorized by</dt><dd>{{ passport.authorized_by.principal_id if passport.authorized_by else "Not authorized" }}</dd></div>
+      <div class="fact"><dt>Provider reference</dt><dd class="mono">{{ passport.provider_reference or "—" }}</dd></div>
+      <div class="fact"><dt>Observed match</dt><dd>{{ passport.observed_matched_expected }}</dd></div>
+      <div class="fact"><dt>Passport hash</dt><dd class="mono small">{{ passport.passport_hash }}</dd></div>
+    </dl>
+  </div>
+  <div class="card"><h2>Complete signed record</h2><pre>{{ passport_json }}</pre></div>
+</section>
+{% endblock %}
