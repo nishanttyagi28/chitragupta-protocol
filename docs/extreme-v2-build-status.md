@@ -46,7 +46,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 6. Atomic plan authorization / decision envelopes | **Implemented** | See below |
 | 7. Compensation manifests | **Implemented** | Separate Compensation Passports; see below |
 | 8. Saga orchestration | **Implemented** | Multi-grant topo orchestration; see below |
-| 9. Independent witness quorum | Not started | |
+| 9. Independent witness quorum | **Implemented** | See below |
 | 10. Evidence quality and provenance | Not started | |
 | 11. Deep delegation revocation | Not started | v0.1's one-hop revocation propagation (documented limitation) is unchanged |
 | 12. Authority budgets | Not started | |
@@ -622,20 +622,46 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 9: Independent witness quorum.** Require N independent witnesses
-to confirm observed outcomes before PROVE-time acceptance of critical
-effects.
+**Phase 10: Evidence quality and provenance.** Typed evidence records,
+freshness/staleness bounds, and provenance binding so VERIFY/PROVE cannot
+accept low-quality or unattributed observations as conclusive.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 7 (`2736d60`, PR #21)
-- current branch: `cursor/phase8-saga-orchestration-ffca`
-- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/22
-- latest local green commit: `783398e`
-- test counts: **584 passed, 6 skipped**; coverage **90.11%**
+- last merged phase on main: Phase 8 (`f3f3530`, PR #22); product docs
+  Milestone A drafts merged (`61d6354`, PR #23)
+- current branch: `cursor/phase9-witness-quorum-ffca`
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/24
+- latest local green commit: `69e286b` (+ CLI docs follow-up)
+- test counts: **607 passed, 6 skipped**; coverage **90.39%**
 - known blockers: Redis-only skips; pip-audit pytest CVE (dev-only)
-- exact next command after Phase 8 merge: begin Phase 9 from updated `main`
-- exact next phase: 9 — Independent witness quorum
+- exact next command after Phase 9 merge: begin Phase 10 from updated `main`
+- exact next phase: 10 — Evidence quality and provenance
+
+## Phase 9: Independent witness quorum
+
+**Status: implemented on branch.**
+
+### What landed
+
+- `karmasakshi.witness`: `WitnessStatement`, `WitnessPolicy`,
+  `evaluate_witness_quorum`, signing gates
+- Engine: `evaluate_witnesses`, `prove_with_witness_quorum`
+- CLI: `karmasakshi witness sign|evaluate`
+- API: `/manifests/{id}/witnesses` (+ evaluate)
+- Passport optional fields: `witness_set_hash`, `witness_policy_hash`,
+  `witness_quorum_satisfied`, `accepted_witness_ids`
+- Invariants **#50–#53**
+- Docs: `docs/witness-quorum.md`
+
+### Design decisions
+
+- Witnesses are VERIFY/PROVE-time observations, not AUTHORIZE-time
+  approvals
+- Statements bind `witness_policy_hash` of a plain `WitnessPolicy`
+  (sealed `witness.v1` bundles deferred)
+- PROVE remains passport/evidence surface — no new lifecycle state
+- Agents, actor, and subject fail closed by default
 
 ## Phase 8: Durable saga orchestration
 

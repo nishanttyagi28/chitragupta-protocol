@@ -1,4 +1,4 @@
-# Security Model: the 49 Invariants
+# Security Model: the 53 Invariants
 
 Each invariant below is implemented in a specific, named location and
 verified by at least one named test. This list exists so a reviewer can
@@ -56,6 +56,10 @@ under a minute per row.
 | 47 | Saga step execution is at-most-once: an `AMBIGUOUS` step cannot be blindly re-committed; recovery must re-observe first | `commit_saga_step` / `recover_saga_step` | `test_blind_retry_of_ambiguous_step_blocked`, `test_recover_saga_step_with_and_without_evidence` |
 | 48 | Saga compensation only targets previously committed/verified forward steps, in reverse order, via Phase 7 status recording | `start_compensation` / `record_saga_compensation` | `test_compensation_starts_reverse_of_verified_only`, `test_recover_helpers_and_engine_record_compensation` |
 | 49 | Saga plan identity and step order are deterministic (canonical hash / topo tie-break independent of input order) | `topo_manifest_hashes` / `SagaPlan.canonical_hash` | `test_topo_order_deterministic_and_parent_before_child` |
+| 50 | An agent principal can never sign a witness statement or satisfy independent witness quorum | `sign_witness_statement` / `evaluate_witness_quorum` | `test_agent_cannot_sign_witness_statement`, `test_forged_agent_typed_statement_never_counts_even_if_signature_present` |
+| 51 | Actor and subject/executor cannot witness their own effect when the witness policy forbids it (default) | `evaluate_witness_quorum` | `test_actor_cannot_witness_own_effect`, `test_subject_executor_cannot_self_witness` |
+| 52 | Witness digest/policy-hash/expiry/signature failures and oversized batches fail closed and never count toward quorum | `evaluate_witness_quorum` / `WitnessBatchTooLargeError` | `test_digest_mismatch_rejected`, `test_expired_statement_rejected`, `test_batch_too_large_fails_closed`, `test_policy_hash_mismatch_rejected` |
+| 53 | Witness quorum evaluation is deterministic and order-independent; the same authoritative set always yields the same `witness_set_hash` | `evaluate_witness_quorum` | `test_order_independent_hash`, `test_later_statement_wins_per_witness` |
 
 ## What this table does not claim
 

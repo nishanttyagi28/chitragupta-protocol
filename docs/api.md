@@ -64,6 +64,9 @@ without authentication — see `karmasakshi.api.auth.require_auth` and
 | POST | `/manifests/{id}/approvals` | Record one approval/dissent statement (signed by the control plane's own key -- see the "Honesty note" in docs/multi-party-authorization.md) |
 | GET | `/manifests/{id}/approvals` | List statements recorded for a manifest |
 | POST | `/manifests/{id}/approvals/evaluate` | Dry-run quorum evaluation, does not issue a grant |
+| POST | `/manifests/{id}/witnesses` | Record one independent witness statement (Phase 9; see docs/witness-quorum.md) |
+| GET | `/manifests/{id}/witnesses` | List witness statements for a manifest |
+| POST | `/manifests/{id}/witnesses/evaluate` | Evaluate / optionally assert independent witness quorum |
 | POST | `/manifests/{id}/approve-with-quorum` | Issue a grant if quorum is met (`403` if not); same optional `separation_policy_bundle_id`/`roles` fields as `/approve` |
 | POST | `/grants/{id}/revoke` | Revoke a grant |
 | POST | `/manifests/{id}/execute` | Commit (blocked with `503` if the kill switch is engaged); if the grant is policy-bundle / Decision-Envelope / causal-graph-bound, the matching artifact id must be supplied or the commit fails closed |
