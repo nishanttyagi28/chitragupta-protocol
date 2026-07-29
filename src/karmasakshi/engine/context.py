@@ -10,6 +10,7 @@ from karmasakshi.config.clock import SYSTEM_CLOCK, Clock
 from karmasakshi.config.settings import ClockSkewPolicy
 from karmasakshi.crypto.keyring import Keyring
 from karmasakshi.intelligence.engine import EffectIntelligenceEngine
+from karmasakshi.outbox.model import OutboxStore
 from karmasakshi.stores.base import GrantStore
 from karmasakshi.stores.lifecycle import LifecycleStore
 
@@ -30,6 +31,9 @@ class EngineContext:
     #: the in-process record. When ``None``, lifecycle remains process-local
     #: (v0.1 / Phases 1-12 behavior).
     lifecycle_store: LifecycleStore | None = None
+    #: Optional Phase 15 transactional outbox for durable commit intent.
+    #: When set, ``commit()`` records PENDING before the adapter runs.
+    outbox_store: OutboxStore | None = None
 
 
 __all__ = ["EngineContext"]

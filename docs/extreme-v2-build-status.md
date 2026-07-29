@@ -52,7 +52,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 12. Authority budgets | **Implemented** | Single-process atomic ledger; see below |
 | 13. Durable lifecycle storage | **Implemented** | SQLite single-node lifecycle store; see below |
 | 14. Distributed audit journal | **Implemented** | AuditBackend contract + optional Redis sink; no consensus claims |
-| 15. Transactional outbox | Not started | |
+| 15. Transactional outbox | **Implemented** | Intent vs confirmed; see below |
 | 16. Production signer interface | Not started | Ed25519 dev keys only, as in v0.1 |
 | 17. Trusted adapter registry | Not started | |
 | 18. Adapter conformance kit | Not started | |
@@ -622,16 +622,37 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 15: Transactional outbox and recovery.** Honest outbox pattern
-for durable intent vs provider confirmation.
+**Phase 16: Production signer interfaces.** Honest KMS/HSM interfaces and
+dev emulators — no fabricated cloud provider support.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 13 (pending confirm after rebase)
-- current branch: `cursor/phase14-audit-journal-ffca`
-- open PR: (pending)
-- known blockers: Redis-only skips; Redis audit is Lua atomicity not consensus
-- exact next phase: 15 — Transactional outbox and recovery
+- last merged phase on main: Phase 14 (`2f7ad35`, PR #29)
+- current branch: `cursor/phase15-transactional-outbox-ffca`
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/30
+- exact next phase: 16 — Production signer interfaces
+
+## Phase 15: Transactional outbox and recovery
+
+**Status: implemented on branch (PR #30).**
+
+### Local gates
+
+**662 passed, 8 skipped**; coverage **90.01%**.
+
+### What landed
+
+- `karmasakshi.outbox`: `OutboxEntry` / `OutboxStore` + memory/SQLite
+- Engine records PENDING after COMMITTING; confirms or abandons honestly
+- Adapter exceptions leave PENDING for `recover_ambiguous_commit`
+- CLI/API open `outbox.db`
+- Docs: `docs/transactional-outbox.md`
+
+### Design decisions
+
+- Not exactly-once; pending != verified
+- Single-node SQLite; no consensus claims
+
 
 ## Phase 14: Distributed audit journal abstraction
 
