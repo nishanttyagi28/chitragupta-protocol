@@ -54,7 +54,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 14. Distributed audit journal | **Implemented** | AuditBackend contract + optional Redis sink; no consensus claims |
 | 15. Transactional outbox | **Implemented** | Intent vs confirmed; see below |
 | 16. Production signer interface | **Implemented** | Signer protocol + local/emulated backends; no real KMS |
-| 17. Trusted adapter registry | Not started | |
+| 17. Trusted adapter registry | **Implemented** | Versioned allow-list; fail-closed; see below |
 | 18. Adapter conformance kit | Not started | |
 | 19. Multi-tenant control plane | Not started | `AssessmentFacts.cross_tenant` exists as a scoring input (Phase 1) but nothing enforces tenant isolation |
 | 20. Resource/DoS protection | Not started | |
@@ -622,16 +622,36 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 17: Trusted adapter registry.** Versioned adapter allow-list with
-fail-closed unknown adapters.
+**Phase 18: Adapter conformance kit.** Deterministic conformance tests
+for EffectAdapter contract honesty (prepare/commit/verify/compensate
+invariants) against reference and third-party adapters.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 15 (`a5f3ae5`, PR #30)
-- current branch: `cursor/phase16-production-signers-ffca`
-- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/31
-- test counts: **666 passed, 8 skipped**; coverage **90.01%**
-- exact next phase: 17 — Trusted adapter registry
+- last merged phase on main: Phase 16 (`f94c861`, PR #31)
+- current branch: `cursor/phase17-trusted-adapter-registry-ffca`
+- open PR: (pending push)
+- test counts: (pending full suite)
+- exact next phase: 18 — Adapter conformance kit
+
+## Phase 17: Trusted adapter registry
+
+**Status: implemented on branch.**
+
+### What landed
+
+- `AdapterCapability`, `TrustedAdapterRegistry`, `build_reference_registry`
+- Optional `EngineContext.adapter_registry`; prepare/commit/verify/compensate gates
+- API + public demo wire the reference registry by default
+- Invariants #65–#67; docs: `docs/trusted-adapter-registry.md`
+
+### Design decisions
+
+- Exact version pins only (no semver ranges / no plugin discovery)
+- Omitting the registry preserves Phases 1–16 behavior
+- Process-local allow-list; not multi-node consensus
+- Compensation commit checks adapter trust, not `.compensate` effect-type
+  suffix (grant still binds allowed effect types)
 
 ## Phase 16: Production signer interfaces
 

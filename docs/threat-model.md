@@ -129,8 +129,12 @@ assumptions this introduces:
   `validate_preconditions()`/`verify()` accurately reflect external state.
   A deliberately dishonest adapter (e.g. one that always reports
   `matched_expected=True` regardless of reality) defeats verification.
-  Adapters are part of the trusted computing base — write and review them
-  accordingly (see [docs/adapter-authoring.md](adapter-authoring.md)).
+  Phase 17's trusted adapter registry constrains *which* exact
+  `(adapter_id, adapter_version)` pairs and effect types may run when
+  configured, but does not make a dishonest registered adapter truthful.
+  Adapters remain part of the trusted computing base — write and review
+  them accordingly (see [docs/adapter-authoring.md](adapter-authoring.md)
+  and [docs/trusted-adapter-registry.md](trusted-adapter-registry.md)).
 - **Denial of service.** Nothing here rate-limits proposal volume,
   protects the audit journal from unbounded growth, or defends the API/CLI
   process against resource exhaustion.

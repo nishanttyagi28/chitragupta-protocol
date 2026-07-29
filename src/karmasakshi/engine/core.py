@@ -65,6 +65,7 @@ from karmasakshi.errors import (
     SeparationOfDutyViolationError,
     StaleManifestError,
     StoreUnavailableError,
+    UntrustedAdapterError,
     WitnessQuorumNotMetError,
 )
 from karmasakshi.evidence.evaluate import evaluate_evidence_quality
@@ -284,10 +285,42 @@ class KarmaSakshiEngine:
         )
         return proposal_id
 
+    def _require_trusted_adapter(
+        self,
+        adapter: EffectAdapter,
+        *,
+        effect_type: str | None = None,
+    ) -> None:
+        """Fail closed when a registry is configured and the adapter is untrusted.
+
+        Additive: when ``adapter_registry`` is ``None``, this is a no-op
+        (Phases 1-16 behavior). Exact ``(adapter_id, adapter_version)`` pins
+        only — no semver ranges.
+        """
+        registry = self._ctx.adapter_registry
+        if registry is None:
+            return
+        if effect_type is None:
+            registry.require_adapter(adapter)
+        else:
+            registry.require_effect(adapter.adapter_id, adapter.adapter_version, effect_type)
+
     # --- PREPARE --------------------------------------------------------------
 
     def prepare(self, adapter: EffectAdapter, request: Any, context: Any) -> EffectManifest:
+        self._require_trusted_adapter(adapter)
         manifest = adapter.prepare(request, context)
+        # Re-check after prepare: identity/version and declared effect type.
+        self._require_trusted_adapter(adapter, effect_type=manifest.effect_type)
+        if (
+            manifest.adapter.adapter_id != adapter.adapter_id
+            or manifest.adapter.adapter_version != adapter.adapter_version
+        ):
+            raise AdapterMismatchError(
+                f"adapter.prepare returned manifest for "
+                f"{manifest.adapter.adapter_id}@{manifest.adapter.adapter_version}, "
+                f"but executing adapter is {adapter.adapter_id}@{adapter.adapter_version}"
+            )
         self._transition(
             manifest.manifest_id,
             LifecycleState.PREPARED,
@@ -1244,6 +1277,17 @@ class KarmaSakshiEngine:
                 ),
             )
 
+        # Phase 17: when a registry is configured, unknown/revoked adapters and
+        # undeclared effect types fail closed before any grant reservation.
+        try:
+            self._require_trusted_adapter(adapter, effect_type=manifest.effect_type)
+        except UntrustedAdapterError as exc:
+            deny(
+                "adapter.untrusted",
+                "blocked_untrusted_adapter",
+                exc,
+            )
+
         if manifest.effect_type not in grant.allowed_effect_types:
             deny(
                 "grant.effect_type_mismatch",
@@ -1558,6 +1602,7 @@ class KarmaSakshiEngine:
         adapter: EffectAdapter,
         context: Any,
     ) -> OutcomeProof:
+        self._require_trusted_adapter(adapter, effect_type=manifest.effect_type)
         proof = adapter.verify(manifest, commit_result, context)
         self._transition(
             manifest.manifest_id,
@@ -1912,6 +1957,16 @@ class KarmaSakshiEngine:
                     "compensation adapter identity does not match the original effect's adapter"
                 ),
             )
+        # Trust the adapter identity; compensation effect_type uses the
+        # ``.compensate`` suffix convention and is separately grant-bound.
+        try:
+            self._require_trusted_adapter(adapter)
+        except UntrustedAdapterError as exc:
+            deny(
+                "adapter.untrusted",
+                "blocked_untrusted_adapter",
+                exc,
+            )
         if compensation.effect_type not in grant.allowed_effect_types:
             deny(
                 "grant.effect_type_mismatch",
@@ -2047,6 +2102,7 @@ class KarmaSakshiEngine:
         the Phase 7 authorized path. This method never builds or mutates
         an Action Passport.
         """
+        self._require_trusted_adapter(adapter, effect_type=manifest.effect_type)
         manifest_hash = manifest.canonical_hash()
         self._transition(
             manifest.manifest_id,

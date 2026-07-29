@@ -80,10 +80,17 @@ confirmation the compensating action took effect.
 ## Registering with the engine
 
 Adapters are plain objects passed explicitly to `engine.prepare()` /
-`engine.commit()` / etc. — there is no adapter registry or plugin-discovery
-mechanism in the core engine (the CLI's `adapter_factory.py` and the API's
-`ApiState.adapters` dict are examples of *callers* wiring up adapters, not
-part of the engine itself).
+`engine.commit()` / etc. There is **no dynamic plugin discovery**.
+
+When `EngineContext.adapter_registry` is configured (extreme-v2 Phase 17),
+the engine additionally fails closed unless the adapter's exact
+`(adapter_id, adapter_version)` is on the trusted allow-list and the
+manifest's `effect_type` is declared in that capability. See
+[docs/trusted-adapter-registry.md](trusted-adapter-registry.md).
+
+The CLI's `adapter_factory.py` and the API's `ApiState.adapters` dict are
+examples of *callers* wiring up adapters; the API default state also
+installs `build_reference_registry()`.
 
 ## Reference implementations
 

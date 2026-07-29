@@ -23,6 +23,7 @@ from karmasakshi.adapters.payment_simulator import (
     PaymentSimulator,
     PaymentSimulatorAdapter,
 )
+from karmasakshi.adapters.registry import AdapterCapability
 from karmasakshi.adapters.sqlite_db import RowEffectRequest
 from karmasakshi.domain.common import AdapterIdentity, MonetaryAmount
 from karmasakshi.domain.enums import (
@@ -599,6 +600,14 @@ def scenario_outcome_mismatch_detected(session: DemoSession) -> ScenarioRun:
             raise NotImplementedError
 
     adapter = MismatchingAdapter()
+    session.adapter_registry.register(
+        AdapterCapability(
+            adapter_id="demo.mismatch",
+            adapter_version="1.0.0",
+            supported_effect_types=("demo.mismatch.effect",),
+            description="Demo-only adapter that reports verify mismatch",
+        )
+    )
     idem = f"demo-mismatch-{uuid.uuid4().hex[:8]}"
     raw_manifest = EffectManifest(
         manifest_id=str(uuid.uuid4()),

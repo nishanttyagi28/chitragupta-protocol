@@ -24,6 +24,7 @@ from typing import Any, Literal
 from karmasakshi.adapters.base import EffectAdapter
 from karmasakshi.adapters.email_sandbox import EmailSandboxAdapter, SandboxOutbox
 from karmasakshi.adapters.payment_simulator import PaymentSimulator, PaymentSimulatorAdapter
+from karmasakshi.adapters.registry import TrustedAdapterRegistry, build_reference_registry
 from karmasakshi.audit.journal import AuditJournal
 from karmasakshi.config.clock import FixedClock
 from karmasakshi.crypto.keyring import Keyring
@@ -75,6 +76,7 @@ class DemoSession:
     payment_simulator: PaymentSimulator
     email_outbox: SandboxOutbox
     adapters: dict[str, EffectAdapter]
+    adapter_registry: TrustedAdapterRegistry
     tmp_dir: Path
     pending_manifests: dict[str, SealedManifest] = field(default_factory=dict)
     grants: dict[str, ExecutionGrant] = field(default_factory=dict)
@@ -110,12 +112,14 @@ def build_session() -> DemoSession:
     signing_key = generate_signing_key("public-demo-issuer")
     other_signing_key = generate_signing_key("public-demo-untrusted")
     keyring = Keyring([signing_key.verification_key()])
+    adapter_registry = build_reference_registry()
     engine = KarmaSakshiEngine(
         EngineContext(
             keyring=keyring,
             grant_store=InMemoryGrantStore(),
             audit=AuditJournal(clock=clock),
             clock=clock,
+            adapter_registry=adapter_registry,
         )
     )
 
@@ -140,6 +144,7 @@ def build_session() -> DemoSession:
         payment_simulator=payment_simulator,
         email_outbox=email_outbox,
         adapters=adapters,
+        adapter_registry=adapter_registry,
         tmp_dir=tmp_dir,
     )
 

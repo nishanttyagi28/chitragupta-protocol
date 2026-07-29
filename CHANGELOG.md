@@ -136,6 +136,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Transactional outbox** (`karmasakshi.outbox`): durable commit intent
   (`pending` / `confirmed` / `abandoned`) with crash-recovery wiring.
   Not exactly-once. See [docs/transactional-outbox.md](docs/transactional-outbox.md).
+- **Trusted adapter registry** (`TrustedAdapterRegistry`): versioned
+  `(adapter_id, adapter_version)` allow-list with fail-closed unknown /
+  revoked / undeclared-effect-type checks when configured (invariants
+  #65–#67). Process-local; no dynamic plugins. See
+  [docs/trusted-adapter-registry.md](docs/trusted-adapter-registry.md).
 
 
 ## [0.1.0] - 2026-07-27
