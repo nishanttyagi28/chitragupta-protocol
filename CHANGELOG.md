@@ -109,6 +109,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   policy-hash binding; deterministic `witness_set_hash` (invariants
   #50–#53). Engine `prove_with_witness_quorum`, CLI `witness`, API
   `/witnesses`. See [docs/witness-quorum.md](docs/witness-quorum.md).
+- **Evidence quality and provenance** (`karmasakshi.evidence`): typed
+  `EvidenceRecord` ladder (provider claim → adapter re-observe →
+  independent ledger → witness), freshness bounds, fail-closed
+  evaluation (invariants #54–#57). See
+  [docs/evidence-quality.md](docs/evidence-quality.md).
 
 ## [0.1.0] - 2026-07-27
 

@@ -90,6 +90,12 @@ class ActionPassport(BaseModel):
     witness_quorum_satisfied: bool | None = None
     accepted_witness_ids: tuple[str, ...] = ()
 
+    # Evidence quality (extreme-v2 Phase 10). None when not evaluated.
+    evidence_set_hash: str | None = None
+    evidence_policy_hash: str | None = None
+    evidence_acceptable: bool | None = None
+    evidence_strongest_kind: str | None = None
+
     # Compensation
     compensation_attempted: bool | None = None
     compensation_succeeded: bool | None = None

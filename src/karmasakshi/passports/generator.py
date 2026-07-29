@@ -61,6 +61,10 @@ def build_passport(
     witness_policy_hash: str | None = None,
     witness_quorum_satisfied: bool | None = None,
     accepted_witness_ids: tuple[str, ...] = (),
+    evidence_set_hash: str | None = None,
+    evidence_policy_hash: str | None = None,
+    evidence_acceptable: bool | None = None,
+    evidence_strongest_kind: str | None = None,
     clock: Clock = SYSTEM_CLOCK,
 ) -> ActionPassport:
     manifest = sealed.manifest
@@ -149,6 +153,10 @@ def build_passport(
         witness_policy_hash=witness_policy_hash,
         witness_quorum_satisfied=witness_quorum_satisfied,
         accepted_witness_ids=accepted_witness_ids,
+        evidence_set_hash=evidence_set_hash,
+        evidence_policy_hash=evidence_policy_hash,
+        evidence_acceptable=evidence_acceptable,
+        evidence_strongest_kind=evidence_strongest_kind,
         compensation_attempted=(
             compensation_result.attempted if compensation_result is not None else None
         ),

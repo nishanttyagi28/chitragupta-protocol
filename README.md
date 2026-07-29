@@ -20,12 +20,13 @@ versioned, experimental protocol.** This is not a certified, audited, or
 "production proven" system — see [Limitations](#limitations) and
 [docs/threat-model.md](docs/threat-model.md).
 
-**In progress:** extreme-v2 Phases 1–9 have landed on top of v0.1 —
+**In progress:** extreme-v2 Phases 1–10 have landed on top of v0.1 —
 Effect Intelligence (advisory), signed policy bundles, multi-party
 authorization, separation of duties, signed causal effect graphs,
 constrained Decision Envelopes / atomic plan authorization,
 compensation manifests with separate Compensation Passports, durable
-saga orchestration, and independent witness quorum. See
+saga orchestration, independent witness quorum, and evidence quality /
+provenance. See
 [docs/effect-intelligence.md](docs/effect-intelligence.md),
 [docs/policy-bundles.md](docs/policy-bundles.md),
 [docs/multi-party-authorization.md](docs/multi-party-authorization.md),
@@ -34,7 +35,8 @@ saga orchestration, and independent witness quorum. See
 [docs/decision-envelopes.md](docs/decision-envelopes.md),
 [docs/compensation-manifests.md](docs/compensation-manifests.md),
 [docs/saga-orchestration.md](docs/saga-orchestration.md),
-[docs/witness-quorum.md](docs/witness-quorum.md), and the
+[docs/witness-quorum.md](docs/witness-quorum.md),
+[docs/evidence-quality.md](docs/evidence-quality.md), and the
 build ledger at
 [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for
 exactly what's implemented vs. planned.
