@@ -67,6 +67,17 @@ def render_passport_markdown(passport: ActionPassport) -> str:
             else ["- No role assignment was recorded for this manifest."]
         ),
         "",
+        "## Causal Effect Graph",
+        "",
+        f"- Graph ID: `{p.causal_graph_id or 'none'}`",
+        f"- Graph hash: `{p.causal_graph_hash or 'n/a'}`",
+        f"- Signatures verified: {_bool_str(p.causal_graph_verified)}",
+        *(
+            [f"- Ancestor manifest hash: `{value}`" for value in p.causal_ancestor_manifest_hashes]
+            if p.causal_ancestor_manifest_hashes
+            else ["- No causal ancestors were recorded."]
+        ),
+        "",
         "## Execution",
         "",
         f"- Commit attempted: {_bool_str(p.commit_attempted)}",
