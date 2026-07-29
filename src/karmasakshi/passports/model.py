@@ -87,6 +87,15 @@ class ActionPassport(BaseModel):
     assessment_required_human_approvals: int | None = None
     assessment_explanation: str | None = None
 
+    # Causal effect graph (extreme-v2 Phase 5): every manifest hash this
+    # one causally descends from (transitively), and whether the supplied
+    # graph's links independently verified with no cycle detected.
+    # Advisory only -- see docs/causal-effect-graphs.md. Empty tuple/None
+    # if no causal graph was supplied when the passport was built.
+    causal_ancestor_hashes: tuple[str, ...] = ()
+    causal_graph_verified: bool | None = None
+    causal_graph_reason: str | None = None
+
     # Lifecycle + cryptographic verification status
     lifecycle_state: str
     verification: PassportVerificationStatus

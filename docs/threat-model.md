@@ -56,6 +56,23 @@ automatically yet -- a caller must still explicitly configure
 `IntelligencePolicy`/`ApprovalPolicy` thresholds; nothing derives one
 from the other's output today.
 
+## New trusted component: causal effect graphs
+
+`karmasakshi.causal` (see [docs/causal-effect-graphs.md](causal-effect-graphs.md))
+adds signed `CausalLink`s and `CausalEffectGraph` cycle detection over
+manifest hashes. Like the Effect Intelligence Engine, **it does not
+currently change the security model**: `authorize()`, `authorize_with_quorum()`,
+and `commit()` never read or enforce a causal graph. A signed link only
+proves *who claimed* a causal relationship existed and *that the claim
+hasn't been altered since* -- it does not prove the relationship is
+real, and recording one (or verifying a graph as cyclic/invalid) has no
+effect on whether any manifest can be authorized or executed. Unlike
+every other signed artifact in this protocol, an agent principal may
+sign a causal link (see docs/causal-effect-graphs.md's rationale) --
+this is a deliberate exception to invariant #30's spirit, justified by
+the fact that a causal link is a factual record, not an authorization
+decision.
+
 ## New trusted components: signed policy bundles, multi-party authorization, and separation of duties
 
 `karmasakshi.policy` (see [docs/policy-bundles.md](policy-bundles.md)),

@@ -17,6 +17,7 @@ from karmasakshi.api.schemas import (
     ApprovalStatementIn,
     ApproveIn,
     AssessIn,
+    CausalLinkIn,
     DenyIn,
     ExecuteIn,
     ManifestSummary,
@@ -34,6 +35,7 @@ from karmasakshi.approval import (
     evaluate_quorum,
     sign_approval_statement,
 )
+from karmasakshi.causal.graph import CausalEffectGraph
 from karmasakshi.domain.common import Principal
 from karmasakshi.duty import SeparationOfDutyPolicy, build_separation_of_duty_policy_bundle
 from karmasakshi.duty.roles import RoleAssignment
@@ -638,6 +640,55 @@ def audit_verify(request: Request) -> dict[str, Any]:
         raise HTTPException(500, f"audit chain verification failed: {exc}") from exc
 
 
+@router.post("/causal-links", dependencies=[Depends(require_auth)])
+def record_causal_link(body: CausalLinkIn, request: Request) -> dict[str, Any]:
+    """Sign and record a causal link between two manifests
+    (extreme-v2 Phase 5, advisory only -- see docs/causal-effect-graphs.md).
+    """
+    state = _state(request)
+    parent_sealed = state.sealed_manifests.get(body.parent_manifest_id)
+    child_sealed = state.sealed_manifests.get(body.child_manifest_id)
+    if parent_sealed is None or child_sealed is None:
+        raise HTTPException(404, "parent or child manifest not found")
+    try:
+        link = state.engine.record_causal_link(
+            parent_manifest_hash=parent_sealed.seal.manifest_hash,
+            child_manifest_hash=child_sealed.seal.manifest_hash,
+            relationship=body.relationship,
+            recorded_by=Principal(**body.recorded_by.model_dump()),
+            signing_key=state.signing_key,
+        )
+    except KarmaSakshiError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    state.causal_links.append(link)
+    return link.model_dump(mode="json")
+
+
+@router.get("/causal-links", dependencies=[Depends(require_auth)])
+def list_causal_links(request: Request) -> dict[str, Any]:
+    state = _state(request)
+    return {"links": [link.model_dump(mode="json") for link in state.causal_links]}
+
+
+@router.post("/causal-links/verify", dependencies=[Depends(require_auth)])
+def verify_causal_links(request: Request) -> dict[str, Any]:
+    """Verify every causal link ever recorded in this control plane:
+    every signature independently, and the whole graph for cycles."""
+    state = _state(request)
+    try:
+        result = state.engine.verify_causal_graph(tuple(state.causal_links))
+    except KarmaSakshiError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {
+        "verified": result.verified,
+        "has_cycle": result.has_cycle,
+        "invalid_link_ids": list(result.invalid_link_ids),
+        "node_count": result.node_count,
+        "edge_count": result.edge_count,
+        "reason": result.reason,
+    }
+
+
 @router.get("/passports/{manifest_id}", dependencies=[Depends(require_auth)])
 def get_passport(manifest_id: str, request: Request, fmt: str = "json") -> Any:
     state = _state(request)
@@ -646,6 +697,9 @@ def get_passport(manifest_id: str, request: Request, fmt: str = "json") -> Any:
         raise HTTPException(404, "manifest not found")
     grant_ids = state.grants_by_manifest.get(manifest_id, [])
     grant = state.grants[grant_ids[-1]] if grant_ids else None
+    causal_graph = (
+        CausalEffectGraph(links=tuple(state.causal_links)) if state.causal_links else None
+    )
     passport = build_passport(
         sealed=sealed,
         keyring=state.keyring,
@@ -657,6 +711,7 @@ def get_passport(manifest_id: str, request: Request, fmt: str = "json") -> Any:
         outcome_proof=state.outcome_proofs.get(manifest_id),
         compensation_result=state.compensation_results.get(manifest_id),
         assessment=state.assessments.get(manifest_id),
+        causal_graph=causal_graph,
     )
     if fmt == "html":
         from fastapi.responses import HTMLResponse

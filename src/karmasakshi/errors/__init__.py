@@ -269,3 +269,16 @@ class BlastRadiusExceededError(AdapterError):
 
 class RecipientNotAllowedError(AdapterError):
     """A recipient/target is not on the adapter's configured allow-list."""
+
+
+# --- Causal effect graphs (extreme-v2 Phase 5) --------------------------------------
+
+
+class CausalGraphError(KarmaSakshiError):
+    """Base class for causal effect graph errors."""
+
+
+class CausalGraphTooLargeError(CausalGraphError):
+    """More causal links were submitted than the graph's size bound
+    allows -- rejected outright (fail closed) rather than silently
+    truncating, which could hide part of the causal chain."""

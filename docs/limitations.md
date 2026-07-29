@@ -96,6 +96,15 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   separation check happened (unlike `policy_bundle_hash`/
   `approval_set_hash`); only the audit trail records it. See
   [docs/separation-of-duties.md](separation-of-duties.md).
+- **Causal effect graphs (`karmasakshi.causal`) are advisory only, and a
+  signed causal link proves attribution, not truth.** A `CausalLink`
+  proves who claimed a causal relationship and that the claim is
+  unaltered since signing -- it does not prove the relationship actually
+  reflects reality, and `authorize()`/`commit()` never read or enforce
+  causal graphs. There is also no cross-check against the pre-existing
+  `EffectManifest.parent_manifest_id` field, and no revocation semantics
+  for a causal link once recorded. See
+  [docs/causal-effect-graphs.md](causal-effect-graphs.md).
 - **The public sandbox demo (`KARMASAKSHI_PUBLIC_DEMO=1`) is a single
   shared, in-memory session**, not multi-tenant: every visitor to a given
   deployment sees and can affect the same sandbox state until it

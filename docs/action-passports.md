@@ -23,6 +23,11 @@ structured facts.
   `observed_after_state_digest`, `observation_detail`.
 - **Compensation**: `compensation_attempted`, `compensation_succeeded`,
   `compensation_reason`.
+- **Causal effect graph** (advisory, extreme-v2 Phase 5): `causal_ancestor_hashes`
+  (every manifest hash this one causally descends from, transitively),
+  `causal_graph_verified` (signatures + no cycle), `causal_graph_reason`
+  -- populated only if a `CausalEffectGraph` was explicitly passed to
+  `build_passport()`; see [causal-effect-graphs.md](causal-effect-graphs.md).
 - **Cryptographic verification status**: `PassportVerificationStatus` —
   `seal_verified`, `grant_verified`, `audit_chain_verified`, plus a detail
   string when any of them failed.

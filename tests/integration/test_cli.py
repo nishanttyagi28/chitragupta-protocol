@@ -1041,3 +1041,138 @@ def test_separation_of_duty_blocks_role_conflict_via_cli(workspace_args, tmp_pat
         ],
     )
     assert result.exit_code != 0
+
+
+# --- causal effect graphs (extreme-v2 Phase 5) --------------------------------
+
+
+def test_causal_record_and_verify_via_cli(workspace_args, tmp_path):
+    _run(workspace_args + ["init"])
+    _run(workspace_args + ["key", "generate", "issuer-1"])
+    db_path = str(tmp_path / "causal-ledger.db")
+
+    def _prepare(row_id, idempotency_key):
+        result = _run(
+            workspace_args
+            + [
+                "--json",
+                "prepare",
+                "--adapter",
+                "sqlite",
+                "--sqlite-db-path",
+                db_path,
+                "--row-operation",
+                "insert",
+                "--row-id",
+                row_id,
+                "--new-balance",
+                "1000",
+                "--actor-id",
+                "agent-1",
+                "--principal-id",
+                "user-1",
+                "--idempotency-key",
+                idempotency_key,
+            ]
+        )
+        return json.loads(result.output)["manifest_id"]
+
+    parent_id = _prepare("acct-causal-1", "idem-cli-causal-1")
+    child_id = _prepare("acct-causal-2", "idem-cli-causal-2")
+    _run(workspace_args + ["seal", child_id, "--key-id", "issuer-1"])
+
+    record_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "causal",
+            "record",
+            parent_id,
+            child_id,
+            "--recorded-by-id",
+            "agent-1",
+            "--key-id",
+            "issuer-1",
+            "--relationship",
+            "compensates",
+        ]
+    )
+    assert json.loads(record_result.output)["link_id"]
+
+    verify_result = _run(workspace_args + ["--json", "causal", "verify"])
+    verify_data = json.loads(verify_result.output)
+    assert verify_data["verified"] is True
+    assert verify_data["has_cycle"] is False
+    assert verify_data["edge_count"] == 1
+
+    passport_result = _run(workspace_args + ["passport", child_id, "--format", "json"])
+    passport_data = json.loads(passport_result.output)
+    assert passport_data["causal_graph_verified"] is True
+    assert len(passport_data["causal_ancestor_hashes"]) == 1
+
+
+def test_causal_verify_reports_cycle_via_cli(workspace_args, tmp_path):
+    _run(workspace_args + ["init"])
+    _run(workspace_args + ["key", "generate", "issuer-1"])
+    db_path = str(tmp_path / "causal-ledger-2.db")
+
+    def _prepare(row_id, idempotency_key):
+        result = _run(
+            workspace_args
+            + [
+                "--json",
+                "prepare",
+                "--adapter",
+                "sqlite",
+                "--sqlite-db-path",
+                db_path,
+                "--row-operation",
+                "insert",
+                "--row-id",
+                row_id,
+                "--new-balance",
+                "1000",
+                "--actor-id",
+                "agent-1",
+                "--principal-id",
+                "user-1",
+                "--idempotency-key",
+                idempotency_key,
+            ]
+        )
+        return json.loads(result.output)["manifest_id"]
+
+    m1 = _prepare("acct-causal-3", "idem-cli-causal-3")
+    m2 = _prepare("acct-causal-4", "idem-cli-causal-4")
+
+    _run(
+        workspace_args
+        + [
+            "causal",
+            "record",
+            m1,
+            m2,
+            "--recorded-by-id",
+            "agent-1",
+            "--key-id",
+            "issuer-1",
+        ]
+    )
+    _run(
+        workspace_args
+        + [
+            "causal",
+            "record",
+            m2,
+            m1,
+            "--recorded-by-id",
+            "agent-1",
+            "--key-id",
+            "issuer-1",
+        ]
+    )
+
+    verify_result = _run(workspace_args + ["--json", "causal", "verify"])
+    verify_data = json.loads(verify_result.output)
+    assert verify_data["verified"] is False
+    assert verify_data["has_cycle"] is True

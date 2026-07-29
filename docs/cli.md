@@ -63,6 +63,10 @@ karmasakshi audit list
 karmasakshi audit show <manifest_id>
 karmasakshi audit verify
 
+karmasakshi causal record <parent_manifest_id> <child_manifest_id> --recorded-by-id ID --key-id ID
+    [--recorded-by-type human|service|agent] [--relationship triggers|compensates|depends_on|supersedes]
+karmasakshi causal verify
+
 karmasakshi passport <manifest_id> [--format json|markdown|html] [--grant-id ID] [-o FILE]
 
 karmasakshi demo --all
@@ -141,6 +145,19 @@ auto-derived proposer/executor/approver(s) plus any `--role
 role_name:principal_id` entries, failing closed
 (`SeparationOfDutyViolationError`, non-zero exit) if any principal holds
 two forbidden roles.
+
+## `causal record`, `causal verify`
+
+Causal effect graphs (see [docs/causal-effect-graphs.md](causal-effect-graphs.md)),
+**advisory only** -- neither command affects authorization or execution.
+`causal record` signs a `CausalLink` from one manifest to another and
+saves it to the workspace; unlike `grant issue`/`approve`, there is no
+principal-type restriction on `--recorded-by-id` (an agent may record its
+own causal claims). `causal verify` independently re-verifies every
+signature and checks for cycles across every link ever recorded in the
+workspace. `karmasakshi passport` automatically includes the whole
+workspace's causal graph (ancestor hashes + verification status) for the
+manifest being reported on.
 
 ## `doctor`
 

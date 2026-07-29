@@ -63,7 +63,10 @@ without authentication — see `karmasakshi.api.auth.require_auth` and
 | POST | `/manifests/{id}/verify` | Independently verify the outcome |
 | GET | `/audit` | Full audit timeline |
 | GET | `/audit/verify` | Verify the hash chain |
-| GET | `/passports/{id}?fmt=json\|html\|markdown` | Action Passport |
+| POST | `/causal-links` | Sign and record a causal link between two manifests (advisory only, see docs/causal-effect-graphs.md) |
+| GET | `/causal-links` | List every causal link recorded in this control plane |
+| POST | `/causal-links/verify` | Verify every recorded link's signature and check for cycles |
+| GET | `/passports/{id}?fmt=json\|html\|markdown` | Action Passport -- automatically includes the causal graph of every link recorded in this process |
 | GET | `/kill-switch` | Current status |
 | POST | `/kill-switch/engage` / `/disengage` | Emergency stop for `/execute` |
 

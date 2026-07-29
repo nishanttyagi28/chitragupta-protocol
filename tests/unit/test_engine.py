@@ -1176,3 +1176,150 @@ def test_grant_issued_records_role_participation_in_audit_metadata(
     assert metadata["role:proposer"] == manifest.actor.principal_id
     assert metadata["role:executor"] == agent_principal.principal_id
     assert metadata["role:approver"] == service_principal.principal_id
+
+
+# --- causal effect graphs (extreme-v2 Phase 5) --------------------------------
+
+
+def test_record_causal_link_returns_signed_link_and_records_audit_event(
+    engine_factory, manifest_factory, agent_principal, issuer_signing_key, fake_adapter
+):
+    engine = engine_factory()
+    parent = _prepare_and_seal(engine, fake_adapter, manifest_factory(), issuer_signing_key)
+    child_manifest = manifest_factory(manifest_id="child-1", idempotency_key="idem-child-1")
+    child = _prepare_and_seal(engine, fake_adapter, child_manifest, issuer_signing_key)
+
+    link = engine.record_causal_link(
+        parent_manifest_hash=parent.seal.manifest_hash,
+        child_manifest_hash=child.seal.manifest_hash,
+        relationship="compensates",
+        recorded_by=agent_principal,
+        signing_key=issuer_signing_key,
+    )
+    assert link.parent_manifest_hash == parent.seal.manifest_hash
+    assert link.child_manifest_hash == child.seal.manifest_hash
+    assert link.signature is not None
+
+    events = [
+        e
+        for e in engine.context.audit.all_events()
+        if e.event_type == "causal_link.recorded" and e.manifest_hash == child.seal.manifest_hash
+    ]
+    assert len(events) == 1
+    assert events[0].metadata["parent_manifest_hash"] == parent.seal.manifest_hash
+    assert events[0].metadata["relationship"] == "compensates"
+
+
+def test_record_causal_link_does_not_transition_lifecycle_state(
+    engine_factory, manifest_factory, agent_principal, issuer_signing_key, fake_adapter
+):
+    """Like assess(), this is a side-channel step -- the manifest's
+    lifecycle state must be unaffected."""
+    from karmasakshi.state_machine import LifecycleState
+
+    engine = engine_factory()
+    parent = _prepare_and_seal(engine, fake_adapter, manifest_factory(), issuer_signing_key)
+    child_manifest = manifest_factory(manifest_id="child-2", idempotency_key="idem-child-2")
+    child = _prepare_and_seal(engine, fake_adapter, child_manifest, issuer_signing_key)
+
+    engine.record_causal_link(
+        parent_manifest_hash=parent.seal.manifest_hash,
+        child_manifest_hash=child.seal.manifest_hash,
+        relationship="triggers",
+        recorded_by=agent_principal,
+        signing_key=issuer_signing_key,
+    )
+    assert engine.get_lifecycle_state(child_manifest.manifest_id) == LifecycleState.SEALED
+
+
+def test_verify_causal_graph_reports_satisfied_for_a_clean_chain(
+    engine_factory, manifest_factory, agent_principal, issuer_signing_key, fake_adapter
+):
+    engine = engine_factory()
+    m1 = _prepare_and_seal(
+        engine,
+        fake_adapter,
+        manifest_factory(manifest_id="m1", idempotency_key="i1"),
+        issuer_signing_key,
+    )
+    m2 = _prepare_and_seal(
+        engine,
+        fake_adapter,
+        manifest_factory(manifest_id="m2", idempotency_key="i2"),
+        issuer_signing_key,
+    )
+    link = engine.record_causal_link(
+        parent_manifest_hash=m1.seal.manifest_hash,
+        child_manifest_hash=m2.seal.manifest_hash,
+        relationship="triggers",
+        recorded_by=agent_principal,
+        signing_key=issuer_signing_key,
+    )
+    result = engine.verify_causal_graph((link,))
+    assert result.verified
+    assert not result.has_cycle
+
+
+def test_verify_causal_graph_does_not_raise_on_cyclic_input(
+    engine_factory, manifest_factory, agent_principal, issuer_signing_key, fake_adapter
+):
+    """verify_causal_graph reports a cycle in its result rather than
+    raising -- callers decide what to do with an invalid graph, the same
+    non-raising pattern as evaluate_quorum's QuorumResult."""
+    engine = engine_factory()
+    m1 = _prepare_and_seal(
+        engine,
+        fake_adapter,
+        manifest_factory(manifest_id="m1", idempotency_key="i1"),
+        issuer_signing_key,
+    )
+    m2 = _prepare_and_seal(
+        engine,
+        fake_adapter,
+        manifest_factory(manifest_id="m2", idempotency_key="i2"),
+        issuer_signing_key,
+    )
+    link_forward = engine.record_causal_link(
+        parent_manifest_hash=m1.seal.manifest_hash,
+        child_manifest_hash=m2.seal.manifest_hash,
+        relationship="triggers",
+        recorded_by=agent_principal,
+        signing_key=issuer_signing_key,
+    )
+    link_backward = engine.record_causal_link(
+        parent_manifest_hash=m2.seal.manifest_hash,
+        child_manifest_hash=m1.seal.manifest_hash,
+        relationship="triggers",
+        recorded_by=agent_principal,
+        signing_key=issuer_signing_key,
+    )
+    result = engine.verify_causal_graph((link_forward, link_backward))
+    assert not result.verified
+    assert result.has_cycle
+
+
+def test_causal_links_are_fully_advisory_and_never_gate_authorize_or_commit(
+    engine_factory,
+    manifest_factory,
+    service_principal,
+    agent_principal,
+    issuer_signing_key,
+    now,
+    fake_adapter,
+):
+    """No causal link is ever recorded for this manifest, and
+    authorize()/commit() take no causal-graph parameter at all -- the
+    ordinary lifecycle must proceed completely unaffected."""
+    engine = engine_factory()
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    grant = _authorize(
+        engine,
+        sealed,
+        issuer=service_principal,
+        subject=agent_principal,
+        issuer_signing_key=issuer_signing_key,
+        now=now,
+    )
+    result = engine.commit(sealed, grant, fake_adapter, context=None)
+    assert result.success

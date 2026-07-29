@@ -5,6 +5,7 @@ from typing import Annotated
 
 import typer
 
+from karmasakshi.causal.graph import CausalEffectGraph
 from karmasakshi.cli.common import console, run_guarded
 from karmasakshi.cli.workspace import Workspace
 from karmasakshi.passports import build_passport, render_passport_html, render_passport_markdown
@@ -31,6 +32,8 @@ def passport(
         outcome_proof = workspace.load_outcome_proof(manifest_id)
         compensation_result = workspace.load_compensation_result(manifest_id)
         assessment = workspace.load_assessment(manifest_id)
+        causal_links = workspace.load_all_causal_links()
+        causal_graph = CausalEffectGraph(links=causal_links) if causal_links else None
 
         p = build_passport(
             sealed=sealed,
@@ -43,6 +46,7 @@ def passport(
             outcome_proof=outcome_proof,
             compensation_result=compensation_result,
             assessment=assessment,
+            causal_graph=causal_graph,
         )
 
         if fmt == "json":

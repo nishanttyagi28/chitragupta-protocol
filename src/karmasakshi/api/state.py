@@ -19,6 +19,7 @@ from karmasakshi.adapters.sqlite_db import SQLiteRowAdapter
 from karmasakshi.approval.model import ApprovalStatement
 from karmasakshi.audit.journal import AuditJournal
 from karmasakshi.audit.sqlite_backend import SQLiteAuditBackend
+from karmasakshi.causal.model import CausalLink
 from karmasakshi.crypto.keyring import Keyring
 from karmasakshi.crypto.keys import SigningKey, generate_signing_key
 from karmasakshi.domain.common import Principal
@@ -47,6 +48,7 @@ class ApiState:
     assessments: dict[str, EffectAssessment] = field(default_factory=dict)
     policy_bundles: dict[str, SealedPolicyBundle] = field(default_factory=dict)
     approval_statements: dict[str, list[ApprovalStatement]] = field(default_factory=dict)
+    causal_links: list[CausalLink] = field(default_factory=list)
     kill_switch_engaged: bool = False
 
     def register_grant(self, manifest_id: str, grant: ExecutionGrant) -> None:

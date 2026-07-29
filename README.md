@@ -25,13 +25,16 @@ scoring, not yet an enforcement gate), signed policy bundles (a policy
 edit after approval can no longer silently alter what a grant
 authorizes), multi-party (M-of-N) authorization (a grant can now
 require a quorum of independently signed approvals, with hard-coded
-no-self-approval and no-agent-approver rules), and separation of duties
+no-self-approval and no-agent-approver rules), separation of duties
 (a signed forbidden-role-pair matrix -- e.g. the same principal can never
-be both the sealer and the approver of one manifest) have landed on top
-of v0.1 — see [docs/effect-intelligence.md](docs/effect-intelligence.md),
+be both the sealer and the approver of one manifest), and causal effect
+graphs (signed, cycle-detected causal links between manifests, advisory
+only) have landed on top of v0.1 — see
+[docs/effect-intelligence.md](docs/effect-intelligence.md),
 [docs/policy-bundles.md](docs/policy-bundles.md),
 [docs/multi-party-authorization.md](docs/multi-party-authorization.md),
-[docs/separation-of-duties.md](docs/separation-of-duties.md), and the
+[docs/separation-of-duties.md](docs/separation-of-duties.md),
+[docs/causal-effect-graphs.md](docs/causal-effect-graphs.md), and the
 build ledger at
 [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for
 exactly what's implemented vs. planned.
@@ -568,6 +571,7 @@ means precisely: [docs/action-passports.md](docs/action-passports.md).
 - [docs/policy-bundles.md](docs/policy-bundles.md) — signed, versioned policy bundles bound into authorization
 - [docs/multi-party-authorization.md](docs/multi-party-authorization.md) — M-of-N approval quorum
 - [docs/separation-of-duties.md](docs/separation-of-duties.md) — signed forbidden-role-pair matrix
+- [docs/causal-effect-graphs.md](docs/causal-effect-graphs.md) — signed causal links, cycle detection (advisory)
 - [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) — build ledger for work beyond v0.1.0
 - [docs/limitations.md](docs/limitations.md)
 - [docs/comparison.md](docs/comparison.md)

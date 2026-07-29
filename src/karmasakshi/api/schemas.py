@@ -134,6 +134,15 @@ class QuorumGrantIn(BaseModel):
     roles: list[str] = []
 
 
+class CausalLinkIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    parent_manifest_id: str
+    child_manifest_id: str
+    recorded_by: PrincipalIn
+    relationship: Literal["triggers", "compensates", "depends_on", "supersedes"] = "triggers"
+
+
 class AssessIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -166,6 +175,7 @@ __all__ = [
     "ApprovalStatementIn",
     "ApproveIn",
     "AssessIn",
+    "CausalLinkIn",
     "DenyIn",
     "ExecuteIn",
     "ManifestSummary",

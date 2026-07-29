@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from karmasakshi.adapters.base import CommitResult, CompensationResult, OutcomeProof
 from karmasakshi.audit.journal import AuditJournal
+from karmasakshi.causal.graph import CausalEffectGraph, verify_causal_graph
 from karmasakshi.config.clock import SYSTEM_CLOCK, Clock
 from karmasakshi.crypto.keyring import Keyring
 from karmasakshi.domain.seal import SealedManifest
@@ -53,6 +54,7 @@ def build_passport(
     compensation_result: CompensationResult | None = None,
     assessment: EffectAssessment | None = None,
     role_assignment: RoleAssignment | None = None,
+    causal_graph: CausalEffectGraph | None = None,
     clock: Clock = SYSTEM_CLOCK,
 ) -> ActionPassport:
     manifest = sealed.manifest
@@ -83,6 +85,15 @@ def build_passport(
     was_revoked = False
     if grant is not None and grant_store is not None:
         was_revoked = grant_store.is_revoked(grant.grant_id)
+
+    causal_ancestor_hashes: tuple[str, ...] = ()
+    causal_graph_verified: bool | None = None
+    causal_graph_reason: str | None = None
+    if causal_graph is not None:
+        causal_ancestor_hashes = causal_graph.ancestors_of(sealed.seal.manifest_hash)
+        causal_result = verify_causal_graph(causal_graph, keyring)
+        causal_graph_verified = causal_result.verified
+        causal_graph_reason = causal_result.reason
 
     return ActionPassport(
         generated_at=clock.now(),
@@ -139,6 +150,9 @@ def build_passport(
             assessment.required_human_approvals if assessment is not None else None
         ),
         assessment_explanation=assessment.explanation if assessment is not None else None,
+        causal_ancestor_hashes=causal_ancestor_hashes,
+        causal_graph_verified=causal_graph_verified,
+        causal_graph_reason=causal_graph_reason,
         lifecycle_state=lifecycle_state,
         verification=PassportVerificationStatus(
             seal_verified=seal_verified,

@@ -42,7 +42,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 2. Signed policy bundles | **Implemented** | See below |
 | 3. Multi-party (M-of-N) authorization | **Implemented** | See below |
 | 4. Separation of duties (explicit roles) | **Implemented** | See below |
-| 5. Causal effect graphs | Not started | `parent_manifest_id` remains a single unsigned string field, unchanged from v0.1 |
+| 5. Causal effect graphs | **Implemented** (advisory only) | See below |
 | 6. Atomic plan authorization / decision envelopes | Not started | |
 | 7. Compensation manifests | Not started | Compensation remains the v0.1 `CompensationResult` model (best-effort, honestly reported) |
 | 8. Saga orchestration | Not started | |
@@ -501,39 +501,161 @@ known dev-only vulnerability as Phases 1-3 (unchanged, unresolved).
 - `ee28813` — Phase 4: Separation of Duties implementation, tests, docs
 - PR [#18](https://github.com/nishanttyagi28/karmasakshi-protocol/pull/18) — merged (`5eb9ab4`), all 14 CI checks green
 
+## Phase 5: Causal Effect Graphs
+
+**Status: implemented, advisory only.**
+
+### Files changed
+
+- Added: `src/karmasakshi/causal/{__init__,model,signing,graph}.py`
+- Added: `src/karmasakshi/cli/causal_cmd.py`
+- Added: `docs/causal-effect-graphs.md`
+- Added: `tests/unit/test_causal_graph.py`,
+  `tests/property/test_causal_graph_properties.py`,
+  `tests/adversarial/test_causal_graph_gaming.py`
+- Modified: `src/karmasakshi/errors/__init__.py` (`CausalGraphError`,
+  `CausalGraphTooLargeError`), `src/karmasakshi/engine/core.py`
+  (`record_causal_link()`, `verify_causal_graph()`, both audited
+  side-channel steps like `assess()`), `src/karmasakshi/passports/{model,generator,render}.py`
+  (`causal_ancestor_hashes`/`causal_graph_verified`/`causal_graph_reason`,
+  populated only when a caller passes `causal_graph=...` explicitly),
+  `src/karmasakshi/cli/workspace.py` (`causal_dir`,
+  `save_causal_link`/`load_causal_link`/`load_all_causal_links`),
+  `src/karmasakshi/cli/{app,passport_cmd}.py` (`causal` sub-app
+  registered; `passport` auto-includes the workspace's whole causal
+  graph), `src/karmasakshi/api/{schemas,state,routes}.py`
+  (`/causal-links`, `/causal-links/verify`; `/passports/{id}`
+  auto-includes the control plane's whole causal graph)
+- Docs updated: `docs/security-model.md` (no new invariant -- see
+  "Security invariants added" below), `docs/threat-model.md` (new
+  "trusted component" section, mirroring Phase 1's), `docs/action-passports.md`,
+  `docs/limitations.md`, `docs/cli.md`, `docs/api.md`, `README.md`,
+  `CHANGELOG.md`
+
+### Tests added
+
+- 14 unit tests (`test_causal_graph.py`): `CausalLink` self-reference and
+  malformed-hash rejection, signing round trip, unknown-key and
+  tampered-content signature failures, agent `recorded_by` explicitly
+  allowed, oversized-graph rejection, `parents_of`/`children_of`/
+  `ancestors_of` correctness (including a transitive chain and a
+  cycle-safe walk over a cyclic graph), `has_cycle` on acyclic/cyclic
+  graphs, and `verify_causal_graph` coverage (all valid, invalid
+  signature reported without raising, cycle reported).
+- 4 Hypothesis property tests (`test_causal_graph_properties.py`):
+  `has_cycle`/`ancestors_of` are independent of link submission order
+  across randomized edge sets; a 511-edge simple chain (just under
+  `MAX_LINKS`) does not raise a recursion error; a maximally dense 8-node
+  complete digraph is correctly detected as cyclic.
+- 5 adversarial tests (`test_causal_graph_gaming.py`): a forged
+  link (content changed, old signature replayed) is caught; a key-swap
+  attack (attacker's own key, never registered in the keyring) is
+  rejected; a 20-hop chain that closes into a cycle only at the very end
+  is still detected; the `MAX_LINKS` bound cannot be bypassed by
+  constructing a `CausalEffectGraph` directly; verification checks every
+  link independently rather than stopping at the first invalid one.
+- Engine integration tests (`test_engine.py`, 5 new):
+  `record_causal_link()` returns a correctly signed link and records a
+  `causal_link.recorded` audit event; it does not transition lifecycle
+  state; `verify_causal_graph()` reports satisfied for a clean chain and
+  reports (without raising) a cycle for cyclic input; ordinary
+  `authorize()`/`commit()` proceed completely unaffected when no causal
+  link is ever recorded (proving the advisory-only claim in code, not
+  just in docs).
+- API integration tests (`test_api.py`, 3 new): full record -> list ->
+  verify -> passport cycle, confirming `causal_graph_verified` appears
+  correctly; unknown parent/child manifest 404s; a 2-cycle is correctly
+  reported by `/causal-links/verify`.
+- CLI integration tests (`test_cli.py`, 2 new): full `causal record` ->
+  `causal verify` -> `passport --format json` cycle against the sqlite
+  adapter, asserting `causal_graph_verified`/`causal_ancestor_hashes`; a
+  2-cycle correctly reported by `causal verify`.
+- Full existing suite remains green throughout (542 passed, 6 skipped --
+  no regressions across all five phases).
+
+### Security invariants added
+
+**None.** Causal effect graphs are advisory only in this release, the
+same posture Phase 1's Effect Intelligence Engine took -- nothing in
+`authorize()`/`authorize_with_quorum()`/`commit()` reads or enforces a
+causal graph, so there is no new structural guarantee to number and
+table in `docs/security-model.md`. This is a deliberate, honestly
+documented scope boundary, not an oversight -- see "Known limitations"
+in docs/causal-effect-graphs.md.
+
+### Design decisions
+
+- **Iterative, not recursive, cycle detection.** `CausalEffectGraph.has_cycle()`
+  uses an explicit stack rather than function recursion so a graph built
+  up to the `MAX_LINKS = 512` bound can never risk Python's recursion
+  limit -- property-tested against both a 511-edge simple chain and a
+  maximally dense 8-node complete digraph.
+- **No principal-type restriction on `recorded_by`.** Every other signed
+  artifact that influences authorization (`ExecutionGrant.issuer`,
+  `ApprovalStatement.approver`, `PolicyBundle.issuer`) enforces
+  invariant #30. A `CausalLink` is a factual claim, never read by
+  `authorize()`/`commit()`, so an agent recording its own causal claims
+  (e.g. "this compensating refund relates to that payment") is the
+  ordinary case, not a security gap.
+- **The causal graph is not auto-derived for passports**, unlike
+  Phase 4's `role_participation`. A role assignment is scoped to one
+  `grant.issued` audit event for the manifest itself; a causal graph can
+  span arbitrarily many unrelated manifests with no single natural
+  audit-trail location to reconstruct "the relevant graph" from. The CLI
+  and API both work around this by passing every link they know about
+  (the whole workspace/process's graph) rather than trying to scope it
+  automatically -- documented as a known simplification, not scaled for
+  a deployment with many unrelated manifest graphs in one workspace.
+
+### Verification commands
+
+Same procedure as Phases 1-4. Results at the time of this commit:
+`ruff check`/`ruff format --check`/`mypy src`/`bandit` all clean;
+`pytest -q` → **542 passed, 6 skipped**; `pytest --cov=karmasakshi` →
+**91.30%** total; `build`/`twine check` clean; `pip-audit` → the same 1
+known dev-only vulnerability as Phases 1-4 (unchanged, unresolved).
+
+### Commit SHAs / PR
+
+Recorded after this slice's PR is opened and merged, matching the
+pattern established for Phases 1-4.
+
 ## Exact next executable step
 
-**Phase 5: Causal Effect Graphs.** Concretely:
+**Phase 6: Atomic Plan Authorization / Decision Envelopes.** Concretely:
 
-1. Today `EffectManifest.parent_manifest_id` is a single unsigned string
-   field -- no verification that a claimed parent actually exists, was
-   sealed, or that the claimed causal link is real. Phase 5 should
-   introduce a signed `CausalLink` (or similar) binding a child
-   manifest's hash to its parent's hash, verified the same way a `Seal`
-   is verified, so a chain of manifests can be walked and independently
-   proven, not just asserted.
-2. Model the graph structure explicitly: a `CausalEffectGraph` type
-   (nodes = manifest hashes, edges = signed causal links) with cycle
-   detection (a manifest can never causally depend on its own effect)
-   and a bound on graph size/depth (resource protection, consistent with
-   `ApprovalPolicy.max_statements_considered` and
-   `RoleAssignment.MAX_ROLE_ASSIGNMENTS`).
-3. Decide and document precisely what a causal link changes about
-   authorization/execution -- e.g. should a parent's revocation
-   propagate to children automatically (this would generalize the
-   existing one-hop delegation-revocation propagation in `commit()` to
-   the causal-graph case), or is Phase 5 initially just a verifiable
-   *record* of causality (PROVE-time value) without new enforcement
-   (mirroring how Phase 1's Effect Intelligence Engine started
-   advisory-only)? The honest, incremental choice is likely the latter
-   first, enforcement later -- state this explicitly rather than
-   quietly deciding one way.
-4. Extend the Action Passport to include the causal chain (parent
-   hashes, verified or not) so a full multi-step operation (e.g. "refund
-   -> compensating ledger adjustment") can be proven as one coherent
-   causal story, not just as isolated individually-verified effects.
-5. CLI/API surface: likely a read-only `karmasakshi manifest graph
-   <manifest_id>` inspection command and a `GET
-   /manifests/{id}/causal-graph` endpoint; avoid adding new write paths
-   beyond what's needed to record a signed causal link at `prepare()`/
-   `seal()` time.
+1. Today, each `EffectManifest` is authorized independently -- there is
+   no way to bind "these N effects must all be authorized together, as
+   one atomic decision" (e.g. "debit account A and credit account B, or
+   neither"). Phase 6 should introduce a signed `PlanEnvelope` (or
+   similar) wrapping an ordered or unordered set of manifest hashes with
+   an explicit atomicity requirement.
+2. Decide the enforcement boundary precisely and document it: does
+   `authorize()` gain a `plan_envelope` parameter that requires every
+   member manifest to already be sealed before any one of them can be
+   granted, or is atomicity enforced later at commit time via a new
+   `commit_plan()` engine method that either commits every member effect
+   or rolls back (invoking Phase 7's eventual Compensation Manifests, or
+   today's existing `compensate()` path) if any one fails? The latter is
+   likely more honest given this protocol's existing "compensation is
+   best-effort, never guaranteed" stance (invariant #25) -- an atomic
+   plan cannot promise true multi-effect atomicity across independent
+   external systems without a two-phase-commit-capable adapter, which no
+   reference adapter implements. State the real guarantee precisely
+   rather than implying database-style atomicity that doesn't exist.
+3. Reuse Phase 4's `RoleAssignment`/`SeparationOfDutyPolicy` machinery
+   for plan-level separation of duty (e.g. "no principal may approve
+   more than N members of one plan") rather than inventing a parallel
+   mechanism, following the same "generalize, don't duplicate" principle
+   Phase 4 itself followed relative to Phase 3.
+4. Extend the Action Passport (or introduce a `PlanPassport`) to record
+   which members of a plan committed, which failed, and whether
+   compensation was attempted for any that failed after others
+   succeeded -- the honest, partial-failure story a real atomic-looking
+   operation across independent systems actually has.
+5. CLI/API surface: a `karmasakshi plan authorize <plan_id>` /
+   `karmasakshi plan commit <plan_id>` pairing and `POST
+   /plans/{id}/authorize` / `POST /plans/{id}/commit`; avoid duplicating
+   the existing single-manifest `authorize()`/`commit()` logic --
+   the plan-level methods should orchestrate calls to the existing
+   per-manifest methods, not reimplement their checks.

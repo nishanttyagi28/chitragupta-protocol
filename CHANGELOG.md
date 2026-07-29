@@ -72,6 +72,24 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   /policy/separation-bundles`, the same two optional fields on
   `/approve` and `/approve-with-quorum`). See
   [docs/separation-of-duties.md](docs/separation-of-duties.md).
+- **Causal effect graphs** (`karmasakshi.causal`): signed `CausalLink`s
+  (`triggers`/`compensates`/`depends_on`/`supersedes`) between manifest
+  hashes, assembled into a `CausalEffectGraph` with iterative (stack-safe)
+  cycle detection and independent per-link signature re-verification via
+  `verify_causal_graph()`. **Advisory only**, exactly like Phase 1's
+  Effect Intelligence Engine: `authorize()`/`authorize_with_quorum()`/
+  `commit()` never read or enforce a causal graph, so no new numbered
+  security invariant was added. `KarmaSakshiEngine.record_causal_link()`
+  and `.verify_causal_graph()` are audited side-channel steps, like
+  `assess()`. Unlike every other signed artifact in this protocol, an
+  agent principal may sign a causal link -- it is a factual claim, not an
+  authorization decision. The Action Passport gained
+  `causal_ancestor_hashes`/`causal_graph_verified`/`causal_graph_reason`
+  fields. Integrated into the CLI (`karmasakshi causal record`,
+  `karmasakshi causal verify`, and `karmasakshi passport` automatically
+  includes the workspace's causal graph) and the API (`POST
+  /causal-links`, `GET /causal-links`, `POST /causal-links/verify`). See
+  [docs/causal-effect-graphs.md](docs/causal-effect-graphs.md).
 
 ## [0.1.0] - 2026-07-27
 

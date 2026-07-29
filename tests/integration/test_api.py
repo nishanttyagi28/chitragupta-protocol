@@ -409,6 +409,78 @@ def test_passport_includes_assessment_when_present(dev_client):
     assert "Effect Intelligence Assessment" in passport_md.text
 
 
+def test_causal_link_record_list_and_verify(dev_client):
+    parent = _prepare_payment(dev_client, idempotency_key="idem-api-causal-1")
+    parent_id = parent.json()["manifest_id"]
+    child = _prepare_payment(dev_client, idempotency_key="idem-api-causal-2")
+    child_id = child.json()["manifest_id"]
+
+    record = dev_client.post(
+        "/causal-links",
+        json={
+            "parent_manifest_id": parent_id,
+            "child_manifest_id": child_id,
+            "recorded_by": {"principal_id": "agent-1", "principal_type": "agent"},
+            "relationship": "compensates",
+        },
+    )
+    assert record.status_code == 200
+    link_id = record.json()["link_id"]
+
+    listed = dev_client.get("/causal-links")
+    assert any(link["link_id"] == link_id for link in listed.json()["links"])
+
+    verify = dev_client.post("/causal-links/verify")
+    assert verify.status_code == 200
+    body = verify.json()
+    assert body["verified"] is True
+    assert body["has_cycle"] is False
+    assert body["edge_count"] == 1
+
+    passport = dev_client.get(f"/passports/{child_id}").json()
+    assert passport["causal_graph_verified"] is True
+
+
+def test_causal_link_unknown_manifest_404s(dev_client):
+    resp = dev_client.post(
+        "/causal-links",
+        json={
+            "parent_manifest_id": "does-not-exist",
+            "child_manifest_id": "also-missing",
+            "recorded_by": {"principal_id": "agent-1", "principal_type": "agent"},
+        },
+    )
+    assert resp.status_code == 404
+
+
+def test_causal_link_verify_reports_cycle(dev_client):
+    m1 = _prepare_payment(dev_client, idempotency_key="idem-api-causal-3")
+    m1_id = m1.json()["manifest_id"]
+    m2 = _prepare_payment(dev_client, idempotency_key="idem-api-causal-4")
+    m2_id = m2.json()["manifest_id"]
+
+    dev_client.post(
+        "/causal-links",
+        json={
+            "parent_manifest_id": m1_id,
+            "child_manifest_id": m2_id,
+            "recorded_by": {"principal_id": "agent-1", "principal_type": "agent"},
+        },
+    )
+    dev_client.post(
+        "/causal-links",
+        json={
+            "parent_manifest_id": m2_id,
+            "child_manifest_id": m1_id,
+            "recorded_by": {"principal_id": "agent-1", "principal_type": "agent"},
+        },
+    )
+    verify = dev_client.post("/causal-links/verify")
+    body = verify.json()
+    assert body["verified"] is False
+    assert body["has_cycle"] is True
+
+
 def test_deny_never_issues_grant(dev_client):
     prep = _prepare_payment(dev_client, idempotency_key="idem-api-deny-1")
     manifest_id = prep.json()["manifest_id"]

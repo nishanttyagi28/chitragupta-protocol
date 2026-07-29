@@ -18,6 +18,7 @@ from karmasakshi.adapters.base import CommitResult, CompensationResult, OutcomeP
 from karmasakshi.approval.model import ApprovalStatement
 from karmasakshi.audit.journal import AuditJournal
 from karmasakshi.audit.sqlite_backend import SQLiteAuditBackend
+from karmasakshi.causal.model import CausalLink
 from karmasakshi.crypto.keyring import Keyring
 from karmasakshi.crypto.keys import (
     SigningKey,
@@ -56,6 +57,7 @@ class Workspace:
         self.grants_dir = self.root / "grants"
         self.policies_dir = self.root / "policies"
         self.approvals_dir = self.root / "approvals"
+        self.causal_dir = self.root / "causal"
 
     def ensure_initialized(self) -> None:
         for d in (
@@ -65,6 +67,7 @@ class Workspace:
             self.grants_dir,
             self.policies_dir,
             self.approvals_dir,
+            self.causal_dir,
         ):
             d.mkdir(parents=True, exist_ok=True)
 
@@ -197,6 +200,27 @@ class Workspace:
                 ApprovalStatement.model_validate_json(path.read_text(encoding="utf-8"))
             )
         return tuple(statements)
+
+    # --- causal links (extreme-v2 Phase 5) --------------------------------------
+
+    def save_causal_link(self, link: CausalLink) -> Path:
+        path = self.causal_dir / f"{link.link_id}.json"
+        path.write_text(link.model_dump_json(indent=2), encoding="utf-8")
+        return path
+
+    def load_causal_link(self, link_id: str) -> CausalLink:
+        path = self.causal_dir / f"{link_id}.json"
+        return CausalLink.model_validate_json(path.read_text(encoding="utf-8"))
+
+    def load_all_causal_links(self) -> tuple[CausalLink, ...]:
+        """Every causal link ever recorded in this workspace -- the whole
+        graph, not scoped to one manifest (a link may relate any two
+        manifests, so there is no single-prefix filter like approvals'
+        manifest-hash-prefixed filenames)."""
+        links = []
+        for path in sorted(self.causal_dir.glob("*.json")):
+            links.append(CausalLink.model_validate_json(path.read_text(encoding="utf-8")))
+        return tuple(links)
 
     # --- grants -------------------------------------------------------------
 

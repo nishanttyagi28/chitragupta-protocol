@@ -23,6 +23,10 @@ from karmasakshi.adapters.base import (
 from karmasakshi.approval.model import ApprovalStatement
 from karmasakshi.approval.policy import POLICY_TYPE_APPROVAL, approval_policy_from_bundle_payload
 from karmasakshi.approval.quorum import evaluate_quorum
+from karmasakshi.causal.graph import CausalEffectGraph, CausalGraphVerificationResult
+from karmasakshi.causal.graph import verify_causal_graph as _verify_causal_graph
+from karmasakshi.causal.model import CausalLink, CausalRelationship
+from karmasakshi.causal.signing import sign_causal_link
 from karmasakshi.crypto.keys import SigningKey
 from karmasakshi.delegation.attenuation import assert_grant_narrower_or_equal
 from karmasakshi.domain.common import Principal
@@ -214,6 +218,76 @@ class KarmaSakshiEngine:
             },
         )
         return assessment
+
+    # --- CAUSAL EFFECT GRAPHS (extreme-v2 Phase 5) ---------------------------
+
+    def record_causal_link(
+        self,
+        *,
+        parent_manifest_hash: str,
+        child_manifest_hash: str,
+        relationship: CausalRelationship,
+        recorded_by: Principal,
+        signing_key: SigningKey,
+        link_id: str | None = None,
+        nonce: str | None = None,
+    ) -> CausalLink:
+        """Sign a :class:`CausalLink` and record it in the audit journal.
+
+        Like :meth:`assess`, this is an audited side-channel step, not a
+        lifecycle-state transition -- it may be called any number of
+        times, before or after either manifest reaches any particular
+        lifecycle state. **Advisory only in this release**: nothing in
+        :meth:`authorize`/:meth:`commit` reads or enforces causal links.
+        Unlike ``authorize()``'s ``issuer``, there is no principal-type
+        restriction on ``recorded_by`` -- see
+        ``causal.signing.sign_causal_link`` and
+        docs/causal-effect-graphs.md.
+        """
+        link = sign_causal_link(
+            link_id=link_id or str(uuid.uuid4()),
+            parent_manifest_hash=parent_manifest_hash,
+            child_manifest_hash=child_manifest_hash,
+            relationship=relationship,
+            recorded_by=recorded_by,
+            signing_key=signing_key,
+            nonce=nonce or uuid.uuid4().hex,
+            clock=self._ctx.clock,
+        )
+        self._ctx.audit.record(
+            event_type="causal_link.recorded",
+            decision="recorded",
+            manifest_hash=child_manifest_hash,
+            actor_id=recorded_by.principal_id,
+            metadata={
+                "link_id": link.link_id,
+                "parent_manifest_hash": parent_manifest_hash,
+                "relationship": relationship,
+            },
+        )
+        return link
+
+    def verify_causal_graph(self, links: tuple[CausalLink, ...]) -> CausalGraphVerificationResult:
+        """Independently verify every link's signature and check the
+        assembled graph for cycles, recording the outcome in the audit
+        journal either way. Does not raise on an invalid or cyclic graph
+        -- callers read ``CausalGraphVerificationResult.verified``, the
+        same non-raising-per-item pattern as ``evaluate_quorum``.
+        """
+        graph = CausalEffectGraph(links=links)
+        result = _verify_causal_graph(graph, self._ctx.keyring)
+        self._ctx.audit.record(
+            event_type="causal_graph.verified",
+            decision="verified" if result.verified else "invalid",
+            metadata={
+                "node_count": str(result.node_count),
+                "edge_count": str(result.edge_count),
+                "has_cycle": str(result.has_cycle),
+                "invalid_link_ids": ",".join(result.invalid_link_ids),
+                "reason": result.reason[:200],
+            },
+        )
+        return result
 
     # --- SEAL -------------------------------------------------------------
 
