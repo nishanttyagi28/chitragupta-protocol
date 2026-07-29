@@ -68,6 +68,12 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   local dev on this" tradeoff, not a claim that the file is protected on
   Windows.
 
+- **The Effect Intelligence Engine (`karmasakshi.intelligence`) is
+  advisory only.** `assess()` scores a manifest and records the result in
+  the audit journal; `authorize()`/`commit()` do not read or enforce its
+  `recommendation`. `IntelligencePolicy` is not cryptographically signed.
+  See [docs/effect-intelligence.md](effect-intelligence.md) and the
+  threat model's "New trusted component" section.
 - **The public sandbox demo (`KARMASAKSHI_PUBLIC_DEMO=1`) is a single
   shared, in-memory session**, not multi-tenant: every visitor to a given
   deployment sees and can affect the same sandbox state until it

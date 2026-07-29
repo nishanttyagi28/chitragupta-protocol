@@ -27,6 +27,10 @@ karmasakshi key generate <key_id>
 karmasakshi key list
 
 karmasakshi prepare --adapter {sqlite,email,payment} --actor-id ID [adapter-specific options...]
+karmasakshi assess <manifest_id> [--delegation-depth N] [--historical-recurrence-count N]
+    [--historical-failure-count N] [--provider-idempotent unknown|yes|no]
+    [--compensation-feasible unknown|yes|no] [--cross-tenant] [--unusual-parameter-change]
+    [--policy-violation TEXT ...] [--from-audit-history]
 karmasakshi seal <manifest_id> --key-id ID
 
 karmasakshi grant issue <manifest_id> --issuer-id ID --subject-id ID --key-id ID [--audience ...] [--max-uses N]
@@ -75,6 +79,17 @@ reference adapters (only `sqlite` persists naturally, via its own database
 file). Use `karmasakshi demo --all` to see a full single-process
 walkthrough of all three, or drive the Python API directly for real
 multi-step usage against the in-memory adapters.
+
+## `assess`
+
+Runs the deterministic Effect Intelligence Engine over a prepared (sealed
+or unsealed) manifest and records an `effect.assessed` audit event. Does
+not require the manifest to be sealed first, and does not transition the
+lifecycle state. **Advisory only** — the recommendation is not read or
+enforced by `grant issue`/`execute`. See
+[docs/effect-intelligence.md](effect-intelligence.md). `--from-audit-history`
+derives the recurrence/failure facts from this workspace's own audit
+journal instead of the `--historical-*` flags.
 
 ## `doctor`
 

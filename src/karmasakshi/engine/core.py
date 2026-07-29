@@ -1,7 +1,9 @@
-"""The core engine: orchestrates PROPOSE -> PREPARE -> SEAL -> AUTHORIZE ->
-COMMIT -> VERIFY, delegating the external effect to an :class:`EffectAdapter`
-while owning every security decision itself (invariant #30: the adapter/agent
-never decides authorization).
+"""The core engine: orchestrates PROPOSE -> PREPARE -> ASSESS -> SEAL ->
+AUTHORIZE -> COMMIT -> VERIFY, delegating the external effect to an
+:class:`EffectAdapter` while owning every security decision itself
+(invariant #30: the adapter/agent never decides authorization). ASSESS
+(see :meth:`KarmaSakshiEngine.assess`) is an audited side-channel step,
+not a lifecycle-state transition -- see docs/effect-intelligence.md.
 
 See docs/architecture.md for the full sequence diagram.
 """
@@ -36,6 +38,8 @@ from karmasakshi.errors import (
 from karmasakshi.grants.issuer import issue_grant
 from karmasakshi.grants.model import ExecutionGrant, ScopeConstraints
 from karmasakshi.grants.verifier import verify_grant
+from karmasakshi.intelligence.facts import AssessmentFacts
+from karmasakshi.intelligence.model import EffectAssessment
 from karmasakshi.protocol.sealing import seal_manifest, verify_seal
 from karmasakshi.state_machine.record import LifecycleRecord
 from karmasakshi.state_machine.states import LifecycleState, is_revocable
@@ -151,6 +155,42 @@ class KarmaSakshiEngine:
             metadata={"adapter_id": adapter.adapter_id, "effect_type": manifest.effect_type},
         )
         return manifest
+
+    # --- ASSESS -------------------------------------------------------------
+
+    def assess(
+        self,
+        manifest: EffectManifest,
+        facts: AssessmentFacts | None = None,
+    ) -> EffectAssessment:
+        """Run the deterministic Effect Intelligence Engine over ``manifest``
+        and record the result in the audit journal.
+
+        Like :meth:`propose`, this does not transition the lifecycle state
+        machine -- it is an audited side-channel evaluation that may be
+        invoked any number of times (e.g. re-assessed after new facts
+        arrive) between :meth:`prepare` and :meth:`authorize`. The returned
+        recommendation is advisory in this protocol version: nothing in
+        :meth:`authorize`/:meth:`commit` currently reads or enforces it.
+        See docs/effect-intelligence.md.
+        """
+        assessment = self._ctx.intelligence.assess(manifest, facts)
+        self._ctx.audit.record(
+            event_type="effect.assessed",
+            decision=assessment.recommendation.value,
+            manifest_id=manifest.manifest_id,
+            manifest_hash=assessment.manifest_hash,
+            actor_id=manifest.actor.principal_id,
+            metadata={
+                "assessment_id": assessment.assessment_id,
+                "score": str(assessment.score),
+                "risk_level": assessment.risk_level.value,
+                "policy_id": assessment.policy_id,
+                "policy_hash": assessment.policy_hash,
+                "required_human_approvals": str(assessment.required_human_approvals),
+            },
+        )
+        return assessment
 
     # --- SEAL -------------------------------------------------------------
 

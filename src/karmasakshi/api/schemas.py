@@ -53,6 +53,20 @@ class ExecuteIn(BaseModel):
     grant_id: str
 
 
+class AssessIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    delegation_depth: int = 0
+    historical_recurrence_count: int = 0
+    historical_failure_count: int = 0
+    provider_idempotent: bool | None = None
+    compensation_feasible: bool | None = None
+    cross_tenant: bool = False
+    unusual_parameter_change: bool = False
+    policy_violations: list[str] = []
+    from_audit_history: bool = False
+
+
 class ManifestSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -68,6 +82,7 @@ class ManifestSummary(BaseModel):
 
 __all__ = [
     "ApproveIn",
+    "AssessIn",
     "DenyIn",
     "ExecuteIn",
     "ManifestSummary",

@@ -13,6 +13,7 @@ from karmasakshi.adapters.sqlite_db import RowEffectRequest
 from karmasakshi.api.auth import is_dev_mode, require_auth
 from karmasakshi.api.schemas import (
     ApproveIn,
+    AssessIn,
     DenyIn,
     ExecuteIn,
     ManifestSummary,
@@ -22,6 +23,7 @@ from karmasakshi.api.state import ApiState
 from karmasakshi.domain.common import Principal
 from karmasakshi.errors import KarmaSakshiError
 from karmasakshi.grants.model import ScopeConstraints
+from karmasakshi.intelligence import AssessmentFacts, derive_facts_from_audit
 from karmasakshi.passports import build_passport, render_passport_html, render_passport_markdown
 
 router = APIRouter()
@@ -201,6 +203,51 @@ def deny_manifest(manifest_id: str, body: DenyIn, request: Request) -> dict[str,
     return {"manifest_id": manifest_id, "denied": True, "reason": body.reason}
 
 
+@router.post("/manifests/{manifest_id}/assess", dependencies=[Depends(require_auth)])
+def assess_manifest(manifest_id: str, body: AssessIn, request: Request) -> dict[str, Any]:
+    state = _state(request)
+    sealed = state.sealed_manifests.get(manifest_id)
+    if sealed is None:
+        raise HTTPException(404, "manifest not found")
+    if body.from_audit_history:
+        facts = derive_facts_from_audit(
+            state.engine.context.audit,
+            sealed.manifest,
+            delegation_depth=body.delegation_depth,
+            provider_idempotent=body.provider_idempotent,
+            compensation_feasible=body.compensation_feasible,
+            cross_tenant=body.cross_tenant,
+            unusual_parameter_change=body.unusual_parameter_change,
+            extra_policy_violations=tuple(body.policy_violations),
+        )
+    else:
+        facts = AssessmentFacts(
+            delegation_depth=body.delegation_depth,
+            historical_recurrence_count=body.historical_recurrence_count,
+            historical_failure_count=body.historical_failure_count,
+            provider_idempotent=body.provider_idempotent,
+            compensation_feasible=body.compensation_feasible,
+            cross_tenant=body.cross_tenant,
+            unusual_parameter_change=body.unusual_parameter_change,
+            policy_violations=tuple(body.policy_violations),
+        )
+    try:
+        assessment = state.engine.assess(sealed.manifest, facts)
+    except KarmaSakshiError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    state.assessments[manifest_id] = assessment
+    return assessment.model_dump(mode="json")
+
+
+@router.get("/manifests/{manifest_id}/assessment", dependencies=[Depends(require_auth)])
+def get_assessment(manifest_id: str, request: Request) -> dict[str, Any]:
+    state = _state(request)
+    assessment = state.assessments.get(manifest_id)
+    if assessment is None:
+        raise HTTPException(404, "no assessment recorded for this manifest")
+    return assessment.model_dump(mode="json")
+
+
 @router.post("/grants/{grant_id}/revoke", dependencies=[Depends(require_auth)])
 def revoke_grant(grant_id: str, request: Request) -> dict[str, Any]:
     state = _state(request)
@@ -284,6 +331,7 @@ def get_passport(manifest_id: str, request: Request, fmt: str = "json") -> Any:
         commit_result=state.commit_results.get(manifest_id),
         outcome_proof=state.outcome_proofs.get(manifest_id),
         compensation_result=state.compensation_results.get(manifest_id),
+        assessment=state.assessments.get(manifest_id),
     )
     if fmt == "html":
         from fastapi.responses import HTMLResponse

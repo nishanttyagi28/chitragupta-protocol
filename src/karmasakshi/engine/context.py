@@ -8,6 +8,7 @@ from karmasakshi.audit.journal import AuditJournal
 from karmasakshi.config.clock import SYSTEM_CLOCK, Clock
 from karmasakshi.config.settings import ClockSkewPolicy
 from karmasakshi.crypto.keyring import Keyring
+from karmasakshi.intelligence.engine import EffectIntelligenceEngine
 from karmasakshi.stores.base import GrantStore
 
 
@@ -18,6 +19,7 @@ class EngineContext:
     audit: AuditJournal
     clock: Clock = SYSTEM_CLOCK
     clock_skew: ClockSkewPolicy = field(default_factory=ClockSkewPolicy)
+    intelligence: EffectIntelligenceEngine = field(default_factory=EffectIntelligenceEngine)
 
 
 __all__ = ["EngineContext"]

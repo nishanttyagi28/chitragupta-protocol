@@ -25,6 +25,7 @@ from karmasakshi.domain.seal import SealedManifest
 from karmasakshi.engine.context import EngineContext
 from karmasakshi.engine.core import KarmaSakshiEngine
 from karmasakshi.grants.model import ExecutionGrant
+from karmasakshi.intelligence.model import EffectAssessment
 from karmasakshi.stores.sqlite import SQLiteGrantStore
 
 
@@ -41,6 +42,7 @@ class ApiState:
     commit_results: dict[str, CommitResult] = field(default_factory=dict)
     outcome_proofs: dict[str, OutcomeProof] = field(default_factory=dict)
     compensation_results: dict[str, CompensationResult] = field(default_factory=dict)
+    assessments: dict[str, EffectAssessment] = field(default_factory=dict)
     kill_switch_engaged: bool = False
 
     def register_grant(self, manifest_id: str, grant: ExecutionGrant) -> None:

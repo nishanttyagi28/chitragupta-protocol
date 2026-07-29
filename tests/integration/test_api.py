@@ -82,6 +82,57 @@ def test_full_lifecycle_happy_path(dev_client):
     assert "not a security certification" in passport_md.text
 
 
+def test_assess_endpoint_records_and_is_retrievable(dev_client):
+    prep = _prepare_payment(dev_client, idempotency_key="idem-api-assess-1")
+    manifest_id = prep.json()["manifest_id"]
+
+    assess = dev_client.post(
+        f"/manifests/{manifest_id}/assess",
+        json={"cross_tenant": True, "policy_violations": ["kyc_pending"]},
+    )
+    assert assess.status_code == 200
+    body = assess.json()
+    assert body["recommendation"] == "block"
+    assert any(s["name"] == "cross_tenant_effect" for s in body["signals"])
+
+    fetched = dev_client.get(f"/manifests/{manifest_id}/assessment")
+    assert fetched.status_code == 200
+    assert fetched.json()["assessment_id"] == body["assessment_id"]
+
+    audit = dev_client.get("/audit").json()
+    assert any(
+        e["event_type"] == "effect.assessed" and e["manifest_id"] == manifest_id
+        for e in audit["events"]
+    )
+
+
+def test_assess_endpoint_unknown_manifest_404s(dev_client):
+    resp = dev_client.post("/manifests/does-not-exist/assess", json={})
+    assert resp.status_code == 404
+
+
+def test_assessment_endpoint_before_assess_404s(dev_client):
+    prep = _prepare_payment(dev_client, idempotency_key="idem-api-assess-2")
+    manifest_id = prep.json()["manifest_id"]
+    resp = dev_client.get(f"/manifests/{manifest_id}/assessment")
+    assert resp.status_code == 404
+
+
+def test_passport_includes_assessment_when_present(dev_client):
+    prep = _prepare_payment(dev_client, idempotency_key="idem-api-assess-3")
+    manifest_id = prep.json()["manifest_id"]
+    dev_client.post(f"/manifests/{manifest_id}/assess", json={})
+
+    passport = dev_client.get(f"/passports/{manifest_id}")
+    assert passport.status_code == 200
+    body = passport.json()
+    assert body["assessment_id"] is not None
+    assert body["assessment_recommendation"] in {"allow", "review", "block"}
+
+    passport_md = dev_client.get(f"/passports/{manifest_id}", params={"fmt": "markdown"})
+    assert "Effect Intelligence Assessment" in passport_md.text
+
+
 def test_deny_never_issues_grant(dev_client):
     prep = _prepare_payment(dev_client, idempotency_key="idem-api-deny-1")
     manifest_id = prep.json()["manifest_id"]

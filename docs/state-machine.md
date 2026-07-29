@@ -31,6 +31,19 @@ Every non-terminal state can reach a terminal state
 over the graph, so a future edit that accidentally strands a state is
 caught automatically).
 
+## ASSESS is not a state
+
+`KarmaSakshiEngine.assess()` (the Effect Intelligence Engine, see
+[docs/effect-intelligence.md](effect-intelligence.md)) is deliberately
+**not** one of the states above and does not appear in the transition
+table. Like `propose()`, it is an audited side-channel step -- callable
+any number of times between `prepare()` and `authorize()` without
+advancing (or being blocked by) the lifecycle state machine. This keeps
+the state machine's transition graph, and every existing test/tool built
+against it, unchanged. A future phase that makes assessment results a
+structural gate on `authorize()` may promote ASSESS to a real state; it
+is not one today.
+
 ## Safe checkpoints for revocation
 
 `REVOCABLE_STATES = {PROPOSED, PREPARED, SEALED, AUTHORIZED}` — i.e.

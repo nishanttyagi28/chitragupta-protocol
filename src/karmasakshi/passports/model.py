@@ -66,6 +66,18 @@ class ActionPassport(BaseModel):
     compensation_succeeded: bool | None = None
     compensation_reason: str | None = None
 
+    # Effect Intelligence assessment (advisory in this protocol version --
+    # see docs/effect-intelligence.md; None if assess() was never called for
+    # this manifest)
+    assessment_id: str | None = None
+    assessment_score: int | None = None
+    assessment_risk_level: str | None = None
+    assessment_recommendation: str | None = None
+    assessment_policy_id: str | None = None
+    assessment_policy_hash: str | None = None
+    assessment_required_human_approvals: int | None = None
+    assessment_explanation: str | None = None
+
     # Lifecycle + cryptographic verification status
     lifecycle_state: str
     verification: PassportVerificationStatus

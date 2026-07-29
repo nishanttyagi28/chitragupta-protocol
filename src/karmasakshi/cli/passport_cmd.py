@@ -30,6 +30,7 @@ def passport(
         commit_result = workspace.load_commit_result(manifest_id)
         outcome_proof = workspace.load_outcome_proof(manifest_id)
         compensation_result = workspace.load_compensation_result(manifest_id)
+        assessment = workspace.load_assessment(manifest_id)
 
         p = build_passport(
             sealed=sealed,
@@ -41,6 +42,7 @@ def passport(
             commit_result=commit_result,
             outcome_proof=outcome_proof,
             compensation_result=compensation_result,
+            assessment=assessment,
         )
 
         if fmt == "json":

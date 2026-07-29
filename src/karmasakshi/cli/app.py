@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from karmasakshi import __version__
+from karmasakshi.cli.assess_cmd import assess
 from karmasakshi.cli.audit_cmd import audit_app
 from karmasakshi.cli.common import console, emit
 from karmasakshi.cli.demo_cmd import demo
@@ -65,6 +66,7 @@ def version() -> None:
 
 
 app.command("prepare")(prepare)
+app.command("assess")(assess)
 app.command("seal")(seal)
 app.command("execute")(execute)
 app.command("verify")(execute_verify)
