@@ -378,8 +378,8 @@ commit: `ruff check`/`ruff format --check`/`mypy src`/`bandit` all clean;
 
 ### Commit SHAs / PR
 
-Recorded after this slice's PR is opened and merged, matching the
-pattern established for Phases 1-2.
+- `459bc5c` — Phase 3: Multi-Party (M-of-N) Authorization implementation, tests, docs
+- PR [#17](https://github.com/nishanttyagi28/karmasakshi-protocol/pull/17) — merged (`ffdf015`), all 14 CI checks green
 
 ## Exact next executable step
 
