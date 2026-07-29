@@ -52,6 +52,11 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
 - **No real cloud KMS/HSM.** Phase 16 adds `Signer` / `LocalDevSigner` /
   `EmulatedKmsSigner` (local Ed25519 only). See
   [docs/production-signers.md](production-signers.md).
+- **Trusted adapter registry is process-local** (extreme-v2 Phase 17).
+  Exact `(adapter_id, adapter_version)` allow-list with fail-closed
+  unknown/revoked/undeclared-effect-type checks when configured. Not a
+  multi-node consensus store. See
+  [docs/trusted-adapter-registry.md](trusted-adapter-registry.md).
 - **No production key management.** Dev-mode key generation writes raw
   private key bytes to a local file with best-effort file permissions.
   There's no HSM/KMS integration, no automated rotation workflow, and no

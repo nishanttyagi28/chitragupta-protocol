@@ -74,7 +74,10 @@ The remaining facts (delegation depth, provider capabilities,
 cross-tenant, external policy violations) are not currently derivable
 from the audit journal alone and must be supplied by the caller; a
 production deployment would source them from the grant/delegation chain,
-an adapter capability declaration (Phase 17, not yet implemented), and a
+an adapter capability declaration (Phase 17 —
+[docs/trusted-adapter-registry.md](trusted-adapter-registry.md);
+`facts_from_capability()` merges registry declarations into
+`AssessmentFacts`), and a
 tenant/policy service (Phase 19, not yet implemented).
 
 ## Output: `EffectAssessment`

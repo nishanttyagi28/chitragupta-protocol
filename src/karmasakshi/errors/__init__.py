@@ -414,6 +414,11 @@ class AdapterMismatchError(AdapterError):
     """Manifest's adapter identity/version does not match the executing adapter."""
 
 
+class UntrustedAdapterError(AdapterError):
+    """Adapter identity/version is missing from, revoked on, or outside the
+    declared capability of the trusted adapter registry (fail closed)."""
+
+
 class UnsupportedCompensationError(AdapterError):
     """The effect is irreversible and cannot honestly be compensated."""
 

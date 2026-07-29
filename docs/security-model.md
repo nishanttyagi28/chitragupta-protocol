@@ -1,4 +1,4 @@
-# Security Model: the 64 Invariants
+# Security Model: the 67 Invariants
 
 Each invariant below is implemented in a specific, named location and
 verified by at least one named test. This list exists so a reviewer can
@@ -71,6 +71,9 @@ under a minute per row.
 | 62 | Delegation cannot drop or swap a parent `authority_budget_id` | `assert_grant_narrower_or_equal` | `test_delegate_inherits_budget_and_rejects_swap` |
 | 63 | Binding a budget without a ledger or to an unknown id fails closed | `require_budget` / authorize + commit | `test_unknown_budget_at_authorize_fails_closed`, `test_budget_without_ledger_fails_closed`, `test_cannot_bind_budget_then_remove_ledger_at_commit` |
 | 64 | Durable lifecycle store write failure rolls back in-memory state and blocks the transition | `engine._transition` + `StoreUnavailableError` | `test_lifecycle_store_outage_rolls_back_memory` |
+| 65 | Unknown or version-mismatched adapters fail closed when a trusted registry is configured | `TrustedAdapterRegistry.require` / `engine._require_trusted_adapter` | `test_unknown_adapter_fails_closed`, `test_version_pin_is_exact`, `test_prepare_and_commit_fail_closed_for_untrusted_adapter` |
+| 66 | Effect types outside the declared adapter capability fail closed at prepare/commit/verify | `TrustedAdapterRegistry.require_effect` | `test_undeclared_effect_type_fails_closed`, `test_commit_rejects_effect_type_outside_capability` |
+| 67 | Revoked adapter registry entries fail closed until explicitly re-registered | `TrustedAdapterRegistry.revoke` | `test_revoked_adapter_fails_closed`, `test_re_register_clears_revocation_explicitly` |
 
 ## What this table does not claim
 

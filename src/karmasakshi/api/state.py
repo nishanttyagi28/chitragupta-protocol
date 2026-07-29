@@ -16,6 +16,7 @@ from pathlib import Path
 from karmasakshi.adapters.base import CommitResult, CompensationResult, EffectAdapter, OutcomeProof
 from karmasakshi.adapters.email_sandbox import EmailSandboxAdapter, SandboxOutbox
 from karmasakshi.adapters.payment_simulator import PaymentSimulator, PaymentSimulatorAdapter
+from karmasakshi.adapters.registry import TrustedAdapterRegistry, build_reference_registry
 from karmasakshi.adapters.sqlite_db import SQLiteRowAdapter
 from karmasakshi.approval.model import ApprovalStatement
 from karmasakshi.audit.journal import AuditJournal
@@ -44,6 +45,7 @@ class ApiState:
     signing_key: SigningKey
     keyring: Keyring
     adapters: dict[str, EffectAdapter]
+    adapter_registry: TrustedAdapterRegistry
     principals: dict[str, Principal] = field(default_factory=dict)
     sealed_manifests: dict[str, SealedManifest] = field(default_factory=dict)
     grants: dict[str, ExecutionGrant] = field(default_factory=dict)
@@ -76,6 +78,7 @@ def build_default_state(data_dir: Path | None = None) -> ApiState:
 
     signing_key = generate_signing_key("api-dev-issuer")
     keyring = Keyring([signing_key.verification_key()])
+    adapter_registry = build_reference_registry()
     engine = KarmaSakshiEngine(
         EngineContext(
             keyring=keyring,
@@ -83,6 +86,7 @@ def build_default_state(data_dir: Path | None = None) -> ApiState:
             audit=AuditJournal(backend=SQLiteAuditBackend(data_dir / "audit.db")),
             lifecycle_store=SQLiteLifecycleStore(data_dir / "lifecycle.db"),
             outbox_store=SQLiteOutboxStore(data_dir / "outbox.db"),
+            adapter_registry=adapter_registry,
         )
     )
 
@@ -95,7 +99,13 @@ def build_default_state(data_dir: Path | None = None) -> ApiState:
         "payment.simulator": PaymentSimulatorAdapter(payment_simulator),
     }
 
-    return ApiState(engine=engine, signing_key=signing_key, keyring=keyring, adapters=adapters)
+    return ApiState(
+        engine=engine,
+        signing_key=signing_key,
+        keyring=keyring,
+        adapters=adapters,
+        adapter_registry=adapter_registry,
+    )
 
 
 __all__ = ["ApiState", "build_default_state"]

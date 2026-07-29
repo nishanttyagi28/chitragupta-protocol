@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from karmasakshi.adapters.registry import TrustedAdapterRegistry
 from karmasakshi.audit.journal import AuditJournal
 from karmasakshi.budget.ledger import BudgetLedger
 from karmasakshi.config.clock import SYSTEM_CLOCK, Clock
@@ -34,6 +35,11 @@ class EngineContext:
     #: Optional Phase 15 transactional outbox for durable commit intent.
     #: When set, ``commit()`` records PENDING before the adapter runs.
     outbox_store: OutboxStore | None = None
+    #: Optional Phase 17 trusted adapter registry. When set, prepare /
+    #: commit / verify / compensate fail closed on unknown, revoked, or
+    #: capability-mismatched adapters. When ``None``, callers may pass any
+    #: adapter instance (v0.1 / Phases 1-16 behavior).
+    adapter_registry: TrustedAdapterRegistry | None = None
 
 
 __all__ = ["EngineContext"]

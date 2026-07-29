@@ -20,9 +20,18 @@ from karmasakshi.adapters.payment_simulator import (
     PaymentSimulator,
     PaymentSimulatorAdapter,
 )
+from karmasakshi.adapters.registry import (
+    AdapterCapability,
+    RegistryEntry,
+    TrustedAdapterRegistry,
+    build_reference_registry,
+    facts_from_capability,
+    reference_adapter_capabilities,
+)
 from karmasakshi.adapters.sqlite_db import RowEffectRequest, SQLiteRowAdapter
 
 __all__ = [
+    "AdapterCapability",
     "AsyncEffectAdapter",
     "CommitResult",
     "CompensationResult",
@@ -35,8 +44,13 @@ __all__ = [
     "PaymentSimulator",
     "PaymentSimulatorAdapter",
     "PreconditionResult",
+    "RegistryEntry",
     "RowEffectRequest",
     "SQLiteRowAdapter",
     "SandboxOutbox",
     "SentMessage",
+    "TrustedAdapterRegistry",
+    "build_reference_registry",
+    "facts_from_capability",
+    "reference_adapter_capabilities",
 ]
