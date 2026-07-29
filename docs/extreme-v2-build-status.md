@@ -59,7 +59,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 19. Multi-tenant control plane | **Implemented** | Process-local isolation; see below |
 | 20. Resource/DoS protection | **Implemented** | API size + rate ceilings; see below |
 | 21. Adversarial/fuzz testing | **Expanded** | Phase 21 Hypothesis + gaming suites; see below |
-| 22. State-machine model checking | Not started | v0.1's `tests/property/test_state_machine_properties.py` (BFS reachability) is unchanged |
+| 22. State-machine model checking | **Implemented** | Bounded exhaustive graph checker; see below |
 | 23. Action Passport V2 | Not started | Phase 1 added optional `assessment_*` fields to the existing (v1) passport rather than a new versioned schema |
 | 24. Portable evidence / observability | Not started | |
 | 25. AgentEval failure-memory loop | Not started | v0.1's AgentEval bridge (versioned, neutral export) is unchanged |
@@ -622,16 +622,25 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 22: Bounded state-machine model checking.** Expand beyond BFS
-reachability toward bounded exhaustive transition checks.
+**Phase 23: Action Passport V2.** Versioned passport schema with explicit
+effect-outcome and evidence fields beyond v1 optional assessment metadata.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 20 (`bbee4cb`, PR #35)
-- current branch: `cursor/phase21-adversarial-fuzz-ffca`
-- open PR: (pending)
-- test counts: **707 passed, 8 skipped**; coverage **90.11%**
-- exact next phase: 22 — Bounded state-machine model checking
+- last merged phase on main: Phase 21 (`aebd417`, PR #36)
+- current branch: `cursor/phase22-sm-model-checking-ffca`
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/37
+- test counts: **710 passed, 8 skipped** (est. after Phase 21+22)
+- exact next phase: 23 — Action Passport V2
+
+## Phase 22: Bounded state-machine model checking
+
+**Status: implemented on branch (PR #37).**
+
+### What landed
+
+- `check_lifecycle_model()` bounded exhaustive graph checks
+- Docs: `docs/state-machine-model-checking.md`
 
 ## Phase 21: Adversarial and fuzz testing
 
