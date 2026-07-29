@@ -17,6 +17,7 @@ from karmasakshi.cli.doctor_cmd import doctor
 from karmasakshi.cli.execute_cmd import compensate, execute
 from karmasakshi.cli.execute_cmd import verify as execute_verify
 from karmasakshi.cli.grant_cmd import grant_app
+from karmasakshi.cli.graph_cmd import graph_app
 from karmasakshi.cli.key_cmd import key_app
 from karmasakshi.cli.manifest_cmd import prepare, seal
 from karmasakshi.cli.passport_cmd import passport
@@ -31,6 +32,7 @@ app = typer.Typer(
 
 app.add_typer(audit_app, name="audit")
 app.add_typer(grant_app, name="grant")
+app.add_typer(graph_app, name="graph")
 app.add_typer(key_app, name="key")
 app.add_typer(policy_app, name="policy")
 app.add_typer(approvals_app, name="approvals")
