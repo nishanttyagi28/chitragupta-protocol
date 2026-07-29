@@ -448,3 +448,18 @@ class UnknownTenantError(TenantError):
 
 class TenantIsolationError(TenantError):
     """Cross-tenant access, suspended tenant, or tenant uncertainty (fail closed)."""
+
+
+# --- Resource / DoS protection (extreme-v2 Phase 20) ------------------------------
+
+
+class ResourceProtectionError(KarmaSakshiError):
+    """Base class for resource and DoS protection errors."""
+
+
+class RequestTooLargeError(ResourceProtectionError):
+    """Request body / Content-Length exceeds the configured ceiling."""
+
+
+class RateLimitExceededError(ResourceProtectionError):
+    """Client exceeded the configured request rate limit."""

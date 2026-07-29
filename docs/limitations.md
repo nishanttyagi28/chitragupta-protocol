@@ -63,6 +63,9 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
 - **Multi-tenant isolation is process-local** (extreme-v2 Phase 19).
   Per-tenant `ApiState` partitions and policy tenant binding; not a
   distributed directory. See [docs/multi-tenant.md](multi-tenant.md).
+- **API resource protection is process-local** (extreme-v2 Phase 20).
+  Body-size and per-client rate ceilings; not a WAF. See
+  [docs/resource-protection.md](resource-protection.md).
 - **No production key management.** Dev-mode key generation writes raw
   private key bytes to a local file with best-effort file permissions.
   There's no HSM/KMS integration, no automated rotation workflow, and no

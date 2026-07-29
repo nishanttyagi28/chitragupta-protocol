@@ -149,6 +149,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `MultiTenantControlPlane`): process-local org isolation; policy
   tenant binding on `EngineContext.tenant_id` (invariants #69–#70). See
   [docs/multi-tenant.md](docs/multi-tenant.md).
+- **Resource / DoS protection** (`ResourceProtectionMiddleware`):
+  Content-Length and per-client rate ceilings on the control-plane API
+  (invariants #71–#72). Process-local. See
+  [docs/resource-protection.md](docs/resource-protection.md).
 
 
 ## [0.1.0] - 2026-07-27
