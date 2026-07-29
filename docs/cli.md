@@ -70,6 +70,8 @@ karmasakshi compensation prepare <original_manifest_id> [--key-id ID]
 karmasakshi compensation authorize <original_id> <compensation_id> [--issuer-id ID] [--key-id ID]
 karmasakshi compensation execute <original_id> <compensation_id> --grant-id ID --adapter {sqlite,email,payment} [...]
 karmasakshi compensation passport <original_id> <compensation_id> [--grant-id ID]
+karmasakshi witness sign <manifest_id> --witness-id ID --key-id ID --observed-digest D
+karmasakshi witness evaluate <manifest_id> --observed-digest D [--assert] [--required-witnesses N]
 
 karmasakshi audit list
 karmasakshi audit show <manifest_id>
