@@ -270,10 +270,8 @@ same 1 known dev-only vulnerability as Phase 1 (unchanged, unresolved).
 
 ### Commit SHAs / PR
 
-Recorded after this slice's PR is opened and merged (see repository
-history / PR list for the exact SHAs and PR number -- this ledger entry
-is completed as part of that PR, matching the pattern established for
-Phase 1).
+- `d9a941b` — Phase 2: Signed Policy Bundles implementation, tests, docs
+- PR [#16](https://github.com/nishanttyagi28/karmasakshi-protocol/pull/16) — merged (`99db98e`), all 14 CI checks green
 
 ## Exact next executable step
 
