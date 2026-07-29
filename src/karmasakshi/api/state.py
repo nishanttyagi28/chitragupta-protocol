@@ -31,6 +31,7 @@ from karmasakshi.engine.context import EngineContext
 from karmasakshi.engine.core import KarmaSakshiEngine
 from karmasakshi.envelope.model import DecisionEnvelope
 from karmasakshi.grants.model import ExecutionGrant
+from karmasakshi.integrations.agenteval import FailureMemoryStore
 from karmasakshi.intelligence.model import EffectAssessment
 from karmasakshi.outbox.sqlite import SQLiteOutboxStore
 from karmasakshi.policy.bundle import SealedPolicyBundle
@@ -46,6 +47,7 @@ class ApiState:
     keyring: Keyring
     adapters: dict[str, EffectAdapter]
     adapter_registry: TrustedAdapterRegistry
+    agenteval_memory: FailureMemoryStore
     principals: dict[str, Principal] = field(default_factory=dict)
     sealed_manifests: dict[str, SealedManifest] = field(default_factory=dict)
     grants: dict[str, ExecutionGrant] = field(default_factory=dict)
@@ -105,6 +107,7 @@ def build_default_state(data_dir: Path | None = None) -> ApiState:
         keyring=keyring,
         adapters=adapters,
         adapter_registry=adapter_registry,
+        agenteval_memory=FailureMemoryStore(data_dir / "agenteval-memory.jsonl"),
     )
 
 

@@ -1176,3 +1176,63 @@ def test_evidence_pack_verify_missing_file_fails_cleanly(workspace_args, tmp_pat
         app, workspace_args + ["evidence-pack", "verify", str(tmp_path / "nope.json")]
     )
     assert result.exit_code != 0
+
+
+# --- AgentEval failure-memory loop (extreme-v2 Phase 25) ----------------------
+
+
+def test_agenteval_record_and_history(workspace_args, tmp_path):
+    _run(workspace_args + ["init"])
+    _run(workspace_args + ["key", "generate", "issuer-1"])
+    manifest_id, _grant_id = _prepare_seal_grant_execute_via_sqlite_cli(
+        workspace_args, tmp_path, row_id="acct-agenteval-1", idempotency_key="idem-cli-agenteval-1"
+    )
+
+    record_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "agenteval",
+            "record",
+            manifest_id,
+            "--failure-category",
+            "verification_mismatch",
+            "--invariant",
+            "#20",
+        ]
+    )
+    data = json.loads(record_result.output)
+    assert data["occurrence_count"] == 1
+    assert data["fixture"]["failure_category"] == "verification_mismatch"
+    assert data["fixture"]["invariant"] == "#20"
+
+    # Recording a second, differently-shaped failure for a fresh manifest.
+    manifest_id_2, _grant_id_2 = _prepare_seal_grant_execute_via_sqlite_cli(
+        workspace_args, tmp_path, row_id="acct-agenteval-2", idempotency_key="idem-cli-agenteval-2"
+    )
+    second_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "agenteval",
+            "record",
+            manifest_id_2,
+            "--failure-category",
+            "verification_mismatch",
+            "--invariant",
+            "#20",
+        ]
+    )
+    assert json.loads(second_result.output)["occurrence_count"] == 2
+
+    history_result = _run(workspace_args + ["--json", "agenteval", "history"])
+    summaries = json.loads(history_result.output)["summaries"]
+    assert len(summaries) == 1
+    assert summaries[0]["occurrence_count"] == 2
+    assert summaries[0]["failure_category"] == "verification_mismatch"
+
+
+def test_agenteval_history_empty_before_any_record(workspace_args):
+    _run(workspace_args + ["init"])
+    result = _run(workspace_args + ["--json", "agenteval", "history"])
+    assert json.loads(result.output)["summaries"] == []

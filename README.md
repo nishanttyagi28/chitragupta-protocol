@@ -20,15 +20,16 @@ versioned, experimental protocol.** This is not a certified, audited, or
 "production proven" system — see [Limitations](#limitations) and
 [docs/threat-model.md](docs/threat-model.md).
 
-**In progress:** extreme-v2 Phases 1–24 have landed on top of v0.1 —
+**In progress:** extreme-v2 Phases 1–25 have landed on top of v0.1 —
 including independent witness quorum, evidence quality / provenance,
 deep delegation revocation, atomic authority budgets, durable lifecycle
 storage, audit backend abstraction, a transactional outbox, a trusted
 adapter registry, a multi-tenant control plane, resource/DoS protection,
-bounded lifecycle model checking, Action Passport V2, and portable
-Evidence Packs. See the build ledger at
+bounded lifecycle model checking, Action Passport V2, portable Evidence
+Packs, advisory observability, and an AgentEval failure-memory loop. See
+the build ledger at
 [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for
-exactly what's implemented vs. planned (Phase 25 remains open).
+exactly what's implemented vs. planned.
 
 ## At a glance: allowed tool call vs. verified effect
 
@@ -564,7 +565,6 @@ means precisely: [docs/action-passports.md](docs/action-passports.md).
 - [docs/crash-recovery.md](docs/crash-recovery.md) — ambiguous-outcome recovery
 - [docs/adapter-authoring.md](docs/adapter-authoring.md) — writing a new adapter
 - [docs/langgraph-integration.md](docs/langgraph-integration.md)
-- [docs/agenteval-integration.md](docs/agenteval-integration.md)
 - [docs/action-passports.md](docs/action-passports.md)
 - [docs/api.md](docs/api.md) — FastAPI control plane
 - [docs/cli.md](docs/cli.md) — CLI reference
@@ -576,6 +576,7 @@ means precisely: [docs/action-passports.md](docs/action-passports.md).
 - [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) — build ledger for work beyond v0.1.0
 - [docs/portable-evidence.md](docs/portable-evidence.md) — self-contained, offline-verifiable Evidence Packs
 - [docs/observability.md](docs/observability.md) — neutral, advisory lifecycle events
+- [docs/agenteval-integration.md](docs/agenteval-integration.md) — regression-fixture export and the failure-memory loop
 - [docs/limitations.md](docs/limitations.md)
 - [docs/comparison.md](docs/comparison.md)
 

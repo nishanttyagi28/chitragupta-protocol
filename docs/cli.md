@@ -82,6 +82,9 @@ karmasakshi passport <manifest_id> [--format json|markdown|html] [--version v1|v
 karmasakshi evidence-pack build <manifest_id> [--grant-id ID] [-o FILE]
 karmasakshi evidence-pack verify <pack_file>
 
+karmasakshi agenteval record <manifest_id> --failure-category CAT [--invariant STR]
+karmasakshi agenteval history
+
 karmasakshi demo --all
 karmasakshi doctor
 karmasakshi version
@@ -169,6 +172,18 @@ reads. `evidence-pack verify <pack_file>` reads **only** that file — no
 workspace, keys, or stores are consulted — and independently re-checks
 every embedded signature and hash, exiting non-zero if anything fails to
 verify.
+
+## `agenteval record` / `agenteval history`
+
+AgentEval failure-memory loop (see
+[docs/agenteval-integration.md](agenteval-integration.md)):
+`agenteval record` exports the manifest's outcome as a regression fixture
+(same format as the demo's export) and appends it to this workspace's
+`agenteval-memory.jsonl`, reporting how many times a failure of this
+exact shape (`effect_type` + `adapter_id` + `failure_category` +
+`invariant`) has been seen before. `agenteval history` summarizes every
+distinct recorded shape, most recurrent first. Advisory only — nothing
+here affects any authorization or commit decision.
 
 ## `doctor`
 

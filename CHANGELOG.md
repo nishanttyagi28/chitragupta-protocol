@@ -178,6 +178,14 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   gates a lifecycle transition, is never written to the audit journal,
   and a failing sink never propagates. See
   [docs/observability.md](docs/observability.md).
+- **AgentEval failure-memory loop** (`karmasakshi.integrations.agenteval.memory`):
+  `FailureMemoryStore` groups exported regression fixtures by a
+  deterministic failure signature (`effect_type` + `adapter_id` +
+  `failure_category` + `invariant`) and reports recurrence counts.
+  Advisory only — nothing in `karmasakshi.engine` reads or writes it. CLI
+  `agenteval record|history`; API `POST /manifests/{id}/agenteval/fixtures`,
+  `GET /agenteval/fixtures/history`. See
+  [docs/agenteval-integration.md](docs/agenteval-integration.md).
 
 
 ## [0.1.0] - 2026-07-27
