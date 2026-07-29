@@ -631,8 +631,8 @@ accept low-quality or unattributed observations as conclusive.
 - last merged phase on main: Phase 8 (`f3f3530`, PR #22); product docs
   Milestone A drafts merged (`61d6354`, PR #23)
 - current branch: `cursor/phase9-witness-quorum-ffca`
-- open PR: (pending push)
-- latest local green commit: (pending commit)
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/24
+- latest local green commit: `69e286b` (+ CLI docs follow-up)
 - test counts: **607 passed, 6 skipped**; coverage **90.39%**
 - known blockers: Redis-only skips; pip-audit pytest CVE (dev-only)
 - exact next command after Phase 9 merge: begin Phase 10 from updated `main`
