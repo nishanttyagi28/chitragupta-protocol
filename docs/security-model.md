@@ -79,6 +79,7 @@ under a minute per row.
 | 70 | Unknown or suspended tenants fail closed | `TenantRegistry.require` | `test_unknown_and_suspended_tenant_fail_closed` |
 | 71 | Oversized API requests fail closed when resource protection is enabled | `enforce_content_length` / `ResourceProtectionMiddleware` | `test_enforce_content_length_fail_closed`, `test_api_middleware_rejects_oversized` |
 | 72 | Clients exceeding the configured API rate limit fail closed | `FixedWindowRateLimiter` / `ResourceProtectionMiddleware` | `test_rate_limiter_trips` |
+| 73 | Action Passport V2 never classifies executor success alone as `verified_match` | `derive_outcome_status` | `test_adversary_cannot_force_verified_match_from_executor_success_alone`, `test_passport_v2_upgrade_verified_match` |
 
 ## What this table does not claim
 

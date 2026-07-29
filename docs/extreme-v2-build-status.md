@@ -60,7 +60,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 20. Resource/DoS protection | **Implemented** | API size + rate ceilings; see below |
 | 21. Adversarial/fuzz testing | **Expanded** | Phase 21 Hypothesis + gaming suites; see below |
 | 22. State-machine model checking | **Implemented** | Bounded exhaustive graph checker; see below |
-| 23. Action Passport V2 | Not started | Phase 1 added optional `assessment_*` fields to the existing (v1) passport rather than a new versioned schema |
+| 23. Action Passport V2 | **Implemented** | Additive schema 2.0; see below |
 | 24. Portable evidence / observability | Not started | |
 | 25. AgentEval failure-memory loop | Not started | v0.1's AgentEval bridge (versioned, neutral export) is unchanged |
 
@@ -622,20 +622,41 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 23: Action Passport V2.** Versioned passport schema with explicit
-effect-outcome and evidence fields beyond v1 optional assessment metadata.
+**Phase 24: Portable evidence / observability.** Export packs and
+honest observability hooks without inventing third-party product
+integrations.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 21 (`aebd417`, PR #36)
-- current branch: `cursor/phase22-sm-model-checking-ffca`
-- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/37
-- test counts: **710 passed, 8 skipped** (est. after Phase 21+22)
-- exact next phase: 23 — Action Passport V2
+- last merged phase on main: Phase 22 (`61dc7bc`, PR #37)
+- current branch: `cursor/phase23-action-passport-v2-ffca`
+- open PR: (pending push)
+- test counts: **724 passed, 8 skipped**; coverage **90.09%**
+- exact next phase: 24 — Portable evidence / observability
+
+## Phase 23: Action Passport V2
+
+**Status: implemented on branch.**
+
+### What landed
+
+- `ActionPassportV2` / `OutcomeStatus` / `derive_outcome_status()` /
+  `upgrade_passport_v1_to_v2()` / `build_passport_v2()`
+- Content `passport_hash` with tamper detection
+- CLI `--version v2`; API `?version=v2`
+- Invariant **#73**; docs: `docs/action-passport-v2.md`
+- V1 remains default emission
+
+### Design decisions
+
+- Additive schema only — no breaking change to v1
+- `verified_match` requires independent observation, never executor
+  success alone
+- `passport_hash` excludes `generated_at` (per-call timestamp)
 
 ## Phase 22: Bounded state-machine model checking
 
-**Status: implemented on branch (PR #37).**
+**Status: merged to main (`61dc7bc`, PR #37).**
 
 ### What landed
 
@@ -644,7 +665,7 @@ effect-outcome and evidence fields beyond v1 optional assessment metadata.
 
 ## Phase 21: Adversarial and fuzz testing
 
-**Status: expanded on branch.**
+**Status: expanded / merged (`aebd417`, PR #36).**
 
 ### What landed
 
@@ -664,7 +685,7 @@ effect-outcome and evidence fields beyond v1 optional assessment metadata.
 
 ## Phase 19: Multi-tenant control plane
 
-**Status: implemented on branch.**
+**Status: merged to main (`49ad114`, PR #34).**
 
 ### What landed
 

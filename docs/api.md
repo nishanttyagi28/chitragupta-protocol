@@ -73,7 +73,7 @@ without authentication — see `karmasakshi.api.auth.require_auth` and
 | POST | `/manifests/{id}/verify` | Independently verify the outcome |
 | GET | `/audit` | Full audit timeline |
 | GET | `/audit/verify` | Verify the hash chain |
-| GET | `/passports/{id}?fmt=json\|html\|markdown` | Action Passport |
+| GET | `/passports/{id}?fmt=json\|html\|markdown&version=v1\|v2` | Action Passport (v1 default; v2 = schema 2.0) |
 | GET | `/kill-switch` | Current status |
 | POST | `/kill-switch/engage` / `/disengage` | Emergency stop for `/execute` |
 

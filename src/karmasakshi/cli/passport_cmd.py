@@ -7,7 +7,14 @@ import typer
 
 from karmasakshi.cli.common import console, run_guarded
 from karmasakshi.cli.workspace import Workspace
-from karmasakshi.passports import build_passport, render_passport_html, render_passport_markdown
+from karmasakshi.passports import (
+    build_passport,
+    build_passport_v2,
+    render_passport_html,
+    render_passport_markdown,
+    render_passport_v2_html,
+    render_passport_v2_markdown,
+)
 
 
 def passport(
@@ -15,6 +22,10 @@ def passport(
     manifest_id: Annotated[str, typer.Argument()],
     fmt: Annotated[str, typer.Option("--format", help="json, markdown, or html")] = "markdown",
     grant_id: Annotated[str | None, typer.Option()] = None,
+    version: Annotated[
+        str,
+        typer.Option("--version", help="Passport schema version: v1 (default) or v2"),
+    ] = "v1",
     output: Annotated[Path | None, typer.Option("-o", "--output")] = None,
 ) -> None:
     """Generate an Action Passport for a manifest: what was proposed, approved,
@@ -31,26 +42,50 @@ def passport(
         outcome_proof = workspace.load_outcome_proof(manifest_id)
         compensation_result = workspace.load_compensation_result(manifest_id)
         assessment = workspace.load_assessment(manifest_id)
+        lifecycle_state = engine.get_lifecycle_state(manifest_id).value
 
-        p = build_passport(
-            sealed=sealed,
-            keyring=engine.context.keyring,
-            audit=engine.context.audit,
-            lifecycle_state=engine.get_lifecycle_state(manifest_id).value,
-            grant=grant,
-            grant_store=engine.context.grant_store,
-            commit_result=commit_result,
-            outcome_proof=outcome_proof,
-            compensation_result=compensation_result,
-            assessment=assessment,
-        )
-
-        if fmt == "json":
-            text = p.model_dump_json(indent=2)
-        elif fmt == "html":
-            text = render_passport_html(p)
+        ver = version.strip().lower()
+        if ver in {"v2", "2", "2.0"}:
+            p2 = build_passport_v2(
+                sealed=sealed,
+                keyring=engine.context.keyring,
+                audit=engine.context.audit,
+                lifecycle_state=lifecycle_state,
+                grant=grant,
+                grant_store=engine.context.grant_store,
+                commit_result=commit_result,
+                outcome_proof=outcome_proof,
+                compensation_result=compensation_result,
+                assessment=assessment,
+                tenant_id=engine.context.tenant_id,
+            )
+            if fmt == "json":
+                text = p2.model_dump_json(indent=2)
+            elif fmt == "html":
+                text = render_passport_v2_html(p2)
+            else:
+                text = render_passport_v2_markdown(p2)
+        elif ver in {"v1", "1", "1.0"}:
+            p1 = build_passport(
+                sealed=sealed,
+                keyring=engine.context.keyring,
+                audit=engine.context.audit,
+                lifecycle_state=lifecycle_state,
+                grant=grant,
+                grant_store=engine.context.grant_store,
+                commit_result=commit_result,
+                outcome_proof=outcome_proof,
+                compensation_result=compensation_result,
+                assessment=assessment,
+            )
+            if fmt == "json":
+                text = p1.model_dump_json(indent=2)
+            elif fmt == "html":
+                text = render_passport_html(p1)
+            else:
+                text = render_passport_markdown(p1)
         else:
-            text = render_passport_markdown(p)
+            raise ValueError("passport --version must be v1 or v2")
 
         if output:
             output.write_text(text, encoding="utf-8")

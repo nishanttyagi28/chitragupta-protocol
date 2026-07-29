@@ -156,6 +156,14 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Adversarial / fuzz expansion** (Phase 21): Hypothesis properties and
   gaming tests for tenant isolation and resource protection. See
   [docs/adversarial-fuzz.md](docs/adversarial-fuzz.md).
+- **Bounded lifecycle state-machine model checking** (Phase 22):
+  `check_lifecycle_model()` exhausts a small transition graph; not a
+  theorem prover. See
+  [docs/state-machine-model-checking.md](docs/state-machine-model-checking.md).
+- **Action Passport V2** (`action_passport.v2` / schema `2.0`): additive
+  versioned passport with deterministic `outcome_status`, content
+  `passport_hash`, and optional `tenant_id` (invariant #73). V1 remains
+  default. See [docs/action-passport-v2.md](docs/action-passport-v2.md).
 
 
 ## [0.1.0] - 2026-07-27

@@ -82,6 +82,38 @@ def test_full_lifecycle_happy_path(dev_client):
     assert "not a security certification" in passport_md.text
 
 
+def test_passport_v2_endpoint(dev_client):
+    """Action Passport V2 is opt-in via ?version=v2; v1 remains default."""
+    prep = _prepare_payment(dev_client, idempotency_key="idem-passport-v2")
+    assert prep.status_code == 200
+    manifest_id = prep.json()["manifest_id"]
+    approve = _approve(dev_client, manifest_id)
+    assert approve.status_code == 200
+    grant_id = approve.json()["grant_id"]
+    assert (
+        dev_client.post(
+            f"/manifests/{manifest_id}/execute", json={"grant_id": grant_id}
+        ).status_code
+        == 200
+    )
+    assert dev_client.post(f"/manifests/{manifest_id}/verify").status_code == 200
+
+    v1 = dev_client.get(f"/passports/{manifest_id}")
+    assert v1.status_code == 200
+    assert "passport_format" not in v1.json()
+
+    v2 = dev_client.get(f"/passports/{manifest_id}", params={"version": "v2"})
+    assert v2.status_code == 200
+    body = v2.json()
+    assert body["passport_format"] == "action_passport.v2"
+    assert body["schema_version"] == "2.0"
+    assert body["outcome_status"] == "verified_match"
+    assert body["passport_hash"].startswith("sha256:")
+
+    bad = dev_client.get(f"/passports/{manifest_id}", params={"version": "v9"})
+    assert bad.status_code == 400
+
+
 def _create_policy_bundle(client, bundle_id="bundle-1", **overrides):
     body = {
         "bundle_id": bundle_id,
