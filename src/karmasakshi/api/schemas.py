@@ -42,6 +42,8 @@ class ApproveIn(BaseModel):
     policy_bundle_id: str | None = None
     separation_policy_bundle_id: str | None = None
     roles: list[str] = []
+    decision_envelope_id: str | None = None
+    causal_graph_id: str | None = None
 
 
 class DenyIn(BaseModel):
@@ -55,6 +57,45 @@ class ExecuteIn(BaseModel):
 
     grant_id: str
     policy_bundle_id: str | None = None
+    decision_envelope_id: str | None = None
+    causal_graph_id: str | None = None
+
+
+class ParameterConstraintIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["exact", "enum", "integer_range", "monetary_range"]
+    exact_value: str | int | bool | None = None
+    allowed_values: list[str | int | bool | None] | None = None
+    min_int: int | None = None
+    max_int: int | None = None
+    currency: str | None = None
+    min_minor_units: int | None = None
+    max_minor_units: int | None = None
+
+
+class DecisionEnvelopeCreateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    envelope_id: str
+    effect_type: str
+    adapter_id: str
+    adapter_version: str = "1.0"
+    target_resources: list[str]
+    constraints: dict[str, ParameterConstraintIn]
+    issuer: PrincipalIn
+    ttl_seconds: int = 3600
+    max_cost_currency: str | None = None
+    max_cost_minor_units: int | None = None
+    causal_graph_id: str | None = None
+    forbid_unknown_parameters: bool = True
+    require_all_constrained_parameters: bool = True
+
+
+class DecisionEnvelopeSubstituteIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    choices: dict[str, str | int | bool | None] = {}
 
 
 class PolicyBundleCreateIn(BaseModel):
@@ -183,9 +224,12 @@ __all__ = [
     "AssessIn",
     "CausalEdgeIn",
     "CausalGraphCreateIn",
+    "DecisionEnvelopeCreateIn",
+    "DecisionEnvelopeSubstituteIn",
     "DenyIn",
     "ExecuteIn",
     "ManifestSummary",
+    "ParameterConstraintIn",
     "PolicyBundleCreateIn",
     "PrepareRequestIn",
     "PrincipalIn",

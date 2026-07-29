@@ -32,6 +32,8 @@ def issue_grant(
     manifest_hash: str | None = None,
     policy_bundle_hash: str | None = None,
     approval_set_hash: str | None = None,
+    decision_envelope_hash: str | None = None,
+    causal_graph_hash: str | None = None,
     max_uses: int = 1,
     parent_grant_id: str | None = None,
     clock: Clock = SYSTEM_CLOCK,
@@ -40,6 +42,10 @@ def issue_grant(
 
     Raises :class:`GrantIssuerNotAuthorizedError` if ``issuer`` is an agent
     principal -- agents may request grants but may never issue them.
+
+    ``decision_envelope_hash`` and ``causal_graph_hash`` are mutually
+    exclusive plan-level bindings (Phase 6); passing both raises
+    ``ValueError`` from ``ExecutionGrant`` validation.
     """
     if issuer.principal_type == PrincipalType.AGENT:
         raise GrantIssuerNotAuthorizedError(
@@ -52,6 +58,8 @@ def issue_grant(
         manifest_hash=manifest_hash,
         policy_bundle_hash=policy_bundle_hash,
         approval_set_hash=approval_set_hash,
+        decision_envelope_hash=decision_envelope_hash,
+        causal_graph_hash=causal_graph_hash,
         issuer=issuer,
         subject=subject,
         audience=audience,

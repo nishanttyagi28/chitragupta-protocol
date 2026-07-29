@@ -165,6 +165,51 @@ class CausalGraphError(KarmaSakshiError):
     """Causal graph is invalid, untrusted, or cannot answer the requested query."""
 
 
+# --- Decision envelopes / atomic plan authorization (extreme-v2 Phase 6) ---------
+
+
+class DecisionEnvelopeError(KarmaSakshiError):
+    """Base class for constrained decision-envelope errors."""
+
+
+class DecisionEnvelopeIssuerNotAuthorizedError(DecisionEnvelopeError):
+    """Attempted to build a decision envelope with an agent principal as
+    issuer. Envelope constraints bound authorization, so the same rule that
+    forbids an agent from issuing an ExecutionGrant (invariant #30) applies."""
+
+
+class DecisionEnvelopeConstraintError(DecisionEnvelopeError):
+    """A concrete value or manifest falls outside an envelope constraint, or
+    a child envelope widens a parent constraint."""
+
+
+class DecisionEnvelopeSubstitutionError(DecisionEnvelopeError):
+    """Deterministic parameter substitution could not resolve a complete,
+    constraint-satisfying parameter dict from the supplied choices."""
+
+
+class DecisionEnvelopeTamperedError(DecisionEnvelopeError):
+    """Recomputed decision-envelope hash does not match the expected hash."""
+
+
+class DecisionEnvelopeMismatchError(DecisionEnvelopeError):
+    """A grant bound to one decision-envelope hash was presented with a
+    different (or missing) envelope at commit time."""
+
+
+class DecisionEnvelopeNotYetValidError(DecisionEnvelopeError):
+    """Decision envelope's ``not_before`` is in the future relative to now."""
+
+
+class DecisionEnvelopeExpiredError(DecisionEnvelopeError):
+    """Decision envelope's ``expires_at`` has passed relative to now."""
+
+
+class AtomicPlanError(KarmaSakshiError):
+    """Atomic plan (causal-graph-bound) authorization failed: missing
+    membership, hash mismatch, or unverified graph."""
+
+
 # --- Policy bundles ----------------------------------------------------------------
 
 

@@ -26,6 +26,22 @@ def execute(
             "must be the same bundle (by hash) presented at `grant issue` time",
         ),
     ] = None,
+    decision_envelope_id: Annotated[
+        str | None,
+        typer.Option(
+            "--decision-envelope-id",
+            help="Required if the grant was issued with a Decision Envelope bound; "
+            "must be the same envelope (by hash) presented at `grant issue` time",
+        ),
+    ] = None,
+    causal_graph_id: Annotated[
+        str | None,
+        typer.Option(
+            "--causal-graph-id",
+            help="Required if the grant was issued via atomic plan authorization; "
+            "must be the same graph (by hash) presented at `grant issue` time",
+        ),
+    ] = None,
 ) -> None:
     """Commit a sealed, authorized manifest through its adapter."""
     workspace: Workspace = ctx.obj["workspace"]
@@ -48,8 +64,22 @@ def execute(
             if policy_bundle_id is not None
             else None
         )
+        decision_envelope = (
+            workspace.load_decision_envelope(decision_envelope_id)
+            if decision_envelope_id is not None
+            else None
+        )
+        causal_graph = (
+            workspace.load_causal_graph(causal_graph_id) if causal_graph_id is not None else None
+        )
         result = engine.commit(
-            sealed, grant, adapter_instance, context=None, policy_bundle=policy_bundle
+            sealed,
+            grant,
+            adapter_instance,
+            context=None,
+            policy_bundle=policy_bundle,
+            decision_envelope=decision_envelope,
+            causal_graph=causal_graph,
         )
         workspace.save_commit_result(manifest_id, result)
         emit(

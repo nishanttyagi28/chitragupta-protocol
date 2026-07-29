@@ -62,6 +62,17 @@ class ExecutionGrant(BaseModel):
     manifest_hash: str | None = None
     policy_bundle_hash: str | None = None
     approval_set_hash: str | None = None
+    #: Extreme-v2 Phase 6: bind authorization to a sealed Decision Envelope
+    #: (constrained parameter space). Mutually exclusive with
+    #: ``causal_graph_hash`` as the plan-level binding -- a grant may carry
+    #: at most one of the two. When set alongside ``manifest_hash``, the
+    #: concrete sealed effect must also fit the envelope at commit time.
+    decision_envelope_hash: str | None = None
+    #: Extreme-v2 Phase 6: bind authorization to one sealed causal effect
+    #: graph (atomic plan). Mutually exclusive with ``decision_envelope_hash``.
+    #: When set alongside ``manifest_hash``, the concrete sealed effect must
+    #: be a node of that graph at commit time.
+    causal_graph_hash: str | None = None
     issuer: Principal
     subject: Principal
     audience: tuple[str, ...]
@@ -90,7 +101,13 @@ class ExecutionGrant(BaseModel):
             raise ValueError("identifier fields must be 1-128 chars")
         return v
 
-    @field_validator("manifest_hash", "policy_bundle_hash", "approval_set_hash")
+    @field_validator(
+        "manifest_hash",
+        "policy_bundle_hash",
+        "approval_set_hash",
+        "decision_envelope_hash",
+        "causal_graph_hash",
+    )
     @classmethod
     def _validate_hash_fields(cls, v: str | None) -> str | None:
         if v is None:
@@ -124,6 +141,17 @@ class ExecutionGrant(BaseModel):
             raise ValueError("expires_at must be strictly after not_before")
         return self
 
+    @model_validator(mode="after")
+    def _validate_plan_binding_exclusivity(self) -> ExecutionGrant:
+        """A grant may bind to a decision envelope *or* a causal graph plan,
+        never both (Phase 6 atomic plan / envelope exclusivity)."""
+        if self.decision_envelope_hash is not None and self.causal_graph_hash is not None:
+            raise ValueError(
+                "a grant cannot bind to both decision_envelope_hash and "
+                "causal_graph_hash; choose exactly one plan-level binding"
+            )
+        return self
+
     def signing_payload(self) -> dict[str, object]:
         """Everything except ``signature`` -- what actually gets signed/verified."""
         data: dict[str, object] = self.model_dump(mode="json", exclude={"signature"})
@@ -140,6 +168,12 @@ class ExecutionGrant(BaseModel):
 
     def is_quorum_bound(self) -> bool:
         return self.approval_set_hash is not None
+
+    def is_decision_envelope_bound(self) -> bool:
+        return self.decision_envelope_hash is not None
+
+    def is_causal_graph_bound(self) -> bool:
+        return self.causal_graph_hash is not None
 
 
 __all__ = ["ExecutionGrant", "ScopeConstraints"]

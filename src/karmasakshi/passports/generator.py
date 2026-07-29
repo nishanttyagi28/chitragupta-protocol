@@ -114,6 +114,10 @@ def build_passport(
         authorization_valid_until=grant.expires_at if grant is not None else None,
         authorization_policy_bundle_hash=grant.policy_bundle_hash if grant is not None else None,
         authorization_approval_set_hash=grant.approval_set_hash if grant is not None else None,
+        authorization_decision_envelope_hash=(
+            grant.decision_envelope_hash if grant is not None else None
+        ),
+        authorization_causal_graph_hash=(grant.causal_graph_hash if grant is not None else None),
         was_revoked=was_revoked,
         role_participation=(
             role_assignment.as_role_participation()

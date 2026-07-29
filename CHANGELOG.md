@@ -80,6 +80,16 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   inspect endpoints. Graphs are proof metadata in schema 1.x and do not
   implicitly authorize or order execution. See
   [docs/causal-effect-graphs.md](docs/causal-effect-graphs.md).
+- **Constrained Decision Envelopes and atomic plan authorization**
+  (`karmasakshi.envelope`): signed parameter constraints (`exact` /
+  `enum` / `integer_range` / `monetary_range`), deterministic
+  substitution, envelope narrowing that fails closed on widening, and
+  grant bindings to either a Decision Envelope *or* a sealed causal
+  graph (never both). `authorize_with_envelope` /
+  `authorize_plan` bind the hashes; `commit()` re-verifies them
+  (invariants #39–#42). Flexible “authorize envelope first, substitute
+  later” execution wiring is deferred. See
+  [docs/decision-envelopes.md](docs/decision-envelopes.md).
 
 ## [0.1.0] - 2026-07-27
 

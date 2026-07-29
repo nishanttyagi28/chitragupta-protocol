@@ -47,6 +47,7 @@ karmasakshi approvals inspect <manifest_id> --approval-policy-bundle-id ID --pro
 
 karmasakshi grant issue <manifest_id> --issuer-id ID --subject-id ID --key-id ID [--audience ...] [--max-uses N]
     [--policy-bundle-id ID] [--separation-policy-bundle-id ID] [--role "role_name:principal_id" ...]
+    [--decision-envelope-id ID | --causal-graph-id ID]
 karmasakshi grant issue-with-quorum <manifest_id> --approval-policy-bundle-id ID --grant-issuer-id ID
     --proposer-id ID --subject-id ID --key-id ID [--audience ...] [--policy-bundle-id ID]
     [--separation-policy-bundle-id ID] [--role "role_name:principal_id" ...]
@@ -55,7 +56,14 @@ karmasakshi grant delegate <parent_grant_id> --issuer-id ID --subject-id ID --ke
 karmasakshi grant revoke <grant_id> [--manifest-id ID]
 karmasakshi grant inspect <grant_id>
 
-karmasakshi execute <manifest_id> --grant-id ID --adapter {sqlite,email,payment} [--policy-bundle-id ID] [adapter-specific options...]
+karmasakshi envelope create <envelope_id> --effect-type TYPE --adapter-id ID --target-resource RES
+    [--constraint name=kind:...] --key-id ID [--sign/--no-sign]
+karmasakshi envelope verify <envelope_id>
+karmasakshi envelope substitute <envelope_id> [--choice name=value ...]
+
+karmasakshi execute <manifest_id> --grant-id ID --adapter {sqlite,email,payment}
+    [--policy-bundle-id ID] [--decision-envelope-id ID] [--causal-graph-id ID]
+    [adapter-specific options...]
 karmasakshi verify <manifest_id> --adapter {sqlite,email,payment} [...]
 karmasakshi compensate <manifest_id> --adapter {sqlite,email,payment} [...]
 

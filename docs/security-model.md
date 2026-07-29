@@ -1,4 +1,4 @@
-# Security Model: the 38 Invariants
+# Security Model: the 42 Invariants
 
 Each invariant below is implemented in a specific, named location and
 verified by at least one named test. This list exists so a reviewer can
@@ -45,6 +45,10 @@ under a minute per row.
 | 36 | Quorum evaluation is deterministic and order-independent: the same statement set always yields the same verdict and `approval_set_hash`, regardless of submission order, including when one approver submitted conflicting statements (latest `signed_at` wins) | `evaluate_quorum()`'s freshness tie-break over grouped-by-approver statements | `tests/property/test_approval_quorum_properties.py`, `test_a_later_dissent_overrides_an_earlier_approval_from_the_same_approver` |
 | 37 | A grant issued via `authorize()`/`authorize_with_quorum()` with a bound separation-of-duty policy cannot exist if any principal holds both roles of a forbidden pair (e.g. sealer and approver) -- checked structurally, never a tally an attacker can outvote | `KarmaSakshiEngine._enforce_separation_of_duty()` raises `SeparationOfDutyViolationError` before `issue_grant()` is ever called | `test_authorize_blocked_when_issuer_is_also_proposer`, `test_authorize_with_quorum_blocked_when_an_approver_is_also_the_proposer`, `tests/adversarial/test_separation_of_duty_gaming.py::test_one_conflicting_approver_among_several_still_blocks` |
 | 38 | Separation-of-duty evaluation is deterministic and order-independent: the same role assignment and forbidden-pair matrix always yield the same verdict, regardless of entry order on either side | `check_separation_of_duty()` computes set intersections per forbidden pair, order has no effect | `tests/property/test_separation_of_duty_properties.py` |
+| 39 | A grant may bind to a Decision Envelope *or* a sealed causal graph as its plan-level binding, never both | `ExecutionGrant` model validator rejects simultaneous `decision_envelope_hash` and `causal_graph_hash` | `test_grant_rejects_both_envelope_and_graph_hashes` |
+| 40 | A grant bound to a Decision Envelope cannot commit against a missing, different, tampered, expired, or constraint-violating envelope | `engine.commit()` re-verifies and re-checks fit when `decision_envelope_hash` is set | `test_authorize_with_envelope_then_commit_rejects_missing_and_swapped`, `tests/adversarial/test_decision_envelope_gaming.py` |
+| 41 | A grant bound to an atomic plan (causal graph) cannot commit unless the presented graph matches the bound hash and the sealed manifest is a verified node | `engine.commit()` + `assert_manifest_in_plan` | `test_authorize_plan_rejects_non_member_and_commit_requires_graph` |
+| 42 | An agent principal cannot issue a Decision Envelope; envelope constraint evaluation and substitution are deterministic | `build_decision_envelope()` rejects agent issuers; `substitute_parameters` / narrowing are pure | `test_agent_cannot_issue_decision_envelope`, `tests/property/test_decision_envelope_properties.py` |
 
 ## What this table does not claim
 

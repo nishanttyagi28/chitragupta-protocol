@@ -18,9 +18,12 @@ from karmasakshi.api.schemas import (
     ApproveIn,
     AssessIn,
     CausalGraphCreateIn,
+    DecisionEnvelopeCreateIn,
+    DecisionEnvelopeSubstituteIn,
     DenyIn,
     ExecuteIn,
     ManifestSummary,
+    ParameterConstraintIn,
     PolicyBundleCreateIn,
     PrepareRequestIn,
     QuorumEvaluateIn,
@@ -36,9 +39,20 @@ from karmasakshi.approval import (
     sign_approval_statement,
 )
 from karmasakshi.causal import build_causal_graph, sign_causal_link
-from karmasakshi.domain.common import Principal
+from karmasakshi.domain.common import AdapterIdentity, MonetaryAmount, Principal
 from karmasakshi.duty import SeparationOfDutyPolicy, build_separation_of_duty_policy_bundle
 from karmasakshi.duty.roles import RoleAssignment
+from karmasakshi.envelope import (
+    ParameterConstraint,
+    build_decision_envelope,
+    enum_of,
+    exact,
+    integer_range,
+    monetary_range,
+    seal_decision_envelope,
+    substitute_parameters,
+    verify_decision_envelope,
+)
 from karmasakshi.errors import KarmaSakshiError
 from karmasakshi.grants.model import ScopeConstraints
 from karmasakshi.intelligence import AssessmentFacts, IntelligencePolicy, derive_facts_from_audit
@@ -260,12 +274,124 @@ def get_causal_graph(graph_id: str, request: Request) -> dict[str, Any]:
     }
 
 
+def _constraint_from_api(spec: ParameterConstraintIn) -> ParameterConstraint:
+    if spec.kind == "exact":
+        return exact(spec.exact_value)
+    if spec.kind == "enum":
+        if not spec.allowed_values:
+            raise HTTPException(422, "enum constraints require allowed_values")
+        return enum_of(*spec.allowed_values)
+    if spec.kind == "integer_range":
+        return integer_range(min_int=spec.min_int, max_int=spec.max_int)
+    if spec.kind == "monetary_range":
+        if not spec.currency:
+            raise HTTPException(422, "monetary_range requires currency")
+        return monetary_range(
+            currency=spec.currency,
+            min_minor_units=spec.min_minor_units,
+            max_minor_units=spec.max_minor_units,
+        )
+    raise HTTPException(422, f"unknown constraint kind {spec.kind!r}")
+
+
+@router.post("/decision-envelopes", dependencies=[Depends(require_auth)])
+def create_decision_envelope(body: DecisionEnvelopeCreateIn, request: Request) -> dict[str, Any]:
+    """Create and seal a constrained Decision Envelope."""
+    state = _state(request)
+    now = datetime.now(timezone.utc)
+    try:
+        constraints = {name: _constraint_from_api(spec) for name, spec in body.constraints.items()}
+        max_cost = None
+        if body.max_cost_currency is not None and body.max_cost_minor_units is not None:
+            max_cost = MonetaryAmount(
+                currency=body.max_cost_currency, minor_units=body.max_cost_minor_units
+            )
+        graph_hash = None
+        if body.causal_graph_id is not None:
+            graph = state.causal_graphs.get(body.causal_graph_id)
+            if graph is None:
+                raise HTTPException(404, f"causal graph {body.causal_graph_id!r} not found")
+            graph.verify(state.keyring)
+            graph_hash = graph.canonical_hash()
+        envelope = build_decision_envelope(
+            envelope_id=body.envelope_id,
+            effect_type=body.effect_type,
+            adapter=AdapterIdentity(
+                adapter_id=body.adapter_id, adapter_version=body.adapter_version
+            ),
+            target_resources=tuple(body.target_resources),
+            parameter_constraints=constraints,
+            issuer=Principal(**body.issuer.model_dump()),
+            not_before=now,
+            expires_at=now + timedelta(seconds=body.ttl_seconds),
+            signing_key_id=state.signing_key.key_id,
+            created_at=now,
+            forbid_unknown_parameters=body.forbid_unknown_parameters,
+            require_all_constrained_parameters=body.require_all_constrained_parameters,
+            max_estimated_cost=max_cost,
+            causal_graph_hash=graph_hash,
+        )
+        envelope = seal_decision_envelope(envelope, state.signing_key)
+        verify_decision_envelope(envelope, state.keyring, now=now)
+    except HTTPException:
+        raise
+    except KarmaSakshiError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    state.decision_envelopes[envelope.envelope_id] = envelope
+    state.engine.context.audit.record(
+        event_type="decision_envelope.created",
+        decision="recorded",
+        metadata={
+            "envelope_id": envelope.envelope_id,
+            "envelope_hash": envelope.canonical_hash(),
+        },
+    )
+    return envelope.model_dump(mode="json") | {"envelope_hash": envelope.canonical_hash()}
+
+
+@router.get("/decision-envelopes/{envelope_id}", dependencies=[Depends(require_auth)])
+def get_decision_envelope(envelope_id: str, request: Request) -> dict[str, Any]:
+    state = _state(request)
+    envelope = state.decision_envelopes.get(envelope_id)
+    if envelope is None:
+        raise HTTPException(404, "decision envelope not found")
+    try:
+        verify_decision_envelope(envelope, state.keyring, now=datetime.now(timezone.utc))
+        verified = True
+    except KarmaSakshiError:
+        verified = False
+    return envelope.model_dump(mode="json") | {
+        "envelope_hash": envelope.canonical_hash(),
+        "verified": verified,
+    }
+
+
+@router.post("/decision-envelopes/{envelope_id}/substitute", dependencies=[Depends(require_auth)])
+def substitute_decision_envelope(
+    envelope_id: str, body: DecisionEnvelopeSubstituteIn, request: Request
+) -> dict[str, Any]:
+    state = _state(request)
+    envelope = state.decision_envelopes.get(envelope_id)
+    if envelope is None:
+        raise HTTPException(404, "decision envelope not found")
+    try:
+        verify_decision_envelope(envelope, state.keyring, now=datetime.now(timezone.utc))
+        resolved = substitute_parameters(envelope, body.choices)
+    except KarmaSakshiError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"envelope_id": envelope_id, "parameters": resolved}
+
+
 @router.post("/manifests/{manifest_id}/approve", dependencies=[Depends(require_auth)])
 def approve_manifest(manifest_id: str, body: ApproveIn, request: Request) -> dict[str, Any]:
     state = _state(request)
     sealed = state.sealed_manifests.get(manifest_id)
     if sealed is None:
         raise HTTPException(404, "manifest not found")
+    if body.decision_envelope_id is not None and body.causal_graph_id is not None:
+        raise HTTPException(422, "decision_envelope_id and causal_graph_id are mutually exclusive")
     policy_bundle = None
     if body.policy_bundle_id is not None:
         policy_bundle = state.policy_bundles.get(body.policy_bundle_id)
@@ -280,28 +406,82 @@ def approve_manifest(manifest_id: str, body: ApproveIn, request: Request) -> dic
             )
     role_assignment = _parse_role_assignment(sealed.seal.manifest_hash, body.roles)
     now = datetime.now(timezone.utc)
+    issuer = Principal(**body.issuer.model_dump())
+    subject = Principal(**body.subject.model_dump())
+    grant_audience = (
+        tuple(body.audience) if body.audience else (sealed.manifest.adapter.adapter_id,)
+    )
+    expires_at = now + timedelta(seconds=body.ttl_seconds)
     try:
-        grant = state.engine.authorize(
-            sealed,
-            issuer=Principal(**body.issuer.model_dump()),
-            subject=Principal(**body.subject.model_dump()),
-            audience=(
-                tuple(body.audience) if body.audience else (sealed.manifest.adapter.adapter_id,)
-            ),
-            allowed_effect_types=(sealed.manifest.effect_type,),
-            scope=ScopeConstraints(),
-            not_before=now,
-            expires_at=now + timedelta(seconds=body.ttl_seconds),
-            signing_key=state.signing_key,
-            max_uses=body.max_uses,
-            policy_bundle=policy_bundle,
-            separation_policy_bundle=separation_policy_bundle,
-            role_assignment=role_assignment,
-        )
+        if body.decision_envelope_id is not None:
+            envelope = state.decision_envelopes.get(body.decision_envelope_id)
+            if envelope is None:
+                raise HTTPException(
+                    404, f"decision envelope {body.decision_envelope_id!r} not found"
+                )
+            grant = state.engine.authorize_with_envelope(
+                sealed,
+                envelope,
+                issuer=issuer,
+                subject=subject,
+                audience=grant_audience,
+                allowed_effect_types=(sealed.manifest.effect_type,),
+                scope=ScopeConstraints(),
+                not_before=now,
+                expires_at=expires_at,
+                signing_key=state.signing_key,
+                max_uses=body.max_uses,
+                policy_bundle=policy_bundle,
+                separation_policy_bundle=separation_policy_bundle,
+                role_assignment=role_assignment,
+            )
+        elif body.causal_graph_id is not None:
+            graph = state.causal_graphs.get(body.causal_graph_id)
+            if graph is None:
+                raise HTTPException(404, f"causal graph {body.causal_graph_id!r} not found")
+            grant = state.engine.authorize_plan(
+                sealed,
+                graph,
+                issuer=issuer,
+                subject=subject,
+                audience=grant_audience,
+                allowed_effect_types=(sealed.manifest.effect_type,),
+                scope=ScopeConstraints(),
+                not_before=now,
+                expires_at=expires_at,
+                signing_key=state.signing_key,
+                max_uses=body.max_uses,
+                policy_bundle=policy_bundle,
+                separation_policy_bundle=separation_policy_bundle,
+                role_assignment=role_assignment,
+            )
+        else:
+            grant = state.engine.authorize(
+                sealed,
+                issuer=issuer,
+                subject=subject,
+                audience=grant_audience,
+                allowed_effect_types=(sealed.manifest.effect_type,),
+                scope=ScopeConstraints(),
+                not_before=now,
+                expires_at=expires_at,
+                signing_key=state.signing_key,
+                max_uses=body.max_uses,
+                policy_bundle=policy_bundle,
+                separation_policy_bundle=separation_policy_bundle,
+                role_assignment=role_assignment,
+            )
+    except HTTPException:
+        raise
     except KarmaSakshiError as exc:
         raise HTTPException(403, str(exc)) from exc
     state.register_grant(manifest_id, grant)
-    return {"grant_id": grant.grant_id, "policy_bundle_hash": grant.policy_bundle_hash}
+    return {
+        "grant_id": grant.grant_id,
+        "policy_bundle_hash": grant.policy_bundle_hash,
+        "decision_envelope_hash": grant.decision_envelope_hash,
+        "causal_graph_hash": grant.causal_graph_hash,
+    }
 
 
 @router.post("/manifests/{manifest_id}/deny", dependencies=[Depends(require_auth)])
@@ -662,10 +842,26 @@ def execute_manifest(manifest_id: str, body: ExecuteIn, request: Request) -> dic
         policy_bundle = state.policy_bundles.get(body.policy_bundle_id)
         if policy_bundle is None:
             raise HTTPException(404, f"policy bundle {body.policy_bundle_id!r} not found")
+    decision_envelope = None
+    if body.decision_envelope_id is not None:
+        decision_envelope = state.decision_envelopes.get(body.decision_envelope_id)
+        if decision_envelope is None:
+            raise HTTPException(404, f"decision envelope {body.decision_envelope_id!r} not found")
+    causal_graph = None
+    if body.causal_graph_id is not None:
+        causal_graph = state.causal_graphs.get(body.causal_graph_id)
+        if causal_graph is None:
+            raise HTTPException(404, f"causal graph {body.causal_graph_id!r} not found")
     adapter = state.adapters[sealed.manifest.adapter.adapter_id]
     try:
         result = state.engine.commit(
-            sealed, grant, adapter, context=None, policy_bundle=policy_bundle
+            sealed,
+            grant,
+            adapter,
+            context=None,
+            policy_bundle=policy_bundle,
+            decision_envelope=decision_envelope,
+            causal_graph=causal_graph,
         )
     except KarmaSakshiError as exc:
         raise HTTPException(409, str(exc)) from exc

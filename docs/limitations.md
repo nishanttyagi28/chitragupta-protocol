@@ -49,7 +49,7 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   walkthrough of all three.
 - **No rate limiting, DoS protection, or resource-exhaustion defense**
   anywhere in the CLI, API, or engine.
-- **No formal verification.** The 38 documented invariants
+- **No formal verification.** The 42 documented invariants
   ([docs/security-model.md](security-model.md)) are backed by unit tests,
   property-based tests (Hypothesis), and adversarial-input tests — not by
   a theorem prover or model checker. Passing tests demonstrate the stated
@@ -96,6 +96,13 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   separation check happened (unlike `policy_bundle_hash`/
   `approval_set_hash`); only the audit trail records it. See
   [docs/separation-of-duties.md](separation-of-duties.md).
+- **Decision Envelope authorization still requires a concrete sealed
+  manifest at authorize time** (`karmasakshi.envelope`). Deterministic
+  substitution is implemented as library logic, but there is not yet a
+  first-class lifecycle path that authorizes an open envelope and only
+  later binds a concrete effect. Multi-node single-grant saga execution
+  for graph-bound plans is deferred to a later phase. See
+  [docs/decision-envelopes.md](decision-envelopes.md).
 - **The public sandbox demo (`KARMASAKSHI_PUBLIC_DEMO=1`) is a single
   shared, in-memory session**, not multi-tenant: every visitor to a given
   deployment sees and can affect the same sandbox state until it

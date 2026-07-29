@@ -43,7 +43,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 3. Multi-party (M-of-N) authorization | **Implemented** | See below |
 | 4. Separation of duties (explicit roles) | **Implemented** | See below |
 | 5. Causal effect graphs | **Implemented (proof metadata)** | Signed deterministic DAG, bounded validation, API and passport ancestry; no implicit execution authority |
-| 6. Atomic plan authorization / decision envelopes | Not started | |
+| 6. Atomic plan authorization / decision envelopes | **Implemented** | See below |
 | 7. Compensation manifests | Not started | Compensation remains the v0.1 `CompensationResult` model (best-effort, honestly reported) |
 | 8. Saga orchestration | Not started | |
 | 9. Independent witness quorum | Not started | |
@@ -526,14 +526,99 @@ available.
 
 **Commit SHA:** `63bea0f` — signed causal effect graphs implementation.
 
+## Phase 6: Atomic plan authorization / constrained decision envelopes
+
+**Status: implemented.**
+
+### Files changed
+
+- Added: `src/karmasakshi/envelope/{__init__,constraints,model,sealing,substitution,plan}.py`
+- Added: `src/karmasakshi/cli/envelope_cmd.py`
+- Added: `docs/decision-envelopes.md`
+- Added: `tests/unit/test_decision_envelopes.py`,
+  `tests/property/test_decision_envelope_properties.py`,
+  `tests/adversarial/test_decision_envelope_gaming.py`
+- Modified: `src/karmasakshi/errors/__init__.py` (envelope + atomic-plan errors),
+  `src/karmasakshi/grants/{model,issuer}.py` (`decision_envelope_hash` /
+  `causal_graph_hash`, mutual exclusivity),
+  `src/karmasakshi/engine/core.py` (`authorize_with_envelope`,
+  `authorize_plan`, `commit` re-verification),
+  `src/karmasakshi/api/{schemas,state,routes}.py`,
+  `src/karmasakshi/cli/{app,grant_cmd,execute_cmd,workspace}.py`,
+  `src/karmasakshi/passports/{model,generator,render}.py`
+- Docs updated: `docs/security-model.md` (invariants #39–#42),
+  `docs/execution-grants.md`, `docs/limitations.md`, `README.md`,
+  `CHANGELOG.md`
+
+### Design decisions
+
+- **Authorization still binds a concrete sealed manifest** in this phase,
+  plus either an envelope or a causal graph. Flexible “authorize envelope
+  first, substitute later, then execute” is deferred; substitution is
+  shipped as deterministic library logic so later wiring cannot invent
+  non-deterministic rules.
+- **Envelope XOR graph on the grant.** A grant may not carry both
+  `decision_envelope_hash` and `causal_graph_hash`. An envelope may itself
+  pin a `causal_graph_hash` inside its signed payload.
+- **Commit re-verifies** the bound envelope/graph the same way policy
+  bundles are re-verified (fail closed on missing/swapped/tampered/
+  expired/out-of-constraint).
+
+### Security invariants added
+
+- **#39**: Envelope XOR causal-graph plan-level binding on a grant.
+- **#40**: Envelope-bound grants fail closed at commit without the matching
+  fitting envelope.
+- **#41**: Plan-bound grants fail closed unless the sealed manifest is a
+  verified node of the matching graph.
+- **#42**: Agents cannot issue Decision Envelopes; substitution/narrowing
+  are deterministic.
+
+### Verification commands
+
+```bash
+ruff check .
+ruff format --check .
+mypy src
+bandit -r src/karmasakshi
+python -m pytest -q
+python -m build && python -m twine check dist/*
+pip-audit
+```
+
+Results at the time of this commit: `ruff check`/`ruff format --check`/
+`mypy src`/`bandit` clean (no new assert findings); `pytest -q` →
+**543 passed, 6 skipped** (Redis-only); `build`/`twine check` clean;
+`pip-audit` → same 1 known dev-only `pytest` CVE as prior phases
+(unresolved).
+
+### Session baseline (this agent, before Phase 6)
+
+Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
+**516 passed, 6 skipped**.
+
 ## Exact next executable step
 
-**Phase 6: Atomic plan authorization / constrained decision envelopes.**
-Define narrow, canonical parameter constraints; bind an authorization to
-either one sealed graph or an exact decision envelope; implement deterministic
-substitution and adversarial widening tests before adding execution support.
+**Phase 7: Compensation manifests and separate Compensation Passports.**
+Model compensation as a separately authorized effect that never mutates
+the original Action Passport; bind compensation manifests with their own
+seals/grants; distinguish compensation attempted vs verified.
+
+## Resumable checkpoint
+
+- last merged phase on main at session start: Phase 5 (`eb94aab`)
+- current branch: `cursor/phase6-decision-envelopes-ffca`
+- open PR: (to be filled after push)
+- latest green commit on this branch: (to be filled after commit)
+- test counts: **543 passed, 6 skipped**
+- known blockers: Redis-only skips (no local Redis); pip-audit pytest CVE
+  (dev-only); Docker not required for this phase
+- exact next command after merge: begin Phase 7 from updated `main`
+- exact next phase: 7 — Compensation manifests and separate Compensation
+  Passports
 
 ## Preserved Phase 5 design notes
+
 
 The following notes were used to scope Phase 5:
 
