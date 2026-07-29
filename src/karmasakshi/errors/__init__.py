@@ -158,6 +158,13 @@ class AuditTamperedError(AuditError):
     """Audit chain hash verification failed."""
 
 
+# --- Causal effect graphs --------------------------------------------------------
+
+
+class CausalGraphError(KarmaSakshiError):
+    """Causal graph is invalid, untrusted, or cannot answer the requested query."""
+
+
 # --- Policy bundles ----------------------------------------------------------------
 
 

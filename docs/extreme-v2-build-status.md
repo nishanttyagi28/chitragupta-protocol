@@ -42,7 +42,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 2. Signed policy bundles | **Implemented** | See below |
 | 3. Multi-party (M-of-N) authorization | **Implemented** | See below |
 | 4. Separation of duties (explicit roles) | **Implemented** | See below |
-| 5. Causal effect graphs | Not started | `parent_manifest_id` remains a single unsigned string field, unchanged from v0.1 |
+| 5. Causal effect graphs | **Implemented (proof metadata)** | Signed deterministic DAG, bounded validation, API and passport ancestry; no implicit execution authority |
 | 6. Atomic plan authorization / decision envelopes | Not started | |
 | 7. Compensation manifests | Not started | Compensation remains the v0.1 `CompensationResult` model (best-effort, honestly reported) |
 | 8. Saga orchestration | Not started | |
@@ -501,9 +501,41 @@ known dev-only vulnerability as Phases 1-3 (unchanged, unresolved).
 - `ee28813` — Phase 4: Separation of Duties implementation, tests, docs
 - PR [#18](https://github.com/nishanttyagi28/karmasakshi-protocol/pull/18) — merged (`5eb9ab4`), all 14 CI checks green
 
+## Phase 5 implementation: signed causal effect graphs
+
+**Status:** Implemented as an additive proof-metadata layer.
+
+**Files:** `src/karmasakshi/causal/`, API state/routes/schemas, Action
+Passport model/generator/rendering, focused unit/integration tests, README,
+CHANGELOG and `docs/causal-effect-graphs.md`.
+
+**Security invariants:** every edge binds exact parent and child hashes and
+must have a valid signature; graph identity is deterministic and independent
+of input ordering; missing nodes, duplicate links, self-links and cycles fail
+closed; size and depth are bounded; graph membership never grants authority.
+
+**Known limitations:** reference API storage is process-local; graph
+relationships are evidence only and do not propagate authorization,
+revocation, ordering or failure state.
+
+**Verification commands:** `ruff format --check .`, `ruff check .`,
+`mypy src`, `bandit -q -r src`, `pytest -q` (**516 passed, 6 skipped**),
+`python -m build`, and `twine check dist/*` all passed. The six skips
+remain the explicit Redis-only tests because no local Redis server was
+available.
+
+**Commit SHA:** `63bea0f` — signed causal effect graphs implementation.
+
 ## Exact next executable step
 
-**Phase 5: Causal Effect Graphs.** Concretely:
+**Phase 6: Atomic plan authorization / constrained decision envelopes.**
+Define narrow, canonical parameter constraints; bind an authorization to
+either one sealed graph or an exact decision envelope; implement deterministic
+substitution and adversarial widening tests before adding execution support.
+
+## Preserved Phase 5 design notes
+
+The following notes were used to scope Phase 5:
 
 1. Today `EffectManifest.parent_manifest_id` is a single unsigned string
    field -- no verification that a claimed parent actually exists, was

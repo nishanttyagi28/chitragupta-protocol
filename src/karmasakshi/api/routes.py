@@ -17,6 +17,7 @@ from karmasakshi.api.schemas import (
     ApprovalStatementIn,
     ApproveIn,
     AssessIn,
+    CausalGraphCreateIn,
     DenyIn,
     ExecuteIn,
     ManifestSummary,
@@ -34,6 +35,7 @@ from karmasakshi.approval import (
     evaluate_quorum,
     sign_approval_statement,
 )
+from karmasakshi.causal import build_causal_graph, sign_causal_link
 from karmasakshi.domain.common import Principal
 from karmasakshi.duty import SeparationOfDutyPolicy, build_separation_of_duty_policy_bundle
 from karmasakshi.duty.roles import RoleAssignment
@@ -188,6 +190,73 @@ def get_manifest(manifest_id: str, request: Request) -> dict[str, Any]:
         "seal": sealed.seal.model_dump(mode="json"),
         "lifecycle_state": state.engine.get_lifecycle_state(manifest_id).value,
         "grant_ids": state.grants_by_manifest.get(manifest_id, []),
+    }
+
+
+@router.post("/causal-graphs", dependencies=[Depends(require_auth)])
+def create_causal_graph(body: CausalGraphCreateIn, request: Request) -> dict[str, Any]:
+    """Create a canonical DAG whose edges are independently signed."""
+    state = _state(request)
+    sealed_by_id = {}
+    for manifest_id in body.manifest_ids:
+        sealed = state.sealed_manifests.get(manifest_id)
+        if sealed is None:
+            raise HTTPException(404, f"manifest {manifest_id!r} not found")
+        sealed_by_id[manifest_id] = sealed
+    now = datetime.now(timezone.utc)
+    try:
+        links = tuple(
+            sign_causal_link(
+                parent_manifest_hash=sealed_by_id[edge.parent_manifest_id].seal.manifest_hash,
+                child_manifest_hash=sealed_by_id[edge.child_manifest_id].seal.manifest_hash,
+                relation=edge.relation,
+                signing_key=state.signing_key,
+                created_at=now,
+            )
+            for edge in body.edges
+        )
+        graph = build_causal_graph(
+            node_manifest_hashes=tuple(
+                sealed_by_id[manifest_id].seal.manifest_hash for manifest_id in body.manifest_ids
+            ),
+            links=links,
+        )
+        graph.verify(state.keyring)
+    except KeyError as exc:
+        raise HTTPException(
+            422, f"causal edge references unlisted manifest {exc.args[0]!r}"
+        ) from exc
+    except (KarmaSakshiError, ValueError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+    state.causal_graphs[graph.graph_id] = graph
+    state.engine.context.audit.record(
+        event_type="causal_graph.created",
+        decision="recorded",
+        metadata={
+            "graph_id": graph.graph_id,
+            "graph_hash": graph.canonical_hash(),
+            "node_count": str(len(graph.node_manifest_hashes)),
+            "link_count": str(len(graph.links)),
+        },
+    )
+    return graph.model_dump(mode="json") | {"graph_hash": graph.canonical_hash()}
+
+
+@router.get("/causal-graphs/{graph_id}", dependencies=[Depends(require_auth)])
+def get_causal_graph(graph_id: str, request: Request) -> dict[str, Any]:
+    state = _state(request)
+    graph = state.causal_graphs.get(graph_id)
+    if graph is None:
+        raise HTTPException(404, "causal graph not found")
+    try:
+        graph.verify(state.keyring)
+        verified = True
+    except KarmaSakshiError:
+        verified = False
+    return graph.model_dump(mode="json") | {
+        "graph_hash": graph.canonical_hash(),
+        "roots": graph.roots(),
+        "verified": verified,
     }
 
 

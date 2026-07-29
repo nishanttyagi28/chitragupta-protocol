@@ -148,6 +148,21 @@ class AssessIn(BaseModel):
     from_audit_history: bool = False
 
 
+class CausalEdgeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    parent_manifest_id: str
+    child_manifest_id: str
+    relation: Literal["causes", "depends_on", "compensates", "verifies"] = "causes"
+
+
+class CausalGraphCreateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    manifest_ids: list[str]
+    edges: list[CausalEdgeIn]
+
+
 class ManifestSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -166,6 +181,8 @@ __all__ = [
     "ApprovalStatementIn",
     "ApproveIn",
     "AssessIn",
+    "CausalEdgeIn",
+    "CausalGraphCreateIn",
     "DenyIn",
     "ExecuteIn",
     "ManifestSummary",
