@@ -17,14 +17,17 @@ from karmasakshi.api.schemas import (
     DenyIn,
     ExecuteIn,
     ManifestSummary,
+    PolicyBundleCreateIn,
     PrepareRequestIn,
 )
 from karmasakshi.api.state import ApiState
 from karmasakshi.domain.common import Principal
 from karmasakshi.errors import KarmaSakshiError
 from karmasakshi.grants.model import ScopeConstraints
-from karmasakshi.intelligence import AssessmentFacts, derive_facts_from_audit
+from karmasakshi.intelligence import AssessmentFacts, IntelligencePolicy, derive_facts_from_audit
+from karmasakshi.intelligence.policy import build_policy_bundle
 from karmasakshi.passports import build_passport, render_passport_html, render_passport_markdown
+from karmasakshi.policy import seal_policy_bundle, verify_policy_bundle
 
 router = APIRouter()
 
@@ -165,6 +168,11 @@ def approve_manifest(manifest_id: str, body: ApproveIn, request: Request) -> dic
     sealed = state.sealed_manifests.get(manifest_id)
     if sealed is None:
         raise HTTPException(404, "manifest not found")
+    policy_bundle = None
+    if body.policy_bundle_id is not None:
+        policy_bundle = state.policy_bundles.get(body.policy_bundle_id)
+        if policy_bundle is None:
+            raise HTTPException(404, f"policy bundle {body.policy_bundle_id!r} not found")
     now = datetime.now(timezone.utc)
     try:
         grant = state.engine.authorize(
@@ -180,11 +188,12 @@ def approve_manifest(manifest_id: str, body: ApproveIn, request: Request) -> dic
             expires_at=now + timedelta(seconds=body.ttl_seconds),
             signing_key=state.signing_key,
             max_uses=body.max_uses,
+            policy_bundle=policy_bundle,
         )
     except KarmaSakshiError as exc:
         raise HTTPException(403, str(exc)) from exc
     state.register_grant(manifest_id, grant)
-    return {"grant_id": grant.grant_id}
+    return {"grant_id": grant.grant_id, "policy_bundle_hash": grant.policy_bundle_hash}
 
 
 @router.post("/manifests/{manifest_id}/deny", dependencies=[Depends(require_auth)])
@@ -248,6 +257,62 @@ def get_assessment(manifest_id: str, request: Request) -> dict[str, Any]:
     return assessment.model_dump(mode="json")
 
 
+@router.post("/policy/bundles", dependencies=[Depends(require_auth)])
+def create_policy_bundle(body: PolicyBundleCreateIn, request: Request) -> dict[str, Any]:
+    """Build, sign, and store a policy bundle (extreme-v2 Phase 2). The
+    issuer must be a human or service principal -- see
+    docs/policy-bundles.md."""
+    state = _state(request)
+    now = datetime.now(timezone.utc)
+    policy = IntelligencePolicy(
+        block_threshold=body.block_threshold,
+        review_threshold=body.review_threshold,
+        max_delegation_depth=body.max_delegation_depth,
+        restricted_effect_types=tuple(body.restricted_effect_types),
+        sensitive_target_patterns=tuple(body.sensitive_target_patterns),
+    )
+    try:
+        bundle = build_policy_bundle(
+            policy,
+            bundle_id=body.bundle_id,
+            bundle_version=body.bundle_version,
+            issuer=Principal(**body.issuer.model_dump()),
+            created_at=now,
+            effective_from=now,
+            effective_until=now + timedelta(seconds=body.effective_seconds),
+            tenant_id=body.tenant_id,
+        )
+        sealed = seal_policy_bundle(bundle, state.signing_key)
+    except KarmaSakshiError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    state.policy_bundles[body.bundle_id] = sealed
+    return sealed.model_dump(mode="json")
+
+
+@router.get("/policy/bundles/{bundle_id}", dependencies=[Depends(require_auth)])
+def get_policy_bundle(bundle_id: str, request: Request) -> dict[str, Any]:
+    state = _state(request)
+    sealed = state.policy_bundles.get(bundle_id)
+    if sealed is None:
+        raise HTTPException(404, "policy bundle not found")
+    return sealed.model_dump(mode="json")
+
+
+@router.post("/policy/bundles/{bundle_id}/verify", dependencies=[Depends(require_auth)])
+def verify_policy_bundle_route(bundle_id: str, request: Request) -> dict[str, Any]:
+    state = _state(request)
+    sealed = state.policy_bundles.get(bundle_id)
+    if sealed is None:
+        raise HTTPException(404, "policy bundle not found")
+    try:
+        verify_policy_bundle(sealed, state.keyring, now=datetime.now(timezone.utc))
+    except KarmaSakshiError as exc:
+        raise HTTPException(422, f"policy bundle verification failed: {exc}") from exc
+    return {"bundle_id": bundle_id, "verified": True}
+
+
 @router.post("/grants/{grant_id}/revoke", dependencies=[Depends(require_auth)])
 def revoke_grant(grant_id: str, request: Request) -> dict[str, Any]:
     state = _state(request)
@@ -270,9 +335,16 @@ def execute_manifest(manifest_id: str, body: ExecuteIn, request: Request) -> dic
     grant = state.grants.get(body.grant_id)
     if sealed is None or grant is None:
         raise HTTPException(404, "manifest or grant not found")
+    policy_bundle = None
+    if body.policy_bundle_id is not None:
+        policy_bundle = state.policy_bundles.get(body.policy_bundle_id)
+        if policy_bundle is None:
+            raise HTTPException(404, f"policy bundle {body.policy_bundle_id!r} not found")
     adapter = state.adapters[sealed.manifest.adapter.adapter_id]
     try:
-        result = state.engine.commit(sealed, grant, adapter, context=None)
+        result = state.engine.commit(
+            sealed, grant, adapter, context=None, policy_bundle=policy_bundle
+        )
     except KarmaSakshiError as exc:
         raise HTTPException(409, str(exc)) from exc
     state.commit_results[manifest_id] = result

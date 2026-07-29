@@ -33,13 +33,18 @@ karmasakshi assess <manifest_id> [--delegation-depth N] [--historical-recurrence
     [--policy-violation TEXT ...] [--from-audit-history]
 karmasakshi seal <manifest_id> --key-id ID
 
-karmasakshi grant issue <manifest_id> --issuer-id ID --subject-id ID --key-id ID [--audience ...] [--max-uses N]
+karmasakshi policy create <bundle_id> --issuer-id ID [--issuer-type human|service] [--block-threshold N]
+    [--review-threshold N] [--restricted-effect-type TEXT ...] [--sensitive-target-pattern REGEX ...]
+karmasakshi policy sign <bundle_id> --key-id ID
+karmasakshi policy verify <bundle_id>
+
+karmasakshi grant issue <manifest_id> --issuer-id ID --subject-id ID --key-id ID [--audience ...] [--max-uses N] [--policy-bundle-id ID]
 karmasakshi grant verify <grant_id>
 karmasakshi grant delegate <parent_grant_id> --issuer-id ID --subject-id ID --key-id ID [--max-uses N] [--ttl-seconds N]
 karmasakshi grant revoke <grant_id> [--manifest-id ID]
 karmasakshi grant inspect <grant_id>
 
-karmasakshi execute <manifest_id> --grant-id ID --adapter {sqlite,email,payment} [adapter-specific options...]
+karmasakshi execute <manifest_id> --grant-id ID --adapter {sqlite,email,payment} [--policy-bundle-id ID] [adapter-specific options...]
 karmasakshi verify <manifest_id> --adapter {sqlite,email,payment} [...]
 karmasakshi compensate <manifest_id> --adapter {sqlite,email,payment} [...]
 
@@ -90,6 +95,16 @@ enforced by `grant issue`/`execute`. See
 [docs/effect-intelligence.md](effect-intelligence.md). `--from-audit-history`
 derives the recurrence/failure facts from this workspace's own audit
 journal instead of the `--historical-*` flags.
+
+## `policy create` / `sign` / `verify`
+
+Builds, signs, and verifies a signed `PolicyBundle` wrapping an
+`IntelligencePolicy` (see [docs/policy-bundles.md](policy-bundles.md)).
+`--policy-bundle-id` on `grant issue` binds the sealed bundle's hash into
+the issued grant; the same bundle must then be passed to `execute
+--policy-bundle-id` or the commit fails closed
+(`PolicyBundleMismatchError`) -- this is what prevents a policy edit
+between approval and execution from silently changing what was approved.
 
 ## `doctor`
 

@@ -33,6 +33,7 @@ from karmasakshi.errors import (
     GrantManifestMismatchError,
     GrantRevokedError,
     KarmaSakshiError,
+    PolicyBundleMismatchError,
     StaleManifestError,
 )
 from karmasakshi.grants.issuer import issue_grant
@@ -40,6 +41,8 @@ from karmasakshi.grants.model import ExecutionGrant, ScopeConstraints
 from karmasakshi.grants.verifier import verify_grant
 from karmasakshi.intelligence.facts import AssessmentFacts
 from karmasakshi.intelligence.model import EffectAssessment
+from karmasakshi.policy.bundle import SealedPolicyBundle
+from karmasakshi.policy.sealing import verify_policy_bundle
 from karmasakshi.protocol.sealing import seal_manifest, verify_seal
 from karmasakshi.state_machine.record import LifecycleRecord
 from karmasakshi.state_machine.states import LifecycleState, is_revocable
@@ -224,8 +227,35 @@ class KarmaSakshiEngine:
         nonce: str | None = None,
         max_uses: int = 1,
         parent_grant_id: str | None = None,
+        policy_bundle: SealedPolicyBundle | None = None,
     ) -> ExecutionGrant:
+        """Issue an :class:`ExecutionGrant` bound to ``sealed``.
+
+        If ``policy_bundle`` is given, it is verified (signature, tamper,
+        and effective-window checks -- see
+        ``policy.sealing.verify_policy_bundle``) before the grant is
+        issued, and its hash is bound into the grant's own signed payload
+        (``ExecutionGrant.policy_bundle_hash``). A later policy edit
+        cannot silently change what this grant authorizes: the grant's
+        signature already covers the old bundle's hash, and
+        :meth:`commit` requires the *same* bundle (by hash) to be
+        re-presented and re-verified before the effect executes.
+        """
         verify_seal(sealed, self._ctx.keyring)
+        if policy_bundle is not None:
+            try:
+                verify_policy_bundle(policy_bundle, self._ctx.keyring, now=self._ctx.clock.now())
+            except KarmaSakshiError:
+                self._ctx.audit.record(
+                    event_type="policy_bundle.verification_failed",
+                    decision="blocked",
+                    manifest_id=sealed.manifest.manifest_id,
+                    manifest_hash=sealed.seal.manifest_hash,
+                    actor_id=issuer.principal_id,
+                    metadata={"bundle_id": policy_bundle.bundle.bundle_id},
+                )
+                raise
+        policy_bundle_hash = policy_bundle.seal.bundle_hash if policy_bundle is not None else None
         try:
             grant = issue_grant(
                 grant_id=grant_id or str(uuid.uuid4()),
@@ -239,6 +269,7 @@ class KarmaSakshiEngine:
                 nonce=nonce or uuid.uuid4().hex,
                 signing_key=signing_key,
                 manifest_hash=sealed.seal.manifest_hash,
+                policy_bundle_hash=policy_bundle_hash,
                 max_uses=max_uses,
                 parent_grant_id=parent_grant_id,
                 clock=self._ctx.clock,
@@ -259,7 +290,10 @@ class KarmaSakshiEngine:
             manifest_hash=sealed.seal.manifest_hash,
             grant_id=grant.grant_id,
             actor_id=issuer.principal_id,
-            metadata={"subject": subject.principal_id},
+            metadata={
+                "subject": subject.principal_id,
+                **({"policy_bundle_hash": policy_bundle_hash} if policy_bundle_hash else {}),
+            },
         )
         return grant
 
@@ -339,6 +373,7 @@ class KarmaSakshiEngine:
         grant: ExecutionGrant,
         adapter: EffectAdapter,
         context: Any,
+        policy_bundle: SealedPolicyBundle | None = None,
     ) -> CommitResult:
         manifest = sealed.manifest
         manifest_id = manifest.manifest_id
@@ -383,6 +418,42 @@ class KarmaSakshiEngine:
                     f"grant {grant_id} is bound to a different manifest than the one presented"
                 ),
             )
+
+        if grant.policy_bundle_hash is not None:
+            # This grant was authorized against a specific signed policy
+            # bundle; the exact same bundle (by hash) must be re-verified
+            # here, or a policy edit/swap between authorize() and commit()
+            # could silently change what was actually approved.
+            if policy_bundle is None:
+                deny(
+                    "policy_bundle.missing_at_commit",
+                    "blocked_policy_bundle_missing",
+                    PolicyBundleMismatchError(
+                        f"grant {grant_id} requires policy bundle "
+                        f"{grant.policy_bundle_hash} to be presented at commit time"
+                    ),
+                )
+            else:
+                try:
+                    verify_policy_bundle(
+                        policy_bundle, self._ctx.keyring, now=self._ctx.clock.now()
+                    )
+                except KarmaSakshiError as exc:
+                    deny(
+                        "policy_bundle.verification_failed",
+                        f"blocked_{type(exc).__name__}",
+                        exc,
+                    )
+                if policy_bundle.seal.bundle_hash != grant.policy_bundle_hash:
+                    deny(
+                        "policy_bundle.mismatch",
+                        "blocked_policy_bundle_mismatch",
+                        PolicyBundleMismatchError(
+                            f"grant {grant_id} is bound to policy bundle "
+                            f"{grant.policy_bundle_hash}, but a different bundle "
+                            f"({policy_bundle.seal.bundle_hash}) was presented at commit time"
+                        ),
+                    )
 
         if adapter.adapter_id not in grant.audience:
             deny(

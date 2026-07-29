@@ -19,6 +19,7 @@ from karmasakshi.cli.grant_cmd import grant_app
 from karmasakshi.cli.key_cmd import key_app
 from karmasakshi.cli.manifest_cmd import prepare, seal
 from karmasakshi.cli.passport_cmd import passport
+from karmasakshi.cli.policy_cmd import policy_app
 from karmasakshi.cli.workspace import Workspace, default_workspace_path
 
 app = typer.Typer(
@@ -30,6 +31,7 @@ app = typer.Typer(
 app.add_typer(audit_app, name="audit")
 app.add_typer(grant_app, name="grant")
 app.add_typer(key_app, name="key")
+app.add_typer(policy_app, name="policy")
 
 
 @app.callback()

@@ -500,3 +500,187 @@ def test_assess_uses_context_configured_policy(
 
     assert assessment.recommendation == Recommendation.BLOCK
     assert assessment.policy_id == strict_policy.policy_id
+
+
+# --- signed policy bundles (extreme-v2 Phase 2) -------------------------------
+
+
+def _sealed_bundle(signing_key, now, *, bundle_id="bundle-1", block_threshold=85):
+    from karmasakshi.config.clock import FixedClock
+    from karmasakshi.domain.common import Principal
+    from karmasakshi.domain.enums import PrincipalType
+    from karmasakshi.intelligence import IntelligencePolicy
+    from karmasakshi.intelligence.policy import build_policy_bundle
+    from karmasakshi.policy import seal_policy_bundle
+
+    bundle = build_policy_bundle(
+        IntelligencePolicy(
+            block_threshold=block_threshold, review_threshold=min(1, block_threshold)
+        ),
+        bundle_id=bundle_id,
+        bundle_version="1.0",
+        issuer=Principal(principal_id="policy-admin", principal_type=PrincipalType.HUMAN),
+        created_at=now,
+        effective_from=now,
+    )
+    return seal_policy_bundle(bundle, signing_key, clock=FixedClock(now))
+
+
+def test_authorize_with_policy_bundle_binds_hash_into_grant(
+    engine_factory,
+    manifest_factory,
+    service_principal,
+    agent_principal,
+    issuer_signing_key,
+    now,
+    fake_adapter,
+):
+    engine = engine_factory()
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    sealed_bundle = _sealed_bundle(issuer_signing_key, now)
+
+    grant = _authorize(
+        engine,
+        sealed,
+        issuer=service_principal,
+        subject=agent_principal,
+        issuer_signing_key=issuer_signing_key,
+        now=now,
+        policy_bundle=sealed_bundle,
+    )
+    assert grant.policy_bundle_hash == sealed_bundle.seal.bundle_hash
+
+
+def test_commit_with_matching_policy_bundle_succeeds(
+    engine_factory,
+    manifest_factory,
+    service_principal,
+    agent_principal,
+    issuer_signing_key,
+    now,
+    fake_adapter,
+):
+    engine = engine_factory()
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    sealed_bundle = _sealed_bundle(issuer_signing_key, now)
+    grant = _authorize(
+        engine,
+        sealed,
+        issuer=service_principal,
+        subject=agent_principal,
+        issuer_signing_key=issuer_signing_key,
+        now=now,
+        policy_bundle=sealed_bundle,
+    )
+    result = engine.commit(sealed, grant, fake_adapter, context=None, policy_bundle=sealed_bundle)
+    assert result.success
+
+
+def test_commit_missing_required_policy_bundle_is_rejected(
+    engine_factory,
+    manifest_factory,
+    service_principal,
+    agent_principal,
+    issuer_signing_key,
+    now,
+    fake_adapter,
+):
+    from karmasakshi.errors import PolicyBundleMismatchError
+
+    engine = engine_factory()
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    sealed_bundle = _sealed_bundle(issuer_signing_key, now)
+    grant = _authorize(
+        engine,
+        sealed,
+        issuer=service_principal,
+        subject=agent_principal,
+        issuer_signing_key=issuer_signing_key,
+        now=now,
+        policy_bundle=sealed_bundle,
+    )
+    with pytest.raises(PolicyBundleMismatchError):
+        engine.commit(sealed, grant, fake_adapter, context=None)
+
+
+def test_commit_with_swapped_policy_bundle_is_rejected(
+    engine_factory,
+    manifest_factory,
+    service_principal,
+    agent_principal,
+    issuer_signing_key,
+    now,
+    fake_adapter,
+):
+    """The core Phase 2 security property: a policy edit/swap between
+    authorize() and commit() must never silently change what was
+    approved -- committing against a *different*, validly-signed policy
+    bundle than the one bound into the grant must fail closed."""
+    from karmasakshi.errors import PolicyBundleMismatchError
+
+    engine = engine_factory()
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    original_bundle = _sealed_bundle(
+        issuer_signing_key, now, bundle_id="original", block_threshold=85
+    )
+    swapped_bundle = _sealed_bundle(issuer_signing_key, now, bundle_id="swapped", block_threshold=1)
+    grant = _authorize(
+        engine,
+        sealed,
+        issuer=service_principal,
+        subject=agent_principal,
+        issuer_signing_key=issuer_signing_key,
+        now=now,
+        policy_bundle=original_bundle,
+    )
+    with pytest.raises(PolicyBundleMismatchError):
+        engine.commit(sealed, grant, fake_adapter, context=None, policy_bundle=swapped_bundle)
+
+
+def test_commit_with_tampered_policy_bundle_is_rejected(
+    engine_factory,
+    manifest_factory,
+    service_principal,
+    agent_principal,
+    issuer_signing_key,
+    now,
+    fake_adapter,
+):
+    from karmasakshi.errors import PolicyBundleTamperedError
+
+    engine = engine_factory()
+    manifest = manifest_factory()
+    sealed = _prepare_and_seal(engine, fake_adapter, manifest, issuer_signing_key)
+    sealed_bundle = _sealed_bundle(issuer_signing_key, now)
+    grant = _authorize(
+        engine,
+        sealed,
+        issuer=service_principal,
+        subject=agent_principal,
+        issuer_signing_key=issuer_signing_key,
+        now=now,
+        policy_bundle=sealed_bundle,
+    )
+    tampered_inner = sealed_bundle.bundle.model_copy(
+        update={"payload": {**sealed_bundle.bundle.payload, "block_threshold": 1}}
+    )
+    tampered = sealed_bundle.model_copy(update={"bundle": tampered_inner})
+    with pytest.raises(PolicyBundleTamperedError):
+        engine.commit(sealed, grant, fake_adapter, context=None, policy_bundle=tampered)
+
+
+def test_commit_without_bound_policy_bundle_is_unaffected_by_extra_bundle(
+    authorized, fake_adapter, issuer_signing_key, now
+):
+    """Backward compatibility: a grant issued without a policy bundle
+    (``policy_bundle_hash is None``) must commit exactly as before, even
+    if the caller happens to pass an (irrelevant) policy_bundle."""
+    engine, sealed, grant = authorized
+    assert grant.policy_bundle_hash is None
+    sealed_bundle = _sealed_bundle(issuer_signing_key, now)
+    result = engine.commit(sealed, grant, fake_adapter, context=None, policy_bundle=sealed_bundle)
+    assert result.success

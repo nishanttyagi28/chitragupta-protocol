@@ -30,6 +30,7 @@ def issue_grant(
     nonce: str,
     signing_key: SigningKey,
     manifest_hash: str | None = None,
+    policy_bundle_hash: str | None = None,
     max_uses: int = 1,
     parent_grant_id: str | None = None,
     clock: Clock = SYSTEM_CLOCK,
@@ -48,6 +49,7 @@ def issue_grant(
     unsigned = ExecutionGrant(
         grant_id=grant_id,
         manifest_hash=manifest_hash,
+        policy_bundle_hash=policy_bundle_hash,
         issuer=issuer,
         subject=subject,
         audience=audience,

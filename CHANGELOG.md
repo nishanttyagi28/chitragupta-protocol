@@ -20,6 +20,19 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   for exactly what is and is not enforced. See
   [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for
   the full build ledger and remaining phases of this program.
+- **Signed policy bundles** (`karmasakshi.policy`): a cryptographic
+  envelope (`PolicyBundle`/`SealedPolicyBundle`, sealed/verified the same
+  way `EffectManifest` is) around a versioned `IntelligencePolicy`, with
+  an explicit effective window. `ExecutionGrant.policy_bundle_hash` binds
+  a grant to one exact policy bundle at authorization time;
+  `engine.commit()` requires the identical bundle (by hash) to be
+  re-verified before executing, so a policy edit or swap after approval
+  can never silently change what a grant authorizes (new invariant #31).
+  An agent principal cannot be a policy bundle's issuer (invariant #32,
+  mirroring invariant #30). Integrated into the CLI (`karmasakshi policy
+  create/sign/verify`, `--policy-bundle-id` on `grant issue`/`execute`)
+  and the API (`POST /policy/bundles`, `--policy_bundle_id` on
+  `/approve`/`/execute`). See [docs/policy-bundles.md](docs/policy-bundles.md).
 
 ## [0.1.0] - 2026-07-27
 

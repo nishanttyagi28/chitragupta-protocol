@@ -13,13 +13,18 @@ or enforces its recommendation. See docs/effect-intelligence.md.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from karmasakshi.canonical.serialize import canonical_hash
+from karmasakshi.domain.common import Principal
 from karmasakshi.domain.enums import (
     BlastRadiusClassification,
+    PrincipalType,
     ReversibilityClassification,
     RiskClassification,
 )
+from karmasakshi.errors import PolicyBundleIssuerNotAuthorizedError
+from karmasakshi.policy.bundle import PolicyBundle
 
 DEFAULT_RISK_BASE_POINTS: dict[str, int] = {
     RiskClassification.LOW.value: 5,
@@ -138,4 +143,158 @@ class IntelligencePolicy:
 
 DEFAULT_INTELLIGENCE_POLICY = IntelligencePolicy()
 
-__all__ = ["DEFAULT_INTELLIGENCE_POLICY", "IntelligencePolicy"]
+#: The ``policy_type`` a signed ``PolicyBundle`` must declare to be
+#: interpreted as an ``IntelligencePolicy`` payload (see
+#: ``build_policy_bundle``/``policy_from_bundle_payload`` below and
+#: docs/policy-bundles.md).
+POLICY_TYPE_INTELLIGENCE = "intelligence.v1"
+
+
+def build_policy_bundle(
+    policy: IntelligencePolicy,
+    *,
+    bundle_id: str,
+    bundle_version: str,
+    issuer: Principal,
+    created_at: datetime,
+    effective_from: datetime,
+    effective_until: datetime | None = None,
+    tenant_id: str | None = None,
+) -> PolicyBundle:
+    """Wrap ``policy`` in an unsigned :class:`PolicyBundle`, ready for
+    ``policy.sealing.seal_policy_bundle``.
+
+    Raises :class:`PolicyBundleIssuerNotAuthorizedError` if ``issuer`` is
+    an agent principal (invariant #30 applied to policy bundles: an agent
+    may draft policy content but may never be the authorizing issuer of
+    the bundle that governs it)."""
+    if issuer.principal_type == PrincipalType.AGENT:
+        raise PolicyBundleIssuerNotAuthorizedError(
+            "an agent principal cannot be the issuer of a policy bundle; the issuer "
+            "must be a human or service principal (invariant #30)"
+        )
+    return PolicyBundle(
+        bundle_id=bundle_id,
+        bundle_version=bundle_version,
+        policy_type=POLICY_TYPE_INTELLIGENCE,
+        payload=policy.canonical_dict(),
+        issuer=issuer,
+        tenant_id=tenant_id,
+        created_at=created_at,
+        effective_from=effective_from,
+        effective_until=effective_until,
+    )
+
+
+def _require(payload: dict[str, object], key: str) -> object:
+    if key not in payload:
+        raise ValueError(f"policy bundle payload is missing required key {key!r}")
+    return payload[key]
+
+
+def _as_str(payload: dict[str, object], key: str) -> str:
+    v = _require(payload, key)
+    if not isinstance(v, str):
+        raise ValueError(
+            f"policy bundle payload key {key!r} must be a string, got {type(v).__name__}"
+        )
+    return v
+
+
+def _as_int(payload: dict[str, object], key: str) -> int:
+    v = _require(payload, key)
+    if not isinstance(v, int) or isinstance(v, bool):
+        raise ValueError(
+            f"policy bundle payload key {key!r} must be an int, got {type(v).__name__}"
+        )
+    return v
+
+
+def _as_dict_str_int(payload: dict[str, object], key: str) -> dict[str, int]:
+    v = _require(payload, key)
+    if not isinstance(v, dict):
+        raise ValueError(
+            f"policy bundle payload key {key!r} must be an object, got {type(v).__name__}"
+        )
+    result: dict[str, int] = {}
+    for k, val in v.items():
+        if not isinstance(k, str) or not isinstance(val, int) or isinstance(val, bool):
+            raise ValueError(f"policy bundle payload key {key!r} must map str -> int")
+        result[k] = val
+    return result
+
+
+def _as_tuple_str(payload: dict[str, object], key: str) -> tuple[str, ...]:
+    v = _require(payload, key)
+    if not isinstance(v, list) or not all(isinstance(item, str) for item in v):
+        raise ValueError(f"policy bundle payload key {key!r} must be a list of strings")
+    return tuple(v)
+
+
+def _as_int3(payload: dict[str, object], key: str) -> tuple[int, int, int]:
+    v = _require(payload, key)
+    if not isinstance(v, list) or len(v) != 3 or not all(isinstance(item, int) for item in v):
+        raise ValueError(f"policy bundle payload key {key!r} must be a 3-element list of ints")
+    a, b, c = v
+    return (a, b, c)
+
+
+def _as_amount_thresholds(payload: dict[str, object], key: str) -> dict[str, tuple[int, int, int]]:
+    v = _require(payload, key)
+    if not isinstance(v, dict):
+        raise ValueError(f"policy bundle payload key {key!r} must be an object")
+    result: dict[str, tuple[int, int, int]] = {}
+    for currency, thresholds in v.items():
+        if (
+            not isinstance(currency, str)
+            or not isinstance(thresholds, list)
+            or len(thresholds) != 3
+            or not all(isinstance(item, int) for item in thresholds)
+        ):
+            raise ValueError(f"policy bundle payload key {key!r} is malformed")
+        a, b, c = thresholds
+        result[currency] = (a, b, c)
+    return result
+
+
+def policy_from_bundle_payload(payload: dict[str, object]) -> IntelligencePolicy:
+    """Reconstruct an :class:`IntelligencePolicy` from a verified bundle's
+    payload. Only call this *after*
+    ``policy.sealing.verify_policy_bundle`` has succeeded -- this function
+    does no cryptographic verification of its own, it only parses already-
+    trusted content back into a policy object. Raises ``ValueError`` if the
+    payload's shape does not match what ``IntelligencePolicy.canonical_dict()``
+    produces (fail closed on a malformed payload rather than crash
+    unpredictably or silently substitute a default)."""
+    return IntelligencePolicy(
+        policy_id=_as_str(payload, "policy_id"),
+        policy_version=_as_str(payload, "policy_version"),
+        risk_base_points=_as_dict_str_int(payload, "risk_base_points"),
+        blast_radius_points=_as_dict_str_int(payload, "blast_radius_points"),
+        reversibility_points=_as_dict_str_int(payload, "reversibility_points"),
+        amount_thresholds=_as_amount_thresholds(payload, "amount_thresholds"),
+        default_amount_thresholds=_as_int3(payload, "default_amount_thresholds"),
+        max_recommended_ttl_seconds=_as_int(payload, "max_recommended_ttl_seconds"),
+        sensitive_target_patterns=_as_tuple_str(payload, "sensitive_target_patterns"),
+        restricted_effect_types=_as_tuple_str(payload, "restricted_effect_types"),
+        max_delegation_depth=_as_int(payload, "max_delegation_depth"),
+        # canonical_dict() stores this as repr(float) to keep floats out of
+        # the canonicalized payload (canonical/serialize.py rejects floats);
+        # repr()/float() round-trip exactly for any float Python can produce.
+        max_acceptable_failure_rate=float(_as_str(payload, "max_acceptable_failure_rate")),
+        block_threshold=_as_int(payload, "block_threshold"),
+        review_threshold=_as_int(payload, "review_threshold"),
+        risk_level_thresholds=_as_int3(payload, "risk_level_thresholds"),
+        max_required_human_approvals=_as_int(payload, "max_required_human_approvals"),
+        cooling_off_high_seconds=_as_int(payload, "cooling_off_high_seconds"),
+        cooling_off_critical_seconds=_as_int(payload, "cooling_off_critical_seconds"),
+    )
+
+
+__all__ = [
+    "DEFAULT_INTELLIGENCE_POLICY",
+    "POLICY_TYPE_INTELLIGENCE",
+    "IntelligencePolicy",
+    "build_policy_bundle",
+    "policy_from_bundle_payload",
+]

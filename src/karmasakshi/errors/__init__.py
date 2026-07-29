@@ -158,6 +158,44 @@ class AuditTamperedError(AuditError):
     """Audit chain hash verification failed."""
 
 
+# --- Policy bundles ----------------------------------------------------------------
+
+
+class PolicyBundleError(KarmaSakshiError):
+    """Base class for signed policy bundle errors."""
+
+
+class PolicyBundleTamperedError(PolicyBundleError):
+    """Recomputed policy bundle hash does not match the sealed hash."""
+
+
+class PolicyBundleNotYetEffectiveError(PolicyBundleError):
+    """Policy bundle's ``effective_from`` is in the future relative to now."""
+
+
+class PolicyBundleExpiredError(PolicyBundleError):
+    """Policy bundle's ``effective_until`` has passed relative to now."""
+
+
+class PolicyBundleTypeMismatchError(PolicyBundleError):
+    """Policy bundle's ``policy_type`` does not match what the caller expected."""
+
+
+class PolicyBundleMismatchError(PolicyBundleError):
+    """A grant bound to one policy bundle hash was presented with a different
+    (or missing) policy bundle at commit time -- a policy swap after
+    authorization must never silently alter what was approved."""
+
+
+class PolicyBundleIssuerNotAuthorizedError(PolicyBundleError):
+    """Attempted to build a policy bundle with an agent principal as its
+    issuer. A policy bundle's thresholds influence authorization outcomes,
+    so the same rule that forbids an agent from issuing an
+    ExecutionGrant (invariant #30) applies here: an agent may propose or
+    draft policy content, but may never be recorded as the authorizing
+    issuer of the bundle that governs it."""
+
+
 # --- Adapters --------------------------------------------------------------------
 
 

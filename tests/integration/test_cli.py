@@ -469,3 +469,152 @@ def test_passport_includes_assessment_section(workspace_args):
 
     result = _run(workspace_args + ["passport", manifest_id])
     assert "Effect Intelligence Assessment" in result.output
+
+
+# --- signed policy bundles (extreme-v2 Phase 2) -------------------------------
+
+
+def test_policy_create_sign_verify_round_trip(workspace_args):
+    _run(workspace_args + ["init"])
+    _run(workspace_args + ["key", "generate", "issuer-1"])
+
+    create_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "policy",
+            "create",
+            "refund-policy",
+            "--issuer-id",
+            "policy-admin",
+            "--issuer-type",
+            "human",
+            "--block-threshold",
+            "80",
+            "--review-threshold",
+            "30",
+        ]
+    )
+    data = json.loads(create_result.output)
+    assert data["bundle_id"] == "refund-policy"
+
+    sign_result = _run(
+        workspace_args + ["--json", "policy", "sign", "refund-policy", "--key-id", "issuer-1"]
+    )
+    assert json.loads(sign_result.output)["bundle_hash"].startswith("sha256:")
+
+    verify_result = _run(workspace_args + ["--json", "policy", "verify", "refund-policy"])
+    assert json.loads(verify_result.output)["valid"] is True
+
+
+def test_policy_verify_before_sign_fails(workspace_args):
+    _run(workspace_args + ["init"])
+    result = runner.invoke(app, workspace_args + ["policy", "verify", "does-not-exist"])
+    assert result.exit_code != 0
+
+
+def test_grant_and_execute_require_matching_policy_bundle(workspace_args, tmp_path):
+    _run(workspace_args + ["init"])
+    _run(workspace_args + ["key", "generate", "issuer-1"])
+    db_path = str(tmp_path / "policy-ledger.db")
+
+    _run(
+        workspace_args
+        + [
+            "policy",
+            "create",
+            "row-policy",
+            "--issuer-id",
+            "policy-admin",
+            "--block-threshold",
+            "80",
+            "--review-threshold",
+            "30",
+        ]
+    )
+    _run(workspace_args + ["policy", "sign", "row-policy", "--key-id", "issuer-1"])
+
+    prepare_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "prepare",
+            "--adapter",
+            "sqlite",
+            "--sqlite-db-path",
+            db_path,
+            "--row-operation",
+            "insert",
+            "--row-id",
+            "acct-policy-1",
+            "--new-balance",
+            "1000",
+            "--actor-id",
+            "agent-1",
+            "--principal-id",
+            "user-1",
+            "--idempotency-key",
+            "idem-cli-policy-1",
+        ]
+    )
+    manifest_id = json.loads(prepare_result.output)["manifest_id"]
+    _run(workspace_args + ["seal", manifest_id, "--key-id", "issuer-1"])
+
+    grant_result = _run(
+        workspace_args
+        + [
+            "--json",
+            "grant",
+            "issue",
+            manifest_id,
+            "--issuer-id",
+            "approver-1",
+            "--subject-id",
+            "agent-1",
+            "--key-id",
+            "issuer-1",
+            "--audience",
+            "sqlite.row",
+            "--policy-bundle-id",
+            "row-policy",
+        ]
+    )
+    grant_data = json.loads(grant_result.output)
+    assert grant_data["policy_bundle_hash"] is not None
+    grant_id = grant_data["grant_id"]
+
+    # Executing without the bound policy bundle must fail closed.
+    missing = runner.invoke(
+        app,
+        workspace_args
+        + [
+            "execute",
+            manifest_id,
+            "--grant-id",
+            grant_id,
+            "--adapter",
+            "sqlite",
+            "--sqlite-db-path",
+            db_path,
+        ],
+    )
+    assert missing.exit_code != 0
+
+    # Executing with the correct bundle succeeds.
+    ok = _run(
+        workspace_args
+        + [
+            "--json",
+            "execute",
+            manifest_id,
+            "--grant-id",
+            grant_id,
+            "--adapter",
+            "sqlite",
+            "--sqlite-db-path",
+            db_path,
+            "--policy-bundle-id",
+            "row-policy",
+        ]
+    )
+    assert json.loads(ok.output)["success"] is True
