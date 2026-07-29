@@ -106,6 +106,12 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   later binds a concrete effect. Multi-node single-grant saga execution
   for graph-bound plans is deferred to a later phase. See
   [docs/decision-envelopes.md](decision-envelopes.md).
+- **Independent witness quorum does not yet use sealed `witness.v1`
+  policy bundles** (statements bind a plain `WitnessPolicy` hash).
+  Durable multi-node witness collection stores are deferred to Phase 13+.
+  Witness quorum is optional at PROVE time unless callers invoke
+  `prove_with_witness_quorum`. See
+  [docs/witness-quorum.md](witness-quorum.md).
 - **The public sandbox demo (`KARMASAKSHI_PUBLIC_DEMO=1`) is a single
   shared, in-memory session**, not multi-tenant: every visitor to a given
   deployment sees and can affect the same sandbox state until it

@@ -58,6 +58,7 @@ from karmasakshi.errors import (
     SagaIllegalTransitionError,
     SeparationOfDutyViolationError,
     StaleManifestError,
+    WitnessQuorumNotMetError,
 )
 from karmasakshi.grants.issuer import issue_grant
 from karmasakshi.grants.model import ExecutionGrant, ScopeConstraints
@@ -87,6 +88,8 @@ from karmasakshi.saga.model import (
 )
 from karmasakshi.state_machine.record import LifecycleRecord
 from karmasakshi.state_machine.states import LifecycleState, is_revocable
+from karmasakshi.witness.model import WitnessPolicy, WitnessQuorumResult, WitnessStatement
+from karmasakshi.witness.quorum import evaluate_witness_quorum
 
 
 def _role_participation_metadata(role_assignment: RoleAssignment) -> dict[str, str]:
@@ -1340,6 +1343,91 @@ class KarmaSakshiEngine:
             metadata={"matched_expected": str(proof.matched_expected)},
         )
         return proof
+
+    # --- WITNESS QUORUM (PROVE-time gate; extreme-v2 Phase 9) ---------------
+
+    def evaluate_witnesses(
+        self,
+        sealed: SealedManifest,
+        *,
+        statements: tuple[WitnessStatement, ...] | list[WitnessStatement],
+        policy: WitnessPolicy,
+        expected_after_state_digest: str,
+        actor: Principal,
+        subject: Principal,
+    ) -> WitnessQuorumResult:
+        """Dry-run independent witness quorum evaluation (no raise on miss)."""
+        verify_seal(sealed, self._ctx.keyring)
+        result = evaluate_witness_quorum(
+            statements,
+            policy,
+            manifest_hash=sealed.seal.manifest_hash,
+            expected_after_state_digest=expected_after_state_digest,
+            actor=actor,
+            subject=subject,
+            keyring=self._ctx.keyring,
+            now=self._ctx.clock.now(),
+        )
+        self._ctx.audit.record(
+            event_type="witness.quorum_evaluated",
+            decision="satisfied" if result.satisfied else "not_satisfied",
+            manifest_id=sealed.manifest.manifest_id,
+            manifest_hash=sealed.seal.manifest_hash,
+            actor_id=actor.principal_id,
+            metadata={
+                "accepted_count": str(len(result.accepted_witness_ids)),
+                "accepted_witness_ids": ",".join(result.accepted_witness_ids),
+                "witness_set_hash": result.witness_set_hash or "",
+                "witness_policy_hash": result.witness_policy_hash,
+                "required_witnesses": str(policy.required_witnesses),
+            },
+        )
+        return result
+
+    def prove_with_witness_quorum(
+        self,
+        sealed: SealedManifest,
+        *,
+        statements: tuple[WitnessStatement, ...] | list[WitnessStatement],
+        policy: WitnessPolicy,
+        expected_after_state_digest: str,
+        actor: Principal,
+        subject: Principal,
+    ) -> WitnessQuorumResult:
+        """Assert independent witness quorum for PROVE-time acceptance.
+
+        Does not change the lifecycle state machine (PROVE is the Action
+        Passport / evidence surface, not a separate state). Raises
+        :class:`WitnessQuorumNotMetError` when unsatisfied.
+        """
+        result = self.evaluate_witnesses(
+            sealed,
+            statements=statements,
+            policy=policy,
+            expected_after_state_digest=expected_after_state_digest,
+            actor=actor,
+            subject=subject,
+        )
+        if not result.satisfied:
+            reasons = "; ".join(result.rejection_reasons) or "insufficient distinct witnesses"
+            raise WitnessQuorumNotMetError(
+                f"witness quorum not met for manifest {sealed.seal.manifest_hash}: "
+                f"accepted={len(result.accepted_witness_ids)} "
+                f"required={policy.required_witnesses}; {reasons}"
+            )
+        # Re-record assert path distinctly for auditors.
+        self._ctx.audit.record(
+            event_type="witness.quorum_asserted",
+            decision="satisfied",
+            manifest_id=sealed.manifest.manifest_id,
+            manifest_hash=sealed.seal.manifest_hash,
+            actor_id=actor.principal_id,
+            metadata={
+                "witness_set_hash": result.witness_set_hash or "",
+                "witness_policy_hash": result.witness_policy_hash,
+            },
+        )
+        return result
 
     # --- COMPENSATE ---------------------------------------------------------
 

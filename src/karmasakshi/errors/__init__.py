@@ -232,6 +232,29 @@ class CompensationPassportIntegrityError(CompensationError):
     to treat a mutated Action Passport as a compensation record."""
 
 
+# --- Independent witness quorum (extreme-v2 Phase 9) -------------------------
+
+
+class WitnessError(KarmaSakshiError):
+    """Base class for independent witness quorum errors."""
+
+
+class WitnessIssuerNotAuthorizedError(WitnessError):
+    """An agent principal attempted to sign a witness statement."""
+
+
+class WitnessExpiredError(WitnessError):
+    """Witness statement expiry has passed relative to now."""
+
+
+class WitnessBatchTooLargeError(WitnessError):
+    """More witness statements were submitted than the policy bound allows."""
+
+
+class WitnessQuorumNotMetError(WitnessError):
+    """Independent witness quorum was not satisfied."""
+
+
 # --- Saga orchestration (extreme-v2 Phase 8) ---------------------------------
 
 

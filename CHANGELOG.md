@@ -103,6 +103,12 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   steps; AMBIGUOUS blocks blind retry; reverse Phase 7 compensation
   recording (invariants #46–#49). Not exactly-once; not multi-node
   single-grant. See [docs/saga-orchestration.md](docs/saga-orchestration.md).
+- **Independent witness quorum** (`karmasakshi.witness`): signed
+  post-COMMIT observations distinct from AUTHORIZE-time approvals;
+  agents/actor/subject cannot satisfy quorum by default; digest and
+  policy-hash binding; deterministic `witness_set_hash` (invariants
+  #50–#53). Engine `prove_with_witness_quorum`, CLI `witness`, API
+  `/witnesses`. See [docs/witness-quorum.md](docs/witness-quorum.md).
 
 ## [0.1.0] - 2026-07-27
 

@@ -83,6 +83,13 @@ class ActionPassport(BaseModel):
     observed_after_state_digest: str | None = None
     observation_detail: str | None = None
 
+    # Independent witness quorum (extreme-v2 Phase 9). None when prove-time
+    # witness quorum was not required / not evaluated for this passport.
+    witness_set_hash: str | None = None
+    witness_policy_hash: str | None = None
+    witness_quorum_satisfied: bool | None = None
+    accepted_witness_ids: tuple[str, ...] = ()
+
     # Compensation
     compensation_attempted: bool | None = None
     compensation_succeeded: bool | None = None

@@ -32,6 +32,7 @@ from karmasakshi.grants.model import ExecutionGrant
 from karmasakshi.intelligence.model import EffectAssessment
 from karmasakshi.policy.bundle import SealedPolicyBundle
 from karmasakshi.stores.sqlite import SQLiteGrantStore
+from karmasakshi.witness.model import WitnessStatement
 
 
 @dataclass
@@ -50,6 +51,7 @@ class ApiState:
     assessments: dict[str, EffectAssessment] = field(default_factory=dict)
     policy_bundles: dict[str, SealedPolicyBundle] = field(default_factory=dict)
     approval_statements: dict[str, list[ApprovalStatement]] = field(default_factory=dict)
+    witness_statements: dict[str, list[WitnessStatement]] = field(default_factory=dict)
     causal_graphs: dict[str, CausalEffectGraph] = field(default_factory=dict)
     decision_envelopes: dict[str, DecisionEnvelope] = field(default_factory=dict)
     compensation_passports: dict[str, CompensationPassport] = field(default_factory=dict)

@@ -39,6 +39,7 @@ from karmasakshi.intelligence.model import EffectAssessment
 from karmasakshi.policy.bundle import PolicyBundle, SealedPolicyBundle
 from karmasakshi.state_machine.states import LifecycleState
 from karmasakshi.stores.sqlite import SQLiteGrantStore
+from karmasakshi.witness.model import WitnessStatement
 
 DEFAULT_WORKSPACE_ENV = "KARMASAKSHI_HOME"
 DEFAULT_WORKSPACE_DIRNAME = ".karmasakshi"
@@ -59,6 +60,7 @@ class Workspace:
         self.grants_dir = self.root / "grants"
         self.policies_dir = self.root / "policies"
         self.approvals_dir = self.root / "approvals"
+        self.witnesses_dir = self.root / "witnesses"
         self.causal_graphs_dir = self.root / "causal-graphs"
         self.envelopes_dir = self.root / "envelopes"
 
@@ -70,6 +72,7 @@ class Workspace:
             self.grants_dir,
             self.policies_dir,
             self.approvals_dir,
+            self.witnesses_dir,
             self.causal_graphs_dir,
             self.envelopes_dir,
         ):
@@ -224,6 +227,25 @@ class Workspace:
         for path in sorted(self.approvals_dir.glob(f"{prefix}.*.json")):
             statements.append(
                 ApprovalStatement.model_validate_json(path.read_text(encoding="utf-8"))
+            )
+        return tuple(statements)
+
+    # --- witness statements (extreme-v2 Phase 9) -------------------------------
+
+    def save_witness_statement(self, statement: WitnessStatement) -> Path:
+        path = (
+            self.witnesses_dir
+            / f"{statement.manifest_hash.removeprefix('sha256:')}.{statement.statement_id}.json"
+        )
+        path.write_text(statement.model_dump_json(indent=2), encoding="utf-8")
+        return path
+
+    def load_witness_statements(self, manifest_hash: str) -> tuple[WitnessStatement, ...]:
+        prefix = manifest_hash.removeprefix("sha256:")
+        statements = []
+        for path in sorted(self.witnesses_dir.glob(f"{prefix}.*.json")):
+            statements.append(
+                WitnessStatement.model_validate_json(path.read_text(encoding="utf-8"))
             )
         return tuple(statements)
 

@@ -32,6 +32,8 @@ from karmasakshi.api.schemas import (
     QuorumEvaluateIn,
     QuorumGrantIn,
     SeparationOfDutyPolicyBundleCreateIn,
+    WitnessEvaluateIn,
+    WitnessStatementIn,
 )
 from karmasakshi.api.state import ApiState
 from karmasakshi.approval import (
@@ -820,6 +822,85 @@ def approve_with_quorum(manifest_id: str, body: QuorumGrantIn, request: Request)
         raise HTTPException(403, str(exc)) from exc
     state.register_grant(manifest_id, grant)
     return {"grant_id": grant.grant_id, "approval_set_hash": grant.approval_set_hash}
+
+
+@router.post("/manifests/{manifest_id}/witnesses", dependencies=[Depends(require_auth)])
+def submit_witness(manifest_id: str, body: WitnessStatementIn, request: Request) -> dict[str, Any]:
+    """Record one independent witness statement for a verified outcome digest.
+
+    Honesty note: like approvals, this reference control plane signs with
+    the single service key; production deployments should use per-witness
+    keys (see CLI ``karmasakshi witness sign``).
+    """
+    from karmasakshi.witness import WitnessPolicy, sign_witness_statement
+
+    state = _state(request)
+    sealed = state.sealed_manifests.get(manifest_id)
+    if sealed is None:
+        raise HTTPException(404, "manifest not found")
+    policy = WitnessPolicy(required_witnesses=body.required_witnesses)
+    try:
+        statement = sign_witness_statement(
+            statement_id=str(uuid.uuid4()),
+            manifest_hash=sealed.seal.manifest_hash,
+            witness_policy_hash=policy.policy_hash(),
+            observed_after_state_digest=body.observed_after_state_digest,
+            matched_expected=body.matched_expected,
+            witness=Principal(**body.witness.model_dump()),
+            signing_key=state.signing_key,
+            expires_at=datetime.now(timezone.utc) + timedelta(seconds=body.ttl_seconds),
+            nonce=str(uuid.uuid4()),
+        )
+    except KarmaSakshiError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    state.witness_statements.setdefault(manifest_id, []).append(statement)
+    return statement.model_dump(mode="json")
+
+
+@router.get("/manifests/{manifest_id}/witnesses", dependencies=[Depends(require_auth)])
+def list_witnesses(manifest_id: str, request: Request) -> dict[str, Any]:
+    state = _state(request)
+    statements = state.witness_statements.get(manifest_id, [])
+    return {"statements": [s.model_dump(mode="json") for s in statements]}
+
+
+@router.post("/manifests/{manifest_id}/witnesses/evaluate", dependencies=[Depends(require_auth)])
+def evaluate_witnesses(
+    manifest_id: str, body: WitnessEvaluateIn, request: Request
+) -> dict[str, Any]:
+    """Evaluate (optionally assert) independent witness quorum for PROVE time."""
+    from karmasakshi.witness import WitnessPolicy
+
+    state = _state(request)
+    sealed = state.sealed_manifests.get(manifest_id)
+    if sealed is None:
+        raise HTTPException(404, "manifest not found")
+    policy = WitnessPolicy(required_witnesses=body.required_witnesses)
+    statements = tuple(state.witness_statements.get(manifest_id, []))
+    actor = Principal(**body.actor.model_dump())
+    subject = Principal(**body.subject.model_dump())
+    try:
+        if body.assert_quorum:
+            result = state.engine.prove_with_witness_quorum(
+                sealed,
+                statements=statements,
+                policy=policy,
+                expected_after_state_digest=body.expected_after_state_digest,
+                actor=actor,
+                subject=subject,
+            )
+        else:
+            result = state.engine.evaluate_witnesses(
+                sealed,
+                statements=statements,
+                policy=policy,
+                expected_after_state_digest=body.expected_after_state_digest,
+                actor=actor,
+                subject=subject,
+            )
+    except KarmaSakshiError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    return result.model_dump(mode="json")
 
 
 @router.post("/grants/{grant_id}/revoke", dependencies=[Depends(require_auth)])

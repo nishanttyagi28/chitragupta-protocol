@@ -57,6 +57,10 @@ def build_passport(
     causal_graph: CausalEffectGraph | None = None,
     compensation_manifest_hash: str | None = None,
     compensation_passport_status: str | None = None,
+    witness_set_hash: str | None = None,
+    witness_policy_hash: str | None = None,
+    witness_quorum_satisfied: bool | None = None,
+    accepted_witness_ids: tuple[str, ...] = (),
     clock: Clock = SYSTEM_CLOCK,
 ) -> ActionPassport:
     manifest = sealed.manifest
@@ -141,6 +145,10 @@ def build_passport(
             outcome_proof.observed_after_state_digest if outcome_proof is not None else None
         ),
         observation_detail=outcome_proof.detail if outcome_proof is not None else None,
+        witness_set_hash=witness_set_hash,
+        witness_policy_hash=witness_policy_hash,
+        witness_quorum_satisfied=witness_quorum_satisfied,
+        accepted_witness_ids=accepted_witness_ids,
         compensation_attempted=(
             compensation_result.attempted if compensation_result is not None else None
         ),

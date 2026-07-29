@@ -176,6 +176,26 @@ class QuorumEvaluateIn(BaseModel):
     subject: PrincipalIn
 
 
+class WitnessStatementIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    witness: PrincipalIn
+    observed_after_state_digest: str
+    matched_expected: bool = True
+    required_witnesses: int = 1
+    ttl_seconds: int = 3600
+
+
+class WitnessEvaluateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_after_state_digest: str
+    actor: PrincipalIn
+    subject: PrincipalIn
+    required_witnesses: int = 1
+    assert_quorum: bool = False
+
+
 class QuorumGrantIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -252,4 +272,6 @@ __all__ = [
     "QuorumEvaluateIn",
     "QuorumGrantIn",
     "SeparationOfDutyPolicyBundleCreateIn",
+    "WitnessEvaluateIn",
+    "WitnessStatementIn",
 ]
