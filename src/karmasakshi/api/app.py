@@ -42,6 +42,9 @@ def create_app(*, state: ApiState | None = None, data_dir: Path | None = None) -
         redoc_url=None if public_demo else "/redoc",
         openapi_url=None if public_demo else "/openapi.json",
     )
+    from karmasakshi.protection import ResourceProtectionMiddleware, policy_from_env
+
+    app.add_middleware(ResourceProtectionMiddleware, policy=policy_from_env())
     app.state.karmasakshi = state or build_default_state(data_dir)
     app.include_router(router)
 

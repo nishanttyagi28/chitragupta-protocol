@@ -57,7 +57,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | 17. Trusted adapter registry | **Implemented** | Versioned allow-list; fail-closed; see below |
 | 18. Adapter conformance kit | **Implemented** | Structural contract checks; see below |
 | 19. Multi-tenant control plane | **Implemented** | Process-local isolation; see below |
-| 20. Resource/DoS protection | Not started | |
+| 20. Resource/DoS protection | **Implemented** | API size + rate ceilings; see below |
 | 21. Adversarial/fuzz testing | Partial | Phase 1's own scoring engine has adversarial + property coverage; no new coverage added for pre-existing v0.1 components beyond the baseline fix |
 | 22. State-machine model checking | Not started | v0.1's `tests/property/test_state_machine_properties.py` (BFS reachability) is unchanged |
 | 23. Action Passport V2 | Not started | Phase 1 added optional `assessment_*` fields to the existing (v1) passport rather than a new versioned schema |
@@ -622,17 +622,25 @@ Confirmed Phase 5 on `main` at `eb94aab`. Baseline suite:
 
 ## Exact next executable step
 
-**Phase 20: Resource and DoS protection.** Bounded request sizes, rate
-limits, and fail-closed resource ceilings on API / engine paths.
+**Phase 21: Adversarial and fuzz testing.** Expand Hypothesis/adversarial
+coverage across grants, adapters, and remaining protocol surfaces.
 
 ## Resumable checkpoint
 
-- last merged phase on main: Phase 18 (`ea45e84`, PR #33)
-- current branch: `cursor/phase19-multi-tenant-control-plane-ffca`
-- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/34
-- test counts: **695 passed, 8 skipped**; coverage **90.14%**
-- quality gates: ruff / mypy / bandit / build / twine clean
-- exact next phase: 20 — Resource and DoS protection
+- last merged phase on main: Phase 19 (`49ad114`, PR #34)
+- current branch: `cursor/phase20-resource-dos-protection-ffca` (stacked on Phase 19)
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/35
+- exact next phase: 21 — Adversarial and fuzz testing
+
+## Phase 20: Resource and DoS protection
+
+**Status: implemented on branch (stacked on Phase 19).**
+
+### What landed
+
+- `ResourceProtectionPolicy` / `FixedWindowRateLimiter` / middleware
+- Wired into `create_app`; `/health` and `/ready` exempt
+- Invariants #71–#72; docs: `docs/resource-protection.md`
 
 ## Phase 19: Multi-tenant control plane
 
