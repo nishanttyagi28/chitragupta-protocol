@@ -592,9 +592,27 @@ Results at the time of this commit: `ruff check`/`ruff format --check`/
 `pip-audit` → same 1 known dev-only `pytest` CVE as prior phases
 (unresolved).
 
+### Coverage follow-up (CI gate)
+
+PR #20 initially failed `CI / Coverage` (~85%). Follow-up commit adds:
+
+- `tests/unit/test_decision_envelope_coverage.py` — constraint/model/seal/
+  substitution/plan edge paths
+- `tests/integration/test_cli_envelope.py` — CLI create/verify/substitute +
+  graph pin path (also lifts `graph_cmd` coverage)
+- `tests/integration/test_api_decision_envelopes.py` — HTTP create/get/
+  substitute + approve/execute binding
+- `constraints.py` round-trip fix: range kinds reject only non-`None`
+  `exact_value` so JSON rehydration of `exact_value: null` remains valid
+
+Local gates after follow-up: **559 passed, 6 skipped**; coverage
+**90.55%** (`--cov-fail-under=90`); ruff/mypy/bandit/build/twine clean.
+
 ### Commit SHAs / PR
 
 - `57371d7` — Phase 6: Atomic plan authorization / constrained decision envelopes
+- follow-up SHA recorded after commit on `cursor/phase6-decision-envelopes-ffca`
+- PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/20
 
 ### Session baseline (this agent, before Phase 6)
 
@@ -612,12 +630,14 @@ seals/grants; distinguish compensation attempted vs verified.
 
 - last merged phase on main at session start: Phase 5 (`eb94aab`)
 - current branch: `cursor/phase6-decision-envelopes-ffca`
-- open PR: (pending create; branch `cursor/phase6-decision-envelopes-ffca`)
-- latest green commit on this branch: `57371d7`
-- test counts: **543 passed, 6 skipped**
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/20
+- latest local green commit on this branch: pending coverage follow-up push
+- test counts: **559 passed, 6 skipped**; coverage **90.55%**
 - known blockers: Redis-only skips (no local Redis); pip-audit pytest CVE
-  (dev-only); Docker not required for this phase
+  (dev-only); Docker not required for this phase; merge blocked until PR
+  #20 CI Coverage is green
 - exact next command after merge: begin Phase 7 from updated `main`
+  (Phase 7 WIP may already be in `git stash` as `phase7-wip`)
 - exact next phase: 7 — Compensation manifests and separate Compensation
   Passports
 
