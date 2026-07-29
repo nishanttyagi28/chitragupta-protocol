@@ -629,8 +629,9 @@ audit journal interface without inventing consensus.
 
 - last merged phase on main: Phase 12 (`504e7aa`, PR #27)
 - current branch: `cursor/phase13-durable-lifecycle-ffca`
-- open PR: (pending)
-- latest local green: pending full suite
+- open PR: (pending push)
+- latest local green: **646 passed, 6 skipped**; coverage **90.03%**;
+  ruff/mypy/bandit/build/twine clean
 - known blockers: Redis-only skips; pip-audit pytest CVE (dev-only);
   lifecycle SQLite is single-node only
 - exact next command after Phase 13 merge: begin Phase 14 from updated `main`
@@ -648,6 +649,7 @@ audit journal interface without inventing consensus.
   memory rollback on store failure; hydrate on `_get_record`
 - CLI workspace + API default state open lifecycle.db
 - Reconstruct prefers store, audit fallback for pre-Phase-13 workspaces
+- Invariant **#64**
 - Docs: `docs/durable-lifecycle-storage.md`
 
 ### Design decisions
@@ -656,6 +658,10 @@ audit journal interface without inventing consensus.
 - Lifecycle store is durable convenience state for the *next* transition
 - No Redis / multi-node lifecycle claims
 - Saga/budget/witness durability remain separate follow-ons
+
+### Local gates
+
+**646 passed, 6 skipped**; coverage **90.03%**.
 
 ## Phase 12: Atomic authority budgets
 
