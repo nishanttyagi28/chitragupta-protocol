@@ -498,8 +498,8 @@ known dev-only vulnerability as Phases 1-3 (unchanged, unresolved).
 
 ### Commit SHAs / PR
 
-Recorded after this slice's PR is opened and merged, matching the
-pattern established for Phases 1-3.
+- `ee28813` — Phase 4: Separation of Duties implementation, tests, docs
+- PR [#18](https://github.com/nishanttyagi28/karmasakshi-protocol/pull/18) — merged (`5eb9ab4`), all 14 CI checks green
 
 ## Exact next executable step
 
