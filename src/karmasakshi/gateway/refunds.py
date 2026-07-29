@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from karmasakshi.adapters.payment_simulator import PaymentRequest
@@ -25,6 +25,16 @@ from karmasakshi.domain.enums import PrincipalType
 from karmasakshi.errors import KarmaSakshiError
 from karmasakshi.gateway.api import require_gateway_session, resolve_org_runtime
 from karmasakshi.gateway.models import GatewayUser
+from karmasakshi.gateway.refund_schemas import (
+    RefundAssessmentOut,
+    RefundDenyIn,
+    RefundDenyResult,
+    RefundDetailOut,
+    RefundEffectView,
+    RefundListOut,
+    RefundPolicyDecisionOut,
+    RefundSummaryOut,
+)
 from karmasakshi.gateway.schemas import validate_principal_safe_id
 from karmasakshi.grants.model import ScopeConstraints
 from karmasakshi.intelligence.policy import IntelligencePolicy, build_policy_bundle
@@ -98,6 +108,171 @@ def _human(principal_id: str) -> Principal:
     return Principal(principal_id=principal_id, principal_type=PrincipalType.HUMAN)
 
 
+def _assessment_out(assessment: Any) -> RefundAssessmentOut:
+    return RefundAssessmentOut(
+        score=assessment.score,
+        risk_level=assessment.risk_level.value,
+        signals=assessment.signals,
+        recommendation=assessment.recommendation.value,
+        required_human_approvals=assessment.required_human_approvals,
+        required_service_approvals=assessment.required_service_approvals,
+        cooling_off_period_seconds=assessment.cooling_off_period_seconds,
+        required_witness_quorum=assessment.required_witness_quorum,
+        required_verification_strength=assessment.required_verification_strength.value,
+        policy_id=assessment.policy_id,
+        policy_version=assessment.policy_version,
+        policy_hash=assessment.policy_hash,
+        explanation=assessment.explanation,
+    )
+
+
+def _denial_event(state: Any, manifest_id: str) -> Any | None:
+    events = state.engine.context.audit.events_for_manifest(manifest_id)
+    return next(
+        (
+            event
+            for event in reversed(events)
+            if event.event_type == "manifest.authorization_denied"
+        ),
+        None,
+    )
+
+
+def _verification_status(
+    *, commit_attempted: bool, commit_success: bool | None, ambiguous: bool, proof: Any | None
+) -> str:
+    if proof is not None:
+        return "verified_match" if proof.matched_expected else "verified_mismatch"
+    if ambiguous:
+        return "ambiguous"
+    if not commit_attempted:
+        return "not_started"
+    if commit_success is True:
+        return "pending"
+    return "failed"
+
+
+def _refund_detail(state: Any, org_id: str, manifest_id: str) -> RefundDetailOut:
+    sealed = state.sealed_manifests.get(manifest_id)
+    if sealed is None:
+        raise HTTPException(404, "refund not found")
+    manifest = sealed.manifest
+    if manifest.effect_type != "payment.transfer" or manifest.parent_manifest_id is not None:
+        raise HTTPException(404, "refund not found")
+    assessment = state.assessments.get(manifest_id)
+    if assessment is None:
+        raise HTTPException(500, "refund assessment unavailable")
+
+    timeline = state.engine.context.audit.events_for_manifest(manifest_id)
+    denied = _denial_event(state, manifest_id)
+    grant_ids = state.grants_by_manifest.get(manifest_id, [])
+    grant = state.grants.get(grant_ids[-1]) if grant_ids else None
+    lifecycle_state = state.engine.get_lifecycle_state(manifest_id).value
+    decision_status = "denied" if denied is not None else ("approved" if grant else "pending")
+    commit = state.commit_results.get(manifest_id)
+    proof = state.outcome_proofs.get(manifest_id)
+    ambiguous = bool(
+        proof is None and commit and commit.detail and "ambiguous" in commit.detail.casefold()
+    )
+
+    fingerprint = manifest.state_fingerprint
+    if fingerprint is None or not fingerprint.value.startswith("balance:"):
+        raise HTTPException(500, "refund before-state fingerprint unavailable")
+    try:
+        source_balance_before = int(fingerprint.value.removeprefix("balance:"))
+        amount = int(manifest.parameters["amount_minor_units"])
+        fee = int(manifest.parameters["fee_minor_units"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(500, "refund effect parameters unavailable") from exc
+
+    observed_digest = None
+    if proof is not None:
+        observed_digest = proof.observed_after_state_digest
+    elif commit is not None:
+        observed_digest = commit.after_state_digest
+
+    effect = RefundEffectView(
+        source_account=str(manifest.parameters["source_account"]),
+        beneficiary=str(manifest.parameters["beneficiary"]),
+        amount_minor_units=amount,
+        fee_minor_units=fee,
+        currency=str(manifest.parameters["currency"]),
+        reference=str(manifest.parameters["reference"]),
+        idempotency_key=manifest.idempotency_key,
+        source_balance_before_minor_units=source_balance_before,
+        source_balance_expected_after_minor_units=source_balance_before - amount - fee,
+        beneficiary_credit_expected_after_minor_units=amount,
+        observed_after_state_digest=observed_digest,
+    )
+    assessment_out = _assessment_out(assessment)
+    return RefundDetailOut(
+        org_id=org_id,
+        manifest_id=manifest_id,
+        manifest_hash=sealed.seal.manifest_hash,
+        actor_id=manifest.actor.principal_id,
+        requested_by=manifest.principal.principal_id,
+        created_at=manifest.created_at,
+        expires_at=manifest.expires_at,
+        lifecycle_state=lifecycle_state,
+        decision_status=decision_status,
+        denied_by=None if denied is None else denied.actor_id,
+        denial_reason=None if denied is None else denied.metadata.get("reason"),
+        can_approve=lifecycle_state == "sealed" and denied is None and grant is None,
+        can_deny=lifecycle_state == "sealed" and denied is None and grant is None,
+        grant_id=None if grant is None else grant.grant_id,
+        authorized_by=None if grant is None else grant.issuer.principal_id,
+        effect=effect,
+        assessment=assessment_out,
+        policy_decision=RefundPolicyDecisionOut(
+            recommendation=assessment.recommendation.value,
+            policy_id=assessment.policy_id,
+            policy_version=assessment.policy_version,
+            policy_hash=assessment.policy_hash,
+            active_policy_bundle_id=state.active_policy_bundle_id,
+            bound_policy_bundle_hash=None if grant is None else grant.policy_bundle_hash,
+            required_human_approvals=assessment.required_human_approvals,
+            completed_human_approvals=1 if grant is not None else 0,
+            required_service_approvals=assessment.required_service_approvals,
+            cooling_off_period_seconds=assessment.cooling_off_period_seconds,
+            required_witness_quorum=assessment.required_witness_quorum,
+            required_verification_strength=assessment.required_verification_strength.value,
+        ),
+        commit_attempted=commit is not None,
+        commit_success=None if commit is None else commit.success,
+        provider_reference=None if commit is None else commit.provider_reference,
+        commit_detail=None if commit is None else commit.detail,
+        ambiguous=ambiguous,
+        verification_status=_verification_status(
+            commit_attempted=commit is not None,
+            commit_success=None if commit is None else commit.success,
+            ambiguous=ambiguous,
+            proof=proof,
+        ),
+        verification_matched_expected=None if proof is None else proof.matched_expected,
+        verification_detail=None if proof is None else proof.detail,
+        timeline=timeline,
+    )
+
+
+def _refund_summary(detail: RefundDetailOut) -> RefundSummaryOut:
+    return RefundSummaryOut(
+        manifest_id=detail.manifest_id,
+        manifest_hash=detail.manifest_hash,
+        created_at=detail.created_at,
+        beneficiary=detail.effect.beneficiary,
+        amount_minor_units=detail.effect.amount_minor_units,
+        currency=detail.effect.currency,
+        reference=detail.effect.reference,
+        lifecycle_state=detail.lifecycle_state,
+        decision_status=detail.decision_status,
+        risk_score=detail.assessment.score,
+        risk_level=detail.assessment.risk_level,
+        recommendation=detail.assessment.recommendation,
+        ambiguous=detail.ambiguous,
+        verification_status=detail.verification_status,
+    )
+
+
 @router.post("/policy")
 def activate_policy(
     org_id: str,
@@ -141,6 +316,48 @@ def activate_policy(
     }
 
 
+@router.get("/refunds")
+def list_refunds(
+    org_id: str,
+    request: Request,
+    user: Annotated[GatewayUser, Depends(require_gateway_session)],
+    decision_status: str | None = Query(default=None, max_length=32),
+) -> RefundListOut:
+    """List the authenticated organization's refund effects.
+
+    The organization scope is resolved before any manifest is enumerated,
+    so an otherwise-valid session cannot use this read model to discover
+    another tenant's identifiers or aggregate counts.
+    """
+    state = resolve_org_runtime(request, user, org_id)
+    refund_ids = [
+        mid
+        for mid, sealed in state.sealed_manifests.items()
+        if sealed.manifest.effect_type == "payment.transfer"
+        and sealed.manifest.parent_manifest_id is None
+    ]
+    details = [_refund_detail(state, org_id, mid) for mid in refund_ids]
+    refunds = [_refund_summary(detail) for detail in details]
+    if decision_status is not None:
+        normalized = decision_status.strip().casefold()
+        if normalized not in {"pending", "approved", "denied"}:
+            raise HTTPException(400, "decision_status must be pending, approved, or denied")
+        refunds = [refund for refund in refunds if refund.decision_status == normalized]
+    refunds.sort(key=lambda refund: refund.created_at, reverse=True)
+    return RefundListOut(refunds=refunds)
+
+
+@router.get("/refunds/{manifest_id}")
+def get_refund(
+    org_id: str,
+    manifest_id: str,
+    request: Request,
+    user: Annotated[GatewayUser, Depends(require_gateway_session)],
+) -> RefundDetailOut:
+    state = resolve_org_runtime(request, user, org_id)
+    return _refund_detail(state, org_id, manifest_id)
+
+
 @router.post("/refunds/propose")
 def propose_refund(
     org_id: str,
@@ -173,13 +390,7 @@ def propose_refund(
     return {
         "manifest_id": manifest.manifest_id,
         "manifest_hash": sealed.seal.manifest_hash,
-        "assessment": {
-            "score": assessment.score,
-            "risk_level": assessment.risk_level.value,
-            "recommendation": assessment.recommendation.value,
-            "required_human_approvals": assessment.required_human_approvals,
-            "explanation": assessment.explanation,
-        },
+        "assessment": _assessment_out(assessment).model_dump(mode="json"),
     }
 
 
@@ -199,6 +410,8 @@ def approve_refund(
     sealed = state.sealed_manifests.get(manifest_id)
     if sealed is None:
         raise HTTPException(404, "manifest not found")
+    if _denial_event(state, manifest_id) is not None:
+        raise HTTPException(409, "refund authorization was denied")
     policy_bundle = None
     bundle_id = body.policy_bundle_id or state.active_policy_bundle_id
     if bundle_id is not None:
@@ -223,6 +436,48 @@ def approve_refund(
         raise HTTPException(403, str(exc)) from exc
     state.register_grant(manifest_id, grant)
     return {"grant_id": grant.grant_id, "policy_bundle_hash": grant.policy_bundle_hash}
+
+
+@router.post("/refunds/{manifest_id}/deny")
+def deny_refund(
+    org_id: str,
+    manifest_id: str,
+    body: RefundDenyIn,
+    request: Request,
+    user: Annotated[GatewayUser, Depends(require_gateway_session)],
+) -> RefundDenyResult:
+    """Record a fail-closed human denial for one exact sealed effect.
+
+    The denying identity is taken exclusively from the authenticated
+    Gateway session. A denied effect remains sealed but can never be
+    approved by this refund API; the denial itself is durable in the
+    organization's append-only audit journal.
+    """
+    state = resolve_org_runtime(request, user, org_id)
+    sealed = state.sealed_manifests.get(manifest_id)
+    if sealed is None:
+        raise HTTPException(404, "manifest not found")
+    if _denial_event(state, manifest_id) is not None:
+        raise HTTPException(409, "refund authorization was already denied")
+    lifecycle_state = state.engine.get_lifecycle_state(manifest_id).value
+    if lifecycle_state != "sealed" or state.grants_by_manifest.get(manifest_id):
+        raise HTTPException(409, "only a pending sealed refund can be denied")
+    state.engine.context.audit.record(
+        event_type="manifest.authorization_denied",
+        decision="denied",
+        manifest_id=manifest_id,
+        manifest_hash=sealed.seal.manifest_hash,
+        actor_id=user.user_id,
+        from_state=lifecycle_state,
+        to_state=lifecycle_state,
+        metadata={"reason": body.reason},
+    )
+    return RefundDenyResult(
+        manifest_id=manifest_id,
+        denied=True,
+        denied_by=user.user_id,
+        reason=body.reason,
+    )
 
 
 @router.post("/refunds/{manifest_id}/execute")
@@ -482,16 +737,46 @@ def search_audit(
     org_id: str,
     request: Request,
     user: Annotated[GatewayUser, Depends(require_gateway_session)],
-    manifest_id: str | None = None,
+    manifest_id: str | None = Query(default=None, max_length=128),
+    q: str | None = Query(default=None, max_length=200),
+    event_type: str | None = Query(default=None, max_length=256),
+    decision: str | None = Query(default=None, max_length=256),
 ) -> dict[str, Any]:
-    """The organization's full audit trail, optionally filtered to one
-    manifest -- append-only and hash-chained (invariant #22)."""
+    """Search one organization's append-only, hash-chained audit trail."""
     state = resolve_org_runtime(request, user, org_id)
     events = (
         state.engine.context.audit.events_for_manifest(manifest_id)
         if manifest_id is not None
         else state.engine.context.audit.all_events()
     )
+    if event_type:
+        normalized_event_type = event_type.strip().casefold()
+        events = [event for event in events if event.event_type.casefold() == normalized_event_type]
+    if decision:
+        normalized_decision = decision.strip().casefold()
+        events = [event for event in events if event.decision.casefold() == normalized_decision]
+    if q:
+        needle = q.strip().casefold()
+        if needle:
+            events = [
+                event
+                for event in events
+                if needle
+                in " ".join(
+                    [
+                        event.event_type,
+                        event.decision,
+                        event.manifest_id or "",
+                        event.manifest_hash or "",
+                        event.grant_id or "",
+                        event.actor_id or "",
+                        event.from_state or "",
+                        event.to_state or "",
+                        *event.metadata.keys(),
+                        *event.metadata.values(),
+                    ]
+                ).casefold()
+            ]
     return {"events": [e.model_dump(mode="json") for e in events]}
 
 

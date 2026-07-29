@@ -43,6 +43,8 @@ with GatewayClient("http://localhost:8000", platform_token="dev-token") as clien
         reference="order-123",
         idempotency_key="idem-order-123",
     )
+    pending = client.list_refunds("acme", decision_status="pending")
+    exact_effect = client.get_refund("acme", proposal.manifest_id)
     approval = client.approve_refund("acme", proposal.manifest_id)
     execution = client.execute_refund("acme", proposal.manifest_id, grant_id=approval.grant_id)
     verification = client.verify_refund("acme", proposal.manifest_id)
@@ -50,6 +52,7 @@ with GatewayClient("http://localhost:8000", platform_token="dev-token") as clien
     passport = client.get_passport("acme", proposal.manifest_id, version="v2")
     pack = client.get_evidence_pack("acme", proposal.manifest_id)
     assert client.verify_evidence_pack(pack).all_verified
+    client.logout()
 ```
 
 ## Asynchronous usage
@@ -72,11 +75,13 @@ model (`ActionPassport`, `ActionPassportV2`, `EvidencePack`,
 `EvidencePackVerificationResult`, `AuditEvent`, and the org/user models
 in `karmasakshi.gateway.schemas`), the SDK parses responses directly into
 that same class -- not a hand-maintained duplicate that could drift out
-of sync. Only the refund-journey convenience endpoints (which the server
-returns as plain JSON objects, not pydantic-backed routes) get their own
-small `karmasakshi.sdk.models` types: `RefundProposalResult`,
-`ApprovalResult`, `ExecutionResult`, `VerificationResult`,
-`CompensationResult`, `PolicyActivationResult`.
+of sync. The Control Center refund read models are shared directly from
+`karmasakshi.gateway.refund_schemas`: `RefundSummaryOut`,
+`RefundDetailOut`, its exact-effect/risk/policy submodels, and
+`RefundDenyResult`. Small action responses remain in
+`karmasakshi.sdk.models`: `RefundProposalResult`, `ApprovalResult`,
+`ExecutionResult`, `VerificationResult`, `CompensationResult`, and
+`PolicyActivationResult`.
 
 ## Errors
 
@@ -101,6 +106,12 @@ reuse a token obtained elsewhere (e.g. restored from secure storage)
 without calling `login()` again. There is no automatic token refresh --
 Gateway sessions expire after 12 hours by default (see docs/gateway.md);
 call `login()` again once a call fails with `KarmaSakshiApiError(401, ...)`.
+`logout()` revokes the active server session and clears
+`client.session_token`.
+
+`get_audit()` supports `manifest_id=`, `query=`, `event_type=`, and
+`decision=` filters. Filtering is performed by the Gateway after
+organization scope is enforced, not by mixing events client-side.
 
 ## Known limitations
 

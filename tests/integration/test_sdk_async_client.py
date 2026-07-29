@@ -66,6 +66,13 @@ async def test_full_refund_journey(client):
         )
         assert proposal.manifest_id
         assert 0 <= proposal.assessment.score <= 100
+        assert proposal.assessment.signals
+
+        pending = await client.list_refunds("acme", decision_status="pending")
+        assert [refund.manifest_id for refund in pending] == [proposal.manifest_id]
+        detail = await client.get_refund("acme", proposal.manifest_id)
+        assert detail.effect.amount_minor_units == 50000
+        assert detail.decision_status == "pending"
 
         approval = await client.approve_refund("acme", proposal.manifest_id)
         assert approval.grant_id
@@ -120,6 +127,26 @@ async def test_full_refund_journey(client):
 
         org = await client.get_organization("acme")
         assert org.org_id == "acme"
+
+        denied_proposal = await client.propose_refund(
+            "acme",
+            agent_id="refund-agent-1",
+            requested_by="customer-2",
+            beneficiary="customer-acct-2",
+            amount_minor_units=1000,
+            reference="order-denied",
+            idempotency_key="idem-async-denied",
+        )
+        denial = await client.deny_refund(
+            "acme",
+            denied_proposal.manifest_id,
+            reason="Duplicate customer request",
+        )
+        assert denial.denied_by == "acme-owner"
+        denied_detail = await client.get_refund("acme", denied_proposal.manifest_id)
+        assert denied_detail.decision_status == "denied"
+        assert (await client.logout()).logged_out is True
+        assert client.session_token is None
 
 
 async def test_duplicate_execute_raises_api_error(client):

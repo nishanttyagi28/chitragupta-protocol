@@ -14,15 +14,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
+from karmasakshi.gateway.refund_schemas import RefundAssessmentOut
 
-class RefundAssessment(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    score: int
-    risk_level: str
-    recommendation: str
-    required_human_approvals: int
-    explanation: str
+RefundAssessment = RefundAssessmentOut
 
 
 class RefundProposalResult(BaseModel):

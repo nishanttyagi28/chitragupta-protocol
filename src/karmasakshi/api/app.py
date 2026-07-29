@@ -73,6 +73,12 @@ def create_app(
         app.include_router(console_router)
     except ImportError:  # pragma: no cover - jinja2 is part of the `api` extra
         pass
+    try:
+        from karmasakshi.web.control_center import control_center_router
+
+        app.include_router(control_center_router)
+    except ImportError:  # pragma: no cover - jinja2/httpx are part of the `api` extra
+        pass
 
     if public_demo:
         from karmasakshi.web.demo_router import demo_router

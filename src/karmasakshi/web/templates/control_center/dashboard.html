@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Overview · KarmaSakshi Control Center{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <div class="eyebrow">{{ organization.name }}</div>
+    <h1>Effect overview</h1>
+    <p class="muted">Real Gateway state for your organization, from proposal through independent verification.</p>
+  </div>
+  <a class="button primary" href="/control-center/approvals">Open approval inbox</a>
+</header>
+{% if notice %}<div class="notice">{{ notice }}</div>{% endif %}
+<section class="grid grid-4" aria-label="Overview metrics">
+  <div class="card metric"><span class="muted small">Pending decisions</span><strong>{{ pending_count }}</strong></div>
+  <div class="card metric"><span class="muted small">Verified outcomes</span><strong>{{ verified_count }}</strong></div>
+  <div class="card metric"><span class="muted small">Ambiguous outcomes</span><strong>{{ ambiguous_count }}</strong></div>
+  <div class="card metric">
+    <span class="muted small">Audit integrity</span>
+    <strong style="font-size:1rem;margin-top:13px;">
+      {% if audit_verified %}<span class="chip good">Verified · {{ audit_event_count }} events</span>
+      {% else %}<span class="chip bad">Verification failed</span>{% endif %}
+    </strong>
+  </div>
+</section>
+<section class="section">
+  <div class="section-head"><h2>Recent refund effects</h2><a class="small muted" href="/control-center/audit">Search audit trail →</a></div>
+  {% if refunds %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Reference</th><th>Beneficiary</th><th>Amount</th><th>Risk</th><th>Decision</th><th>Verification</th></tr></thead>
+      <tbody>
+      {% for refund in refunds %}
+        <tr>
+          <td><a href="/control-center/refunds/{{ refund.manifest_id }}"><strong>{{ refund.reference }}</strong></a><br><span class="mono muted small">{{ refund.manifest_id[:8] }}</span></td>
+          <td class="mono">{{ refund.beneficiary }}</td>
+          <td>{{ refund.currency }} {{ "%.2f"|format(refund.amount_minor_units / 100) }}</td>
+          <td><span class="chip {% if refund.risk_level in ['high','critical'] %}bad{% elif refund.risk_level == 'medium' %}warn{% else %}good{% endif %}">{{ refund.risk_score }} · {{ refund.risk_level }}</span></td>
+          <td><span class="chip {% if refund.decision_status == 'approved' %}good{% elif refund.decision_status == 'denied' %}bad{% else %}warn{% endif %}">{{ refund.decision_status }}</span></td>
+          <td><span class="chip {% if refund.verification_status == 'verified_match' %}good{% elif refund.ambiguous or refund.verification_status in ['failed','verified_mismatch'] %}bad{% else %}neutral{% endif %}">{{ refund.verification_status|replace('_',' ') }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="empty">No refund effects have been proposed for this organization.</div>{% endif %}
+</section>
+{% endblock %}

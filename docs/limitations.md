@@ -189,16 +189,19 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   Single-node SQLite only. Gateway sessions are process-local, in-memory,
   and non-durable -- a process restart invalidates every session; a
   horizontally scaled Gateway would need a shared session backend
-  (Milestone B). No session revocation, password reset, or user-removal
-  endpoint exists yet. See [docs/gateway.md](gateway.md).
+  (Milestone B). The current session can be revoked by logout; password
+  reset and user-removal endpoints do not exist yet. See
+  [docs/gateway.md](gateway.md).
 - **The Gateway refund journey (`karmasakshi.gateway.refunds`) is
   payment-simulator-only and single-approver** -- no real payment
   provider; "agent"/"adapter registration" are not yet their own durable
   registries (an agent is just a `principal_id` string in the propose
   call); `approve`/`compensate` accept one authenticated session user's
   decision, not a configurable multi-approver quorum (Milestone B). No
-  Control Center UI yet -- HTTP API only. See
-  [docs/gateway.md](gateway.md).
+  durable background worker or real provider is implied by the
+  server-rendered Control Center. See
+  [docs/gateway.md](gateway.md) and
+  [docs/control-center.md](control-center.md).
 - **The Gateway SDK (`karmasakshi.sdk`) is a client for the Gateway
   surface above only** -- not a general client for every protocol
   feature (decision envelopes, causal graphs, witness quorum, ...). One
