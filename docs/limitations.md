@@ -182,6 +182,13 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   shapes -- no fuzzy matching or clustering. Local file only, no
   shared/remote store. See
   [docs/agenteval-integration.md](agenteval-integration.md).
+- **The Gateway's organization/user model (`karmasakshi.gateway`) is
+  local development authentication only** -- PBKDF2 password hashing,
+  no SSO, no MFA, no session/token issuance, and no server-enforced RBAC
+  (`GatewayUserRole` is metadata, not currently checked by any
+  authorization decision). Single-node SQLite only. Not yet wired into
+  an HTTP Gateway API or Control Center UI. See
+  [docs/gateway.md](gateway.md).
 
 ## What "feature-complete" means here
 

@@ -491,3 +491,44 @@ class FailureMemoryError(KarmaSakshiError):
 class FailureMemoryCorruptedError(FailureMemoryError):
     """A stored failure-memory record is not valid JSON or does not match
     the ``RegressionFixture`` schema."""
+
+
+# --- Commercial Gateway: durable organization model (Milestone A) ----------------
+
+
+class GatewayError(KarmaSakshiError):
+    """Base class for Gateway commercial-layer errors."""
+
+
+class GatewayMigrationError(GatewayError):
+    """A Gateway database migration failed to apply."""
+
+
+class OrganizationNotFoundError(GatewayError):
+    """Referenced org_id does not exist."""
+
+
+class OrganizationAlreadyExistsError(GatewayError):
+    """org_id is already registered."""
+
+
+class OrganizationSuspendedError(GatewayError):
+    """The organization is suspended and cannot be used."""
+
+
+class GatewayUserNotFoundError(GatewayError):
+    """No user with that org_id + email exists."""
+
+
+class GatewayUserAlreadyExistsError(GatewayError):
+    """A user with that org_id + email is already registered."""
+
+
+class GatewayAuthenticationError(GatewayError):
+    """Email/password did not authenticate for the given organization."""
+
+
+class CrossOrganizationAccessError(GatewayError):
+    """An operation attempted to read or act across an organization
+    boundary (invariant: fail closed on tenant uncertainty, same posture
+    as Phase 19's ``TenantIsolationError``)."""
