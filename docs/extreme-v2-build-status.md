@@ -630,7 +630,7 @@ effects.
 
 - last merged phase on main: Phase 7 (`2736d60`, PR #21)
 - current branch: `cursor/phase8-saga-orchestration-ffca`
-- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/22 (pending number)
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/22
 - latest local green commit: `783398e`
 - test counts: **584 passed, 6 skipped**; coverage **90.11%**
 - known blockers: Redis-only skips; pip-audit pytest CVE (dev-only)
