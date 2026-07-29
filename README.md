@@ -20,18 +20,16 @@ versioned, experimental protocol.** This is not a certified, audited, or
 "production proven" system — see [Limitations](#limitations) and
 [docs/threat-model.md](docs/threat-model.md).
 
-**In progress:** a deterministic Effect Intelligence Engine (advisory risk
-scoring, not yet an enforcement gate), signed policy bundles (a policy
-edit after approval can no longer silently alter what a grant
-authorizes), multi-party (M-of-N) authorization (a grant can now
-require a quorum of independently signed approvals, with hard-coded
-no-self-approval and no-agent-approver rules), and separation of duties
-(a signed forbidden-role-pair matrix -- e.g. the same principal can never
-be both the sealer and the approver of one manifest) have landed on top
-of v0.1 — see [docs/effect-intelligence.md](docs/effect-intelligence.md),
+**In progress:** extreme-v2 Phases 1–6 have landed on top of v0.1 —
+Effect Intelligence (advisory), signed policy bundles, multi-party
+authorization, separation of duties, signed causal effect graphs, and
+constrained Decision Envelopes / atomic plan authorization. See
+[docs/effect-intelligence.md](docs/effect-intelligence.md),
 [docs/policy-bundles.md](docs/policy-bundles.md),
 [docs/multi-party-authorization.md](docs/multi-party-authorization.md),
-[docs/separation-of-duties.md](docs/separation-of-duties.md), and the
+[docs/separation-of-duties.md](docs/separation-of-duties.md),
+[docs/causal-effect-graphs.md](docs/causal-effect-graphs.md),
+[docs/decision-envelopes.md](docs/decision-envelopes.md), and the
 build ledger at
 [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for
 exactly what's implemented vs. planned.
@@ -134,11 +132,13 @@ Playwright + ffmpeg — see the script's docstring). Same for the
 screenshots below: `python scripts/capture_screenshots.py`.
 
 The current protocol also supports signed, deterministic causal effect
-graphs. Use `karmasakshi graph create` and `karmasakshi graph verify`, or
-the `/causal-graphs` API, to bind separately authorized effects into an
-independently verifiable DAG. Graph membership is evidence, not implicit
-execution authority; see
-[docs/causal-effect-graphs.md](docs/causal-effect-graphs.md).
+graphs and constrained Decision Envelopes. Use `karmasakshi graph create`
+/ `karmasakshi envelope create`, or the `/causal-graphs` and
+`/decision-envelopes` APIs. Graph membership and envelope fit are
+authorization bindings when a grant records them — not implicit
+execution authority by themselves; see
+[docs/causal-effect-graphs.md](docs/causal-effect-graphs.md) and
+[docs/decision-envelopes.md](docs/decision-envelopes.md).
 
 **Public live sandbox:** a `render.yaml` blueprint for a one-click Render.com
 deployment of this exact sandbox is included in the repo (see
@@ -337,7 +337,7 @@ the [live sandbox](#try-it-live) or run `karmasakshi demo --all`.
 
 ## Core security invariants
 
-38 invariants are implemented and tested. The **primary differentiators**
+42 invariants are implemented and tested. The **primary differentiators**
 — the specific claims that distinguish KarmaSakshi Protocol from a
 tool-permission layer, IAM system, or credential broker — are:
 
@@ -378,7 +378,7 @@ exist to bound *who may approve what, for how long* — they are necessary,
 but the manifest-sealing/TOCTOU/exactly-once/verification chain above is
 what actually proves the effect happened as approved.
 
-Full list of all 38 invariants, each mapped to its enforcing code and the
+Full list of all 42 invariants, each mapped to its enforcing code and the
 test that verifies it: [docs/security-model.md](docs/security-model.md).
 
 ## Exactly-once execution and TOCTOU protection
@@ -561,7 +561,7 @@ means precisely: [docs/action-passports.md](docs/action-passports.md).
 - [docs/delegation.md](docs/delegation.md) — attenuation rules with worked examples
 - [docs/state-machine.md](docs/state-machine.md) — full transition table
 - [docs/threat-model.md](docs/threat-model.md) — what is and isn't defended against
-- [docs/security-model.md](docs/security-model.md) — the 38 invariants
+- [docs/security-model.md](docs/security-model.md) — the 42 invariants
 - [docs/storage-semantics.md](docs/storage-semantics.md) — memory/SQLite/Redis backends
 - [docs/crash-recovery.md](docs/crash-recovery.md) — ambiguous-outcome recovery
 - [docs/adapter-authoring.md](docs/adapter-authoring.md) — writing a new adapter

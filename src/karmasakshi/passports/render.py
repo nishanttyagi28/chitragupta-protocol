@@ -54,6 +54,8 @@ def render_passport_markdown(passport: ActionPassport) -> str:
         f"- Valid until: {p.authorization_valid_until.isoformat() if p.authorization_valid_until else 'n/a'}",  # noqa: E501
         f"- Policy bundle: `{p.authorization_policy_bundle_hash or 'none (unpinned)'}`",
         f"- Approval set (quorum): `{p.authorization_approval_set_hash or 'none (single-issuer authorize())'}`",  # noqa: E501
+        f"- Decision envelope: `{p.authorization_decision_envelope_hash or 'none'}`",
+        f"- Atomic plan (causal graph): `{p.authorization_causal_graph_hash or 'none'}`",
         f"- Revoked: {_bool_str(p.was_revoked)}",
         "",
         "## Role Participation (Separation of Duties)",

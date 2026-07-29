@@ -50,6 +50,12 @@ class ActionPassport(BaseModel):
     authorization_valid_until: datetime | None = None
     authorization_policy_bundle_hash: str | None = None
     authorization_approval_set_hash: str | None = None
+    #: Extreme-v2 Phase 6: hash of the Decision Envelope bound at
+    #: authorization time (None when authorize() was used without one).
+    authorization_decision_envelope_hash: str | None = None
+    #: Extreme-v2 Phase 6: hash of the causal graph bound as an atomic
+    #: plan at authorization time (None when authorize_plan() was not used).
+    authorization_causal_graph_hash: str | None = None
     was_revoked: bool = False
 
     # Separation of Duties (extreme-v2 Phase 4): which principal(s) held

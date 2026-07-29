@@ -31,6 +31,7 @@ from karmasakshi.domain.manifest import EffectManifest
 from karmasakshi.domain.seal import SealedManifest
 from karmasakshi.engine.context import EngineContext
 from karmasakshi.engine.core import KarmaSakshiEngine
+from karmasakshi.envelope.model import DecisionEnvelope
 from karmasakshi.errors import KeyLoadError
 from karmasakshi.grants.model import ExecutionGrant
 from karmasakshi.intelligence.model import EffectAssessment
@@ -58,6 +59,7 @@ class Workspace:
         self.policies_dir = self.root / "policies"
         self.approvals_dir = self.root / "approvals"
         self.causal_graphs_dir = self.root / "causal-graphs"
+        self.envelopes_dir = self.root / "envelopes"
 
     def ensure_initialized(self) -> None:
         for d in (
@@ -68,6 +70,7 @@ class Workspace:
             self.policies_dir,
             self.approvals_dir,
             self.causal_graphs_dir,
+            self.envelopes_dir,
         ):
             d.mkdir(parents=True, exist_ok=True)
 
@@ -172,6 +175,17 @@ class Workspace:
     def load_causal_graph(self, graph_id: str) -> CausalEffectGraph:
         path = self.causal_graphs_dir / f"{graph_id}.json"
         return CausalEffectGraph.model_validate_json(path.read_text(encoding="utf-8"))
+
+    # --- decision envelopes (extreme-v2 Phase 6) ------------------------------
+
+    def save_decision_envelope(self, envelope: DecisionEnvelope) -> Path:
+        path = self.envelopes_dir / f"{envelope.envelope_id}.json"
+        path.write_text(envelope.model_dump_json(indent=2), encoding="utf-8")
+        return path
+
+    def load_decision_envelope(self, envelope_id: str) -> DecisionEnvelope:
+        path = self.envelopes_dir / f"{envelope_id}.json"
+        return DecisionEnvelope.model_validate_json(path.read_text(encoding="utf-8"))
 
     # --- policy bundles ---------------------------------------------------------
 

@@ -26,6 +26,7 @@ from karmasakshi.domain.common import Principal
 from karmasakshi.domain.seal import SealedManifest
 from karmasakshi.engine.context import EngineContext
 from karmasakshi.engine.core import KarmaSakshiEngine
+from karmasakshi.envelope.model import DecisionEnvelope
 from karmasakshi.grants.model import ExecutionGrant
 from karmasakshi.intelligence.model import EffectAssessment
 from karmasakshi.policy.bundle import SealedPolicyBundle
@@ -49,6 +50,7 @@ class ApiState:
     policy_bundles: dict[str, SealedPolicyBundle] = field(default_factory=dict)
     approval_statements: dict[str, list[ApprovalStatement]] = field(default_factory=dict)
     causal_graphs: dict[str, CausalEffectGraph] = field(default_factory=dict)
+    decision_envelopes: dict[str, DecisionEnvelope] = field(default_factory=dict)
     kill_switch_engaged: bool = False
 
     def register_grant(self, manifest_id: str, grant: ExecutionGrant) -> None:

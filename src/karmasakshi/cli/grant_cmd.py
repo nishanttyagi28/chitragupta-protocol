@@ -69,6 +69,23 @@ def issue(
             "additional roles beyond the auto-derived proposer/executor/approver",
         ),
     ] = [],  # noqa: B006
+    decision_envelope_id: Annotated[
+        str | None,
+        typer.Option(
+            "--decision-envelope-id",
+            help="A sealed Decision Envelope (from `envelope create`) the sealed "
+            "manifest must fit; bound into the grant and re-checked at execute",
+        ),
+    ] = None,
+    causal_graph_id: Annotated[
+        str | None,
+        typer.Option(
+            "--causal-graph-id",
+            help="A sealed causal graph (from `graph create`) the sealed manifest "
+            "must be a node of; bound into the grant and re-checked at execute. "
+            "Mutually exclusive with --decision-envelope-id",
+        ),
+    ] = None,
 ) -> None:
     """Issue an ExecutionGrant bound to a sealed manifest (invariant #30:
     issuer must be human or service, never the agent itself)."""
@@ -76,6 +93,10 @@ def issue(
     as_json: bool = ctx.obj["json"]
 
     def _do() -> None:
+        if decision_envelope_id is not None and causal_graph_id is not None:
+            raise typer.BadParameter(
+                "--decision-envelope-id and --causal-graph-id are mutually exclusive"
+            )
         sealed = workspace.load_sealed_manifest(manifest_id)
         signing_key = workspace.load_signing_key(key_id)
         engine = workspace.build_engine()
@@ -92,27 +113,70 @@ def issue(
             else None
         )
         role_assignment = _parse_role_assignment(sealed.seal.manifest_hash, role)
-        grant = engine.authorize(
-            sealed,
-            issuer=Principal(principal_id=issuer_id, principal_type=issuer_type),
-            subject=Principal(principal_id=subject_id, principal_type=subject_type),
-            audience=tuple(audience) or (sealed.manifest.adapter.adapter_id,),
-            allowed_effect_types=(sealed.manifest.effect_type,),
-            scope=ScopeConstraints(),
-            not_before=now,
-            expires_at=now + timedelta(seconds=ttl_seconds),
-            signing_key=signing_key,
-            max_uses=max_uses,
-            policy_bundle=policy_bundle,
-            separation_policy_bundle=separation_policy_bundle,
-            role_assignment=role_assignment,
-        )
+        issuer = Principal(principal_id=issuer_id, principal_type=issuer_type)
+        subject = Principal(principal_id=subject_id, principal_type=subject_type)
+        grant_audience = tuple(audience) or (sealed.manifest.adapter.adapter_id,)
+        expires_at = now + timedelta(seconds=ttl_seconds)
+        if decision_envelope_id is not None:
+            envelope = workspace.load_decision_envelope(decision_envelope_id)
+            grant = engine.authorize_with_envelope(
+                sealed,
+                envelope,
+                issuer=issuer,
+                subject=subject,
+                audience=grant_audience,
+                allowed_effect_types=(sealed.manifest.effect_type,),
+                scope=ScopeConstraints(),
+                not_before=now,
+                expires_at=expires_at,
+                signing_key=signing_key,
+                max_uses=max_uses,
+                policy_bundle=policy_bundle,
+                separation_policy_bundle=separation_policy_bundle,
+                role_assignment=role_assignment,
+            )
+        elif causal_graph_id is not None:
+            graph = workspace.load_causal_graph(causal_graph_id)
+            grant = engine.authorize_plan(
+                sealed,
+                graph,
+                issuer=issuer,
+                subject=subject,
+                audience=grant_audience,
+                allowed_effect_types=(sealed.manifest.effect_type,),
+                scope=ScopeConstraints(),
+                not_before=now,
+                expires_at=expires_at,
+                signing_key=signing_key,
+                max_uses=max_uses,
+                policy_bundle=policy_bundle,
+                separation_policy_bundle=separation_policy_bundle,
+                role_assignment=role_assignment,
+            )
+        else:
+            grant = engine.authorize(
+                sealed,
+                issuer=issuer,
+                subject=subject,
+                audience=grant_audience,
+                allowed_effect_types=(sealed.manifest.effect_type,),
+                scope=ScopeConstraints(),
+                not_before=now,
+                expires_at=expires_at,
+                signing_key=signing_key,
+                max_uses=max_uses,
+                policy_bundle=policy_bundle,
+                separation_policy_bundle=separation_policy_bundle,
+                role_assignment=role_assignment,
+            )
         path = workspace.save_grant(grant)
         emit(
             {
                 "grant_id": grant.grant_id,
                 "manifest_id": manifest_id,
                 "policy_bundle_hash": grant.policy_bundle_hash,
+                "decision_envelope_hash": grant.decision_envelope_hash,
+                "causal_graph_hash": grant.causal_graph_hash,
                 "path": str(path),
             },
             as_json=as_json,

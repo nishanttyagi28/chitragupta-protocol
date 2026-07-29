@@ -14,6 +14,7 @@ from karmasakshi.cli.audit_cmd import audit_app
 from karmasakshi.cli.common import console, emit
 from karmasakshi.cli.demo_cmd import demo
 from karmasakshi.cli.doctor_cmd import doctor
+from karmasakshi.cli.envelope_cmd import envelope_app
 from karmasakshi.cli.execute_cmd import compensate, execute
 from karmasakshi.cli.execute_cmd import verify as execute_verify
 from karmasakshi.cli.grant_cmd import grant_app
@@ -33,6 +34,7 @@ app = typer.Typer(
 app.add_typer(audit_app, name="audit")
 app.add_typer(grant_app, name="grant")
 app.add_typer(graph_app, name="graph")
+app.add_typer(envelope_app, name="envelope")
 app.add_typer(key_app, name="key")
 app.add_typer(policy_app, name="policy")
 app.add_typer(approvals_app, name="approvals")

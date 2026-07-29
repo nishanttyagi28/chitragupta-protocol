@@ -23,6 +23,7 @@ from karmasakshi.adapters.base import (
 from karmasakshi.approval.model import ApprovalStatement
 from karmasakshi.approval.policy import POLICY_TYPE_APPROVAL, approval_policy_from_bundle_payload
 from karmasakshi.approval.quorum import evaluate_quorum
+from karmasakshi.causal.graph import CausalEffectGraph
 from karmasakshi.crypto.keys import SigningKey
 from karmasakshi.delegation.attenuation import assert_grant_narrower_or_equal
 from karmasakshi.domain.common import Principal
@@ -35,8 +36,13 @@ from karmasakshi.duty.policy import (
 )
 from karmasakshi.duty.roles import RoleAssignment, base_role_assignment
 from karmasakshi.engine.context import EngineContext
+from karmasakshi.envelope.model import DecisionEnvelope, assert_manifest_fits_envelope
+from karmasakshi.envelope.plan import assert_manifest_in_plan, require_matching_plan_hash
+from karmasakshi.envelope.sealing import verify_decision_envelope
 from karmasakshi.errors import (
     AdapterMismatchError,
+    AtomicPlanError,
+    DecisionEnvelopeMismatchError,
     GrantAudienceError,
     GrantExhaustedError,
     GrantManifestMismatchError,
@@ -343,6 +349,252 @@ class KarmaSakshiEngine:
             actor_id=issuer.principal_id,
             metadata={
                 "subject": subject.principal_id,
+                **({"policy_bundle_hash": policy_bundle_hash} if policy_bundle_hash else {}),
+                **_role_participation_metadata(combined_roles),
+            },
+        )
+        return grant
+
+    # --- PHASE 6: DECISION ENVELOPES / ATOMIC PLAN AUTHORIZATION ----------
+
+    def authorize_with_envelope(
+        self,
+        sealed: SealedManifest,
+        envelope: DecisionEnvelope,
+        *,
+        issuer: Principal,
+        subject: Principal,
+        audience: tuple[str, ...],
+        allowed_effect_types: tuple[str, ...],
+        scope: ScopeConstraints,
+        not_before: datetime,
+        expires_at: datetime,
+        signing_key: SigningKey,
+        grant_id: str | None = None,
+        nonce: str | None = None,
+        max_uses: int = 1,
+        parent_grant_id: str | None = None,
+        policy_bundle: SealedPolicyBundle | None = None,
+        separation_policy_bundle: SealedPolicyBundle | None = None,
+        role_assignment: RoleAssignment | None = None,
+    ) -> ExecutionGrant:
+        """Issue a grant bound to ``sealed`` *and* a verified Decision Envelope.
+
+        The sealed manifest must fit the envelope's constrained parameter
+        space (``assert_manifest_fits_envelope``). The envelope's hash is
+        bound into the grant (``decision_envelope_hash``); ``commit()``
+        requires the same envelope to be re-presented and re-checked.
+        Mutually exclusive with :meth:`authorize_plan` -- this path never
+        sets ``causal_graph_hash`` on the grant (if the envelope itself
+        pins a ``causal_graph_hash``, that binding lives inside the
+        envelope hash, not as a separate grant field).
+        """
+        verify_seal(sealed, self._ctx.keyring)
+        manifest_hash = sealed.seal.manifest_hash
+        try:
+            verify_decision_envelope(envelope, self._ctx.keyring, now=self._ctx.clock.now())
+            assert_manifest_fits_envelope(sealed.manifest, envelope)
+        except KarmaSakshiError:
+            self._ctx.audit.record(
+                event_type="decision_envelope.authorization_failed",
+                decision="blocked",
+                manifest_id=sealed.manifest.manifest_id,
+                manifest_hash=manifest_hash,
+                actor_id=issuer.principal_id,
+                metadata={"envelope_id": envelope.envelope_id},
+            )
+            raise
+
+        envelope_hash = envelope.canonical_hash()
+        if policy_bundle is not None:
+            try:
+                verify_policy_bundle(policy_bundle, self._ctx.keyring, now=self._ctx.clock.now())
+            except KarmaSakshiError:
+                self._ctx.audit.record(
+                    event_type="policy_bundle.verification_failed",
+                    decision="blocked",
+                    manifest_id=sealed.manifest.manifest_id,
+                    manifest_hash=manifest_hash,
+                    actor_id=issuer.principal_id,
+                    metadata={"bundle_id": policy_bundle.bundle.bundle_id},
+                )
+                raise
+        policy_bundle_hash = policy_bundle.seal.bundle_hash if policy_bundle is not None else None
+
+        combined_roles = base_role_assignment(
+            manifest_hash,
+            proposer_id=sealed.manifest.actor.principal_id,
+            executor_id=subject.principal_id,
+            approver_ids=(issuer.principal_id,),
+        ).merge(role_assignment)
+        if separation_policy_bundle is not None:
+            self._enforce_separation_of_duty(
+                separation_policy_bundle,
+                combined_roles,
+                manifest_id=sealed.manifest.manifest_id,
+                manifest_hash=manifest_hash,
+                actor_id=issuer.principal_id,
+            )
+
+        try:
+            grant = issue_grant(
+                grant_id=grant_id or str(uuid.uuid4()),
+                issuer=issuer,
+                subject=subject,
+                audience=audience,
+                allowed_effect_types=allowed_effect_types,
+                scope=scope,
+                not_before=not_before,
+                expires_at=expires_at,
+                nonce=nonce or uuid.uuid4().hex,
+                signing_key=signing_key,
+                manifest_hash=manifest_hash,
+                policy_bundle_hash=policy_bundle_hash,
+                decision_envelope_hash=envelope_hash,
+                max_uses=max_uses,
+                parent_grant_id=parent_grant_id,
+                clock=self._ctx.clock,
+            )
+        except KarmaSakshiError:
+            self._ctx.audit.record(
+                event_type="grant.issue_denied",
+                decision="blocked",
+                manifest_id=sealed.manifest.manifest_id,
+                manifest_hash=manifest_hash,
+                actor_id=issuer.principal_id,
+            )
+            raise
+        self._transition(
+            sealed.manifest.manifest_id,
+            LifecycleState.AUTHORIZED,
+            event_type="grant.issued",
+            manifest_hash=manifest_hash,
+            grant_id=grant.grant_id,
+            actor_id=issuer.principal_id,
+            metadata={
+                "subject": subject.principal_id,
+                "decision_envelope_hash": envelope_hash,
+                "envelope_id": envelope.envelope_id,
+                **({"policy_bundle_hash": policy_bundle_hash} if policy_bundle_hash else {}),
+                **_role_participation_metadata(combined_roles),
+            },
+        )
+        return grant
+
+    def authorize_plan(
+        self,
+        sealed: SealedManifest,
+        graph: CausalEffectGraph,
+        *,
+        issuer: Principal,
+        subject: Principal,
+        audience: tuple[str, ...],
+        allowed_effect_types: tuple[str, ...],
+        scope: ScopeConstraints,
+        not_before: datetime,
+        expires_at: datetime,
+        signing_key: SigningKey,
+        grant_id: str | None = None,
+        nonce: str | None = None,
+        max_uses: int = 1,
+        parent_grant_id: str | None = None,
+        policy_bundle: SealedPolicyBundle | None = None,
+        separation_policy_bundle: SealedPolicyBundle | None = None,
+        role_assignment: RoleAssignment | None = None,
+    ) -> ExecutionGrant:
+        """Issue a grant bound to ``sealed`` *and* one sealed causal graph.
+
+        The sealed manifest's hash must be a node of ``graph`` (atomic plan
+        membership). The graph's canonical hash is bound into the grant
+        (``causal_graph_hash``); ``commit()`` requires the same graph to be
+        re-presented and re-checked. Mutually exclusive with
+        :meth:`authorize_with_envelope`.
+        """
+        verify_seal(sealed, self._ctx.keyring)
+        manifest_hash = sealed.seal.manifest_hash
+        try:
+            assert_manifest_in_plan(manifest_hash, graph, keyring=self._ctx.keyring)
+        except KarmaSakshiError:
+            self._ctx.audit.record(
+                event_type="atomic_plan.authorization_failed",
+                decision="blocked",
+                manifest_id=sealed.manifest.manifest_id,
+                manifest_hash=manifest_hash,
+                actor_id=issuer.principal_id,
+                metadata={"graph_id": graph.graph_id},
+            )
+            raise
+
+        graph_hash = graph.canonical_hash()
+        if policy_bundle is not None:
+            try:
+                verify_policy_bundle(policy_bundle, self._ctx.keyring, now=self._ctx.clock.now())
+            except KarmaSakshiError:
+                self._ctx.audit.record(
+                    event_type="policy_bundle.verification_failed",
+                    decision="blocked",
+                    manifest_id=sealed.manifest.manifest_id,
+                    manifest_hash=manifest_hash,
+                    actor_id=issuer.principal_id,
+                    metadata={"bundle_id": policy_bundle.bundle.bundle_id},
+                )
+                raise
+        policy_bundle_hash = policy_bundle.seal.bundle_hash if policy_bundle is not None else None
+
+        combined_roles = base_role_assignment(
+            manifest_hash,
+            proposer_id=sealed.manifest.actor.principal_id,
+            executor_id=subject.principal_id,
+            approver_ids=(issuer.principal_id,),
+        ).merge(role_assignment)
+        if separation_policy_bundle is not None:
+            self._enforce_separation_of_duty(
+                separation_policy_bundle,
+                combined_roles,
+                manifest_id=sealed.manifest.manifest_id,
+                manifest_hash=manifest_hash,
+                actor_id=issuer.principal_id,
+            )
+
+        try:
+            grant = issue_grant(
+                grant_id=grant_id or str(uuid.uuid4()),
+                issuer=issuer,
+                subject=subject,
+                audience=audience,
+                allowed_effect_types=allowed_effect_types,
+                scope=scope,
+                not_before=not_before,
+                expires_at=expires_at,
+                nonce=nonce or uuid.uuid4().hex,
+                signing_key=signing_key,
+                manifest_hash=manifest_hash,
+                policy_bundle_hash=policy_bundle_hash,
+                causal_graph_hash=graph_hash,
+                max_uses=max_uses,
+                parent_grant_id=parent_grant_id,
+                clock=self._ctx.clock,
+            )
+        except KarmaSakshiError:
+            self._ctx.audit.record(
+                event_type="grant.issue_denied",
+                decision="blocked",
+                manifest_id=sealed.manifest.manifest_id,
+                manifest_hash=manifest_hash,
+                actor_id=issuer.principal_id,
+            )
+            raise
+        self._transition(
+            sealed.manifest.manifest_id,
+            LifecycleState.AUTHORIZED,
+            event_type="grant.issued",
+            manifest_hash=manifest_hash,
+            grant_id=grant.grant_id,
+            actor_id=issuer.principal_id,
+            metadata={
+                "subject": subject.principal_id,
+                "causal_graph_hash": graph_hash,
+                "graph_id": graph.graph_id,
                 **({"policy_bundle_hash": policy_bundle_hash} if policy_bundle_hash else {}),
                 **_role_participation_metadata(combined_roles),
             },
@@ -662,6 +914,8 @@ class KarmaSakshiEngine:
         adapter: EffectAdapter,
         context: Any,
         policy_bundle: SealedPolicyBundle | None = None,
+        decision_envelope: DecisionEnvelope | None = None,
+        causal_graph: CausalEffectGraph | None = None,
     ) -> CommitResult:
         manifest = sealed.manifest
         manifest_id = manifest.manifest_id
@@ -742,6 +996,65 @@ class KarmaSakshiEngine:
                             f"({policy_bundle.seal.bundle_hash}) was presented at commit time"
                         ),
                     )
+
+        if grant.decision_envelope_hash is not None:
+            if decision_envelope is None:
+                deny(
+                    "decision_envelope.missing_at_commit",
+                    "blocked_decision_envelope_missing",
+                    DecisionEnvelopeMismatchError(
+                        f"grant {grant_id} requires decision envelope "
+                        f"{grant.decision_envelope_hash} to be presented at commit time"
+                    ),
+                )
+            try:
+                verify_decision_envelope(
+                    decision_envelope, self._ctx.keyring, now=self._ctx.clock.now()
+                )
+            except KarmaSakshiError as exc:
+                deny(
+                    "decision_envelope.verification_failed",
+                    f"blocked_{type(exc).__name__}",
+                    exc,
+                )
+            if decision_envelope.canonical_hash() != grant.decision_envelope_hash:
+                deny(
+                    "decision_envelope.mismatch",
+                    "blocked_decision_envelope_mismatch",
+                    DecisionEnvelopeMismatchError(
+                        f"grant {grant_id} is bound to decision envelope "
+                        f"{grant.decision_envelope_hash}, but a different envelope "
+                        f"({decision_envelope.canonical_hash()}) was presented at commit time"
+                    ),
+                )
+            try:
+                assert_manifest_fits_envelope(manifest, decision_envelope)
+            except KarmaSakshiError as exc:
+                deny(
+                    "decision_envelope.constraint_failed",
+                    f"blocked_{type(exc).__name__}",
+                    exc,
+                )
+
+        if grant.causal_graph_hash is not None:
+            if causal_graph is None:
+                deny(
+                    "atomic_plan.missing_at_commit",
+                    "blocked_causal_graph_missing",
+                    AtomicPlanError(
+                        f"grant {grant_id} requires causal graph "
+                        f"{grant.causal_graph_hash} to be presented at commit time"
+                    ),
+                )
+            try:
+                require_matching_plan_hash(causal_graph, grant.causal_graph_hash)
+                assert_manifest_in_plan(manifest_hash, causal_graph, keyring=self._ctx.keyring)
+            except KarmaSakshiError as exc:
+                deny(
+                    "atomic_plan.verification_failed",
+                    f"blocked_{type(exc).__name__}",
+                    exc,
+                )
 
         if adapter.adapter_id not in grant.audience:
             deny(
