@@ -12,8 +12,8 @@ from karmasakshi.errors import AuditWriteError
 
 def test_redis_backend_append_conflict_with_fake_client(fixed_clock):
     """Exercise RedisAuditBackend paths without a live Redis server."""
-    from karmasakshi.audit.redis_backend import RedisAuditBackend
     from karmasakshi.audit.events import AuditEvent
+    from karmasakshi.audit.redis_backend import RedisAuditBackend
     from karmasakshi.canonical.serialize import canonical_hash
 
     class FakeRedis:
