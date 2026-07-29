@@ -59,6 +59,13 @@ class ActionPassport(BaseModel):
     # called before Phase 4, or without a role_assignment).
     role_participation: dict[str, str] | None = None
 
+    # Verifiable causal story (extreme-v2 Phase 5). None for standalone
+    # effects or callers that do not supply a graph when building a passport.
+    causal_graph_id: str | None = None
+    causal_graph_hash: str | None = None
+    causal_ancestor_manifest_hashes: tuple[str, ...] = ()
+    causal_graph_verified: bool | None = None
+
     # What was executed
     commit_attempted: bool = False
     commit_success: bool | None = None
