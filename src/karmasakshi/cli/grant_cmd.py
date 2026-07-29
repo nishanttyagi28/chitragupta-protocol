@@ -30,6 +30,14 @@ def issue(
     ] = [],  # noqa: B006
     max_uses: Annotated[int, typer.Option()] = 1,
     ttl_seconds: Annotated[int, typer.Option()] = 300,
+    policy_bundle_id: Annotated[
+        str | None,
+        typer.Option(
+            "--policy-bundle-id",
+            help="A sealed policy bundle (from `policy sign`) to bind into this grant; "
+            "the same bundle must be presented again at `execute` time",
+        ),
+    ] = None,
 ) -> None:
     """Issue an ExecutionGrant bound to a sealed manifest (invariant #30:
     issuer must be human or service, never the agent itself)."""
@@ -42,6 +50,11 @@ def issue(
         engine = workspace.build_engine()
         workspace.reconstruct_lifecycle_state(engine, manifest_id)
         now = datetime.now(timezone.utc)
+        policy_bundle = (
+            workspace.load_sealed_policy_bundle(policy_bundle_id)
+            if policy_bundle_id is not None
+            else None
+        )
         grant = engine.authorize(
             sealed,
             issuer=Principal(principal_id=issuer_id, principal_type=issuer_type),
@@ -53,10 +66,16 @@ def issue(
             expires_at=now + timedelta(seconds=ttl_seconds),
             signing_key=signing_key,
             max_uses=max_uses,
+            policy_bundle=policy_bundle,
         )
         path = workspace.save_grant(grant)
         emit(
-            {"grant_id": grant.grant_id, "manifest_id": manifest_id, "path": str(path)},
+            {
+                "grant_id": grant.grant_id,
+                "manifest_id": manifest_id,
+                "policy_bundle_hash": grant.policy_bundle_hash,
+                "path": str(path),
+            },
             as_json=as_json,
             human=(
                 f"Issued grant [bold]{grant.grant_id}[/bold] for manifest {manifest_id} -> {path}"

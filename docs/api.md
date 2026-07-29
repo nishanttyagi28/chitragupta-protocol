@@ -47,10 +47,13 @@ without authentication — see `karmasakshi.api.auth.require_auth` and
 | GET | `/manifests/{id}` | Inspect one manifest + its seal + grant ids |
 | POST | `/manifests/{id}/assess` | Run the Effect Intelligence Engine, record `EffectAssessment` (advisory only -- see docs/effect-intelligence.md) |
 | GET | `/manifests/{id}/assessment` | Fetch the most recent assessment recorded for a manifest |
-| POST | `/manifests/{id}/approve` | Issue an `ExecutionGrant` (invariant #30 still enforced) |
+| POST | `/manifests/{id}/approve` | Issue an `ExecutionGrant` (invariant #30 still enforced); optional `policy_bundle_id` binds a signed policy bundle's hash into the grant |
 | POST | `/manifests/{id}/deny` | Audit-log a denial; never issues a grant |
+| POST | `/policy/bundles` | Build, sign, and store a policy bundle (see docs/policy-bundles.md) |
+| GET | `/policy/bundles/{id}` | Fetch a stored sealed policy bundle |
+| POST | `/policy/bundles/{id}/verify` | Re-verify a stored bundle's signature/integrity/window |
 | POST | `/grants/{id}/revoke` | Revoke a grant |
-| POST | `/manifests/{id}/execute` | Commit (blocked with `503` if the kill switch is engaged) |
+| POST | `/manifests/{id}/execute` | Commit (blocked with `503` if the kill switch is engaged); if the grant is policy-bundle-bound, the same `policy_bundle_id` must be supplied or the commit fails closed |
 | POST | `/manifests/{id}/verify` | Independently verify the outcome |
 | GET | `/audit` | Full audit timeline |
 | GET | `/audit/verify` | Verify the hash chain |

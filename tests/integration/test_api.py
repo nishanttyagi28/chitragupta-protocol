@@ -82,6 +82,103 @@ def test_full_lifecycle_happy_path(dev_client):
     assert "not a security certification" in passport_md.text
 
 
+def _create_policy_bundle(client, bundle_id="bundle-1", **overrides):
+    body = {
+        "bundle_id": bundle_id,
+        "issuer": {"principal_id": "policy-admin", "principal_type": "human"},
+        **overrides,
+    }
+    return client.post("/policy/bundles", json=body)
+
+
+def test_policy_bundle_create_get_and_verify(dev_client):
+    created = _create_policy_bundle(dev_client)
+    assert created.status_code == 200
+    body = created.json()
+    assert body["bundle"]["bundle_id"] == "bundle-1"
+    assert body["seal"]["bundle_hash"].startswith("sha256:")
+
+    fetched = dev_client.get("/policy/bundles/bundle-1")
+    assert fetched.status_code == 200
+    assert fetched.json()["seal"]["bundle_hash"] == body["seal"]["bundle_hash"]
+
+    verified = dev_client.post("/policy/bundles/bundle-1/verify")
+    assert verified.status_code == 200
+    assert verified.json()["verified"] is True
+
+
+def test_policy_bundle_create_rejects_agent_issuer(dev_client):
+    resp = _create_policy_bundle(
+        dev_client,
+        bundle_id="bundle-agent",
+        issuer={"principal_id": "agent-1", "principal_type": "agent"},
+    )
+    assert resp.status_code == 422
+
+
+def test_policy_bundle_not_found_404s(dev_client):
+    assert dev_client.get("/policy/bundles/does-not-exist").status_code == 404
+    assert dev_client.post("/policy/bundles/does-not-exist/verify").status_code == 404
+
+
+def test_approve_and_execute_bind_and_require_matching_policy_bundle(dev_client):
+    _create_policy_bundle(dev_client, bundle_id="refund-policy")
+    prep = _prepare_payment(dev_client, idempotency_key="idem-api-policy-1")
+    manifest_id = prep.json()["manifest_id"]
+
+    approve = dev_client.post(
+        f"/manifests/{manifest_id}/approve",
+        json={
+            "issuer": {"principal_id": "approver-1", "principal_type": "human"},
+            "subject": {"principal_id": "agent-1", "principal_type": "agent"},
+            "policy_bundle_id": "refund-policy",
+        },
+    )
+    assert approve.status_code == 200
+    grant_id = approve.json()["grant_id"]
+    assert approve.json()["policy_bundle_hash"] is not None
+
+    # Executing without the bound policy bundle must fail closed.
+    execute_missing = dev_client.post(
+        f"/manifests/{manifest_id}/execute", json={"grant_id": grant_id}
+    )
+    assert execute_missing.status_code == 409
+
+    # Executing with the correct bundle succeeds.
+    execute_ok = dev_client.post(
+        f"/manifests/{manifest_id}/execute",
+        json={"grant_id": grant_id, "policy_bundle_id": "refund-policy"},
+    )
+    assert execute_ok.status_code == 200
+    assert execute_ok.json()["success"] is True
+
+    passport = dev_client.get(f"/passports/{manifest_id}").json()
+    assert passport["authorization_policy_bundle_hash"] is not None
+
+
+def test_execute_with_swapped_policy_bundle_is_rejected(dev_client):
+    _create_policy_bundle(dev_client, bundle_id="policy-a", block_threshold=85)
+    _create_policy_bundle(dev_client, bundle_id="policy-b", block_threshold=10, review_threshold=0)
+    prep = _prepare_payment(dev_client, idempotency_key="idem-api-policy-2")
+    manifest_id = prep.json()["manifest_id"]
+
+    approve = dev_client.post(
+        f"/manifests/{manifest_id}/approve",
+        json={
+            "issuer": {"principal_id": "approver-1", "principal_type": "human"},
+            "subject": {"principal_id": "agent-1", "principal_type": "agent"},
+            "policy_bundle_id": "policy-a",
+        },
+    )
+    grant_id = approve.json()["grant_id"]
+
+    execute = dev_client.post(
+        f"/manifests/{manifest_id}/execute",
+        json={"grant_id": grant_id, "policy_bundle_id": "policy-b"},
+    )
+    assert execute.status_code == 409
+
+
 def test_assess_endpoint_records_and_is_retrievable(dev_client):
     prep = _prepare_payment(dev_client, idempotency_key="idem-api-assess-1")
     manifest_id = prep.json()["manifest_id"]

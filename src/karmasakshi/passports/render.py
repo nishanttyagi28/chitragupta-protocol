@@ -52,6 +52,7 @@ def render_passport_markdown(passport: ActionPassport) -> str:
         f"- Authorized by: `{p.authorized_by.principal_id if p.authorized_by else 'n/a'}`",
         f"- Valid from: {p.authorization_valid_from.isoformat() if p.authorization_valid_from else 'n/a'}",  # noqa: E501
         f"- Valid until: {p.authorization_valid_until.isoformat() if p.authorization_valid_until else 'n/a'}",  # noqa: E501
+        f"- Policy bundle: `{p.authorization_policy_bundle_hash or 'none (unpinned)'}`",
         f"- Revoked: {_bool_str(p.was_revoked)}",
         "",
         "## Execution",

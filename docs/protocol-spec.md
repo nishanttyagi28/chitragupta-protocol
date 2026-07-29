@@ -73,6 +73,16 @@ git history around `engine.commit()` for why this distinction matters (a
 forged-signature-with-unchanged-content regression test exists precisely
 because an earlier version only re-checked #1, not #2, at commit time).
 
+## Policy bundle sealing
+
+`policy/sealing.py` (extreme-v2 Phase 2) applies the identical
+two-check pattern above to `PolicyBundle`/`SealedPolicyBundle` instead of
+`EffectManifest`/`SealedManifest`: `seal_policy_bundle()` signs
+`bundle.canonical_hash()`; `verify_policy_bundle()` recomputes the hash
+(tamper detection) and checks the signature (identity proof), plus an
+effective-window check specific to policy bundles. See
+[docs/policy-bundles.md](policy-bundles.md).
+
 ## Nonces and idempotency keys
 
 - `nonce` exists purely to make otherwise-identical manifests hash

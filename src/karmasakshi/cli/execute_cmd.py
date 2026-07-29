@@ -18,6 +18,14 @@ def execute(
     sqlite_table: Annotated[str, typer.Option()] = "ledger_accounts",
     fund_source_account: Annotated[int | None, typer.Option()] = None,
     fund_account_id: Annotated[str, typer.Option()] = "acct-src",
+    policy_bundle_id: Annotated[
+        str | None,
+        typer.Option(
+            "--policy-bundle-id",
+            help="Required if the grant was issued with a policy bundle bound to it; "
+            "must be the same bundle (by hash) presented at `grant issue` time",
+        ),
+    ] = None,
 ) -> None:
     """Commit a sealed, authorized manifest through its adapter."""
     workspace: Workspace = ctx.obj["workspace"]
@@ -35,7 +43,14 @@ def execute(
         )
         engine = workspace.build_engine()
         workspace.reconstruct_lifecycle_state(engine, manifest_id)
-        result = engine.commit(sealed, grant, adapter_instance, context=None)
+        policy_bundle = (
+            workspace.load_sealed_policy_bundle(policy_bundle_id)
+            if policy_bundle_id is not None
+            else None
+        )
+        result = engine.commit(
+            sealed, grant, adapter_instance, context=None, policy_bundle=policy_bundle
+        )
         workspace.save_commit_result(manifest_id, result)
         emit(
             {

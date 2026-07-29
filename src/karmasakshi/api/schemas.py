@@ -39,6 +39,7 @@ class ApproveIn(BaseModel):
     audience: list[str] | None = None
     max_uses: int = 1
     ttl_seconds: int = 300
+    policy_bundle_id: str | None = None
 
 
 class DenyIn(BaseModel):
@@ -51,6 +52,22 @@ class ExecuteIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     grant_id: str
+    policy_bundle_id: str | None = None
+
+
+class PolicyBundleCreateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bundle_id: str
+    bundle_version: str = "1.0"
+    issuer: PrincipalIn
+    tenant_id: str | None = None
+    effective_seconds: int = 30 * 24 * 3600
+    block_threshold: int = 85
+    review_threshold: int = 40
+    max_delegation_depth: int = 8
+    restricted_effect_types: list[str] = []
+    sensitive_target_patterns: list[str] = []
 
 
 class AssessIn(BaseModel):
@@ -86,6 +103,7 @@ __all__ = [
     "DenyIn",
     "ExecuteIn",
     "ManifestSummary",
+    "PolicyBundleCreateIn",
     "PrepareRequestIn",
     "PrincipalIn",
 ]

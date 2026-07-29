@@ -77,6 +77,7 @@ def build_passport(
         authorized_by=grant.issuer if grant is not None else None,
         authorization_valid_from=grant.not_before if grant is not None else None,
         authorization_valid_until=grant.expires_at if grant is not None else None,
+        authorization_policy_bundle_hash=grant.policy_bundle_hash if grant is not None else None,
         was_revoked=was_revoked,
         commit_attempted=commit_result is not None,
         commit_success=commit_result.success if commit_result is not None else None,

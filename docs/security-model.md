@@ -37,6 +37,8 @@ under a minute per row.
 | 28 | All timestamps use timezone-aware UTC internally | `config/clock.py::ensure_utc()` rejects naive datetimes everywhere they're accepted | `test_manifest_rejects_naive_datetime` |
 | 29 | Error messages must not leak secrets | `SigningKey.__repr__` redacts private key material; no log statement anywhere serializes a `SigningKey` or raw token | `test_private_key_never_in_repr`, `test_export_contains_no_secrets_or_raw_credentials` |
 | 30 | The model or agent must never make the final authorization decision | `issue_grant()`/`engine.authorize()`/`engine.delegate()` raise `GrantIssuerNotAuthorizedError` if `issuer.principal_type == AGENT` | `test_agent_cannot_issue_grant`, `test_agent_cannot_be_the_authorizing_issuer` (LangGraph) |
+| 31 | A grant bound to a policy bundle cannot commit against a missing, different, tampered, expired, or unsigned-by-an-untrusted-key policy bundle | `engine.commit()`'s `policy_bundle_hash` check (only enforced when the grant declares one; see [docs/policy-bundles.md](policy-bundles.md)) | `test_commit_missing_required_policy_bundle_is_rejected`, `test_commit_with_swapped_policy_bundle_is_rejected`, `test_commit_with_tampered_policy_bundle_is_rejected`, `tests/adversarial/test_policy_bundle_gaming.py` |
+| 32 | An agent principal cannot be the issuer of a signed policy bundle | `build_policy_bundle()` raises `PolicyBundleIssuerNotAuthorizedError` if `issuer.principal_type == AGENT` | `test_agent_cannot_be_policy_bundle_issuer` |
 
 ## What this table does not claim
 

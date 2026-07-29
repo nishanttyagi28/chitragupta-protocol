@@ -60,6 +60,7 @@ class ExecutionGrant(BaseModel):
     schema_version: str = CURRENT_SCHEMA_VERSION
     grant_id: str
     manifest_hash: str | None = None
+    policy_bundle_hash: str | None = None
     issuer: Principal
     subject: Principal
     audience: tuple[str, ...]
@@ -88,13 +89,13 @@ class ExecutionGrant(BaseModel):
             raise ValueError("identifier fields must be 1-128 chars")
         return v
 
-    @field_validator("manifest_hash")
+    @field_validator("manifest_hash", "policy_bundle_hash")
     @classmethod
-    def _validate_manifest_hash(cls, v: str | None) -> str | None:
+    def _validate_hash_fields(cls, v: str | None) -> str | None:
         if v is None:
             return None
         if not v.startswith("sha256:") or len(v) != len("sha256:") + 64:
-            raise ValueError("manifest_hash must be a sha256:<hex> digest")
+            raise ValueError("must be a sha256:<hex> digest")
         return v
 
     @field_validator("audience", "allowed_effect_types")
@@ -132,6 +133,9 @@ class ExecutionGrant(BaseModel):
 
     def is_manifest_bound(self) -> bool:
         return self.manifest_hash is not None
+
+    def is_policy_bundle_bound(self) -> bool:
+        return self.policy_bundle_hash is not None
 
 
 __all__ = ["ExecutionGrant", "ScopeConstraints"]

@@ -10,6 +10,7 @@ and rejects unknown fields.
 |---|---|
 | `grant_id` | Unique identifier |
 | `manifest_hash` | The exact manifest this grant authorizes execution of. `None` only for a pure delegation/capability grant not yet bound to a concrete effect (see [delegation.md](delegation.md)); a grant actually presented to `engine.commit()` must have this set, and it must equal the sealed manifest's hash exactly (invariant #2) |
+| `policy_bundle_hash` | Optional (default `None`, backward compatible). If set, `engine.commit()` requires the exact same signed policy bundle (by hash) to be re-presented and re-verified before the effect executes — see [policy-bundles.md](policy-bundles.md) and invariant #31 |
 | `issuer` | Who authorized this — **must** be `human` or `service`, never `agent` (invariant #30, enforced in `grants/issuer.py`) |
 | `subject` | Who the grant is issued to (typically the agent) |
 | `audience` | Allowed adapter id(s) this grant may be presented to |

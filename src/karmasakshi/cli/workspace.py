@@ -32,6 +32,7 @@ from karmasakshi.engine.core import KarmaSakshiEngine
 from karmasakshi.errors import KeyLoadError
 from karmasakshi.grants.model import ExecutionGrant
 from karmasakshi.intelligence.model import EffectAssessment
+from karmasakshi.policy.bundle import PolicyBundle, SealedPolicyBundle
 from karmasakshi.state_machine.states import LifecycleState
 from karmasakshi.stores.sqlite import SQLiteGrantStore
 
@@ -52,9 +53,16 @@ class Workspace:
         self.keys_dir = self.root / "keys"
         self.manifests_dir = self.root / "manifests"
         self.grants_dir = self.root / "grants"
+        self.policies_dir = self.root / "policies"
 
     def ensure_initialized(self) -> None:
-        for d in (self.root, self.keys_dir, self.manifests_dir, self.grants_dir):
+        for d in (
+            self.root,
+            self.keys_dir,
+            self.manifests_dir,
+            self.grants_dir,
+            self.policies_dir,
+        ):
             d.mkdir(parents=True, exist_ok=True)
 
     def is_initialized(self) -> bool:
@@ -147,6 +155,26 @@ class Workspace:
         if not path.exists():
             return None
         return EffectAssessment.model_validate_json(path.read_text(encoding="utf-8"))
+
+    # --- policy bundles ---------------------------------------------------------
+
+    def save_unsigned_policy_bundle(self, bundle: PolicyBundle) -> Path:
+        path = self.policies_dir / f"{bundle.bundle_id}.unsigned.json"
+        path.write_text(bundle.model_dump_json(indent=2), encoding="utf-8")
+        return path
+
+    def load_unsigned_policy_bundle(self, bundle_id: str) -> PolicyBundle:
+        path = self.policies_dir / f"{bundle_id}.unsigned.json"
+        return PolicyBundle.model_validate_json(path.read_text(encoding="utf-8"))
+
+    def save_sealed_policy_bundle(self, sealed: SealedPolicyBundle) -> Path:
+        path = self.policies_dir / f"{sealed.bundle.bundle_id}.json"
+        path.write_text(sealed.model_dump_json(indent=2), encoding="utf-8")
+        return path
+
+    def load_sealed_policy_bundle(self, bundle_id: str) -> SealedPolicyBundle:
+        path = self.policies_dir / f"{bundle_id}.json"
+        return SealedPolicyBundle.model_validate_json(path.read_text(encoding="utf-8"))
 
     # --- grants -------------------------------------------------------------
 

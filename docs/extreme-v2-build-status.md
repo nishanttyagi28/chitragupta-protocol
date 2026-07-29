@@ -1,6 +1,6 @@
 # Build Status — KarmaSakshi Protocol "extreme-v2"
 
-_Last updated: 2026-07-28_
+_Last updated: 2026-07-29_
 
 This ledger tracks work beyond the v0.1.0 baseline documented in
 [`BUILD_STATUS.md`](../BUILD_STATUS.md), toward the 25-phase program
@@ -39,7 +39,7 @@ for a baseline hygiene fix) and is recorded here, not silently dropped.
 | Phase | Status | Notes |
 |---|---|---|
 | 1. Effect Intelligence | **Implemented** (advisory only) | See below |
-| 2. Signed policy bundles | Not started | `IntelligencePolicy` from Phase 1 is the scoring-rule shape a signed bundle would wrap; no signature/versioned-bundle envelope exists yet |
+| 2. Signed policy bundles | **Implemented** | See below |
 | 3. Multi-party (M-of-N) authorization | Not started | |
 | 4. Separation of duties (explicit roles) | Not started | |
 | 5. Causal effect graphs | Not started | `parent_manifest_id` remains a single unsigned string field, unchanged from v0.1 |
@@ -168,35 +168,139 @@ Results at the time of this commit: `ruff check`/`ruff format --check`/
 fabricated); `build`/`twine check` clean; `pip-audit` → 1 known
 vulnerability (`pytest` 8.4.2, dev-only, noted above, unresolved).
 
-### Commit SHAs
+### Commit SHAs / PR
 
 - `900c87b` — baseline test/tooling fixes (pre-Phase-1)
 - `739ecc3` — Phase 1: Effect Intelligence Engine implementation, tests, docs
+- `d22db89` — Phase 1: build ledger
+- PR [#15](https://github.com/nishanttyagi28/karmasakshi-protocol/pull/15) — merged (`3ceebcb`), all 14 CI checks green
+
+## Phase 2: Signed Policy Bundles
+
+**Status: implemented.**
+
+### Files changed
+
+- Added: `src/karmasakshi/policy/{__init__,bundle,sealing}.py`
+- Added: `src/karmasakshi/cli/policy_cmd.py`
+- Added: `docs/policy-bundles.md`
+- Added: `tests/unit/test_policy_bundles.py`,
+  `tests/property/test_policy_bundle_properties.py`,
+  `tests/adversarial/test_policy_bundle_gaming.py`
+- Modified: `src/karmasakshi/errors/__init__.py` (6 new `PolicyBundleError`
+  subclasses), `src/karmasakshi/intelligence/policy.py`
+  (`build_policy_bundle`/`policy_from_bundle_payload`,
+  `POLICY_TYPE_INTELLIGENCE`), `src/karmasakshi/grants/model.py`
+  (`ExecutionGrant.policy_bundle_hash`, `is_policy_bundle_bound()`),
+  `src/karmasakshi/grants/issuer.py` (`issue_grant(policy_bundle_hash=...)`),
+  `src/karmasakshi/engine/core.py` (`authorize(policy_bundle=...)`,
+  `commit(policy_bundle=...)`), `src/karmasakshi/cli/app.py`,
+  `src/karmasakshi/cli/{grant_cmd,execute_cmd,workspace}.py`
+  (`--policy-bundle-id`), `src/karmasakshi/api/{schemas,state,routes}.py`
+  (`/policy/bundles*`, `policy_bundle_id` on `/approve`/`/execute`),
+  `src/karmasakshi/passports/{model,generator,render}.py`
+  (`authorization_policy_bundle_hash`)
+- Docs updated: `docs/security-model.md` (invariants #31, #32),
+  `docs/threat-model.md` implicitly covered by the "New trusted
+  component" section already added for Phase 1 (policy bundles are the
+  same trust class); `docs/execution-grants.md`, `docs/protocol-spec.md`,
+  `docs/cli.md`, `docs/api.md`, `README.md`, `CHANGELOG.md`
+
+### Tests added
+
+- 16 unit tests (`test_policy_bundles.py`): construction/validation
+  (effective window ordering, oversized payload), hash determinism
+  regardless of dict/tuple construction order, seal/verify round trip,
+  type-mismatch/not-yet-effective/expired/tampered/unknown-key/forged-
+  signature rejection, `IntelligencePolicy` <-> payload round trip
+  (including malformed-payload rejection).
+- 3 Hypothesis property tests (`test_policy_bundle_properties.py`, 100-200
+  examples each): arbitrary `IntelligencePolicy` values round-trip
+  through a bundle payload with an identical `policy_hash()`; bundle hash
+  is stable across repeated builds of the same policy; effective-window
+  membership is consistent (`is_effective_at` at the boundaries).
+- 7 adversarial tests (`test_policy_bundle_gaming.py`): agent-issuer
+  rejection, expired-bundle replay, seal/bundle "frankenstein" grafting
+  (stolen signature over swapped content), unknown-signer rejection,
+  cross-bundle signature reuse, forged-signature-over-correct-hash.
+- Engine integration tests (`test_engine.py`, 6 new): `authorize()` binds
+  the bundle hash into the grant; `commit()` succeeds with the matching
+  bundle; **the core security property** -- `commit()` rejects a missing
+  bundle, a swapped (different but validly-signed) bundle, and a
+  tampered bundle, each with a specific error; a grant issued without a
+  policy bundle is unaffected by an extraneous one being passed
+  (backward-compatibility regression test).
+- API integration tests (`test_api.py`, 6 new): bundle create/get/verify,
+  agent-issuer 422, not-found 404s, `/approve`+`/execute` binding and
+  rejecting a swapped bundle (`409`), passport surfacing the bound hash.
+- CLI integration tests (`test_cli.py`, 4 new): `policy create/sign/verify`
+  round trip, verify-before-sign failure, and a full `grant issue
+  --policy-bundle-id` / `execute --policy-bundle-id` cycle against the
+  SQLite adapter proving the missing-bundle case fails and the matching
+  case succeeds.
+- Full existing suite remains green throughout (414 passed, 6 skipped --
+  no regressions from either phase).
+
+### Security invariants added
+
+- **#31**: A grant bound to a policy bundle cannot commit against a
+  missing, different, tampered, expired, or untrusted-signer policy
+  bundle (`engine.commit()`'s `policy_bundle_hash` check, only active
+  when the grant declares one -- fully backward compatible).
+- **#32**: An agent principal cannot be the issuer of a signed policy
+  bundle (`build_policy_bundle()`, mirroring invariant #30).
+
+### Known limitations
+
+See `docs/policy-bundles.md`'s "Known limitations" section in full;
+summary: not yet an enforcement gate on `EffectAssessment.recommendation`
+(Phase 2 gives a cryptographically pinned *reference*, not automatic
+blocking -- that is explicitly deferred to a later phase, per the prior
+ledger's own guidance, to avoid wiring enforcement in before the binding
+existed); `tenant_id` is metadata only, not enforced; only
+`policy_type == "intelligence.v1"` is currently interpretable.
+
+### Verification commands
+
+Same procedure as Phase 1 (see above). Results at the time of this
+commit: `ruff check`/`ruff format --check`/`mypy src`/`bandit` all clean;
+`pytest -q` → **414 passed, 6 skipped**; `pytest --cov=karmasakshi
+--cov-fail-under=90` → 92%; `build`/`twine check` clean; `pip-audit` → the
+same 1 known dev-only vulnerability as Phase 1 (unchanged, unresolved).
+
+### Commit SHAs / PR
+
+Recorded after this slice's PR is opened and merged (see repository
+history / PR list for the exact SHAs and PR number -- this ledger entry
+is completed as part of that PR, matching the pattern established for
+Phase 1).
 
 ## Exact next executable step
 
-**Phase 2: Signed policy bundles.** Concretely:
+**Phase 3: Multi-party (M-of-N) authorization.** Concretely:
 
-1. Wrap `IntelligencePolicy` (or a renamed/versioned successor) in a
-   signed envelope analogous to `SealedManifest`/`Seal`
-   (`protocol/sealing.py` is the existing pattern to reuse): a canonical
-   hash of the policy bundle, an Ed25519 signature over that hash via the
-   existing `Keyring`/`SigningKey` machinery, and a `verify_policy_bundle()`
-   analogous to `verify_seal()`.
-2. Add an explicit effective/expiry window and a `policy_bundle_id` to the
-   bundle envelope, distinct from the inner `IntelligencePolicy.policy_id`.
-3. Bind `ExecutionGrant` (or a new field on it) to both `manifest_hash`
-   (already present) **and** the policy bundle's hash, so a policy swap
-   after approval cannot silently alter what was authorized -- this is
-   the mechanism the mission's Phase 2 requirement ("a policy change
-   after approval must not silently alter an existing authorization")
-   depends on.
-4. Only after that binding exists does it become honest to make
-   `EffectAssessment.recommendation == BLOCK` (or an unmet
-   `required_human_approvals`) a structural gate in `engine.authorize()` --
-   do not wire enforcement in before the policy itself is
-   cryptographically pinned, or a compromised/careless caller could swap
-   in a permissive policy at authorization time.
-5. Extend the CLI (`karmasakshi policy create|sign|verify`) and API
-   accordingly, following the same request/response and audit-event
-   patterns established for `assess` in this phase.
+1. Add `ApprovalStatement` (one principal's signed yes/no on a specific
+   `manifest_hash` + `policy_bundle_hash` pair, with expiry) and
+   `ApprovalSet` (a collection of statements) domain models, mirroring
+   the `Seal`/`PolicyBundleSeal` sign/verify pattern a third time.
+2. Add `ApprovalPolicy` (quorum rules: N-of-M, named-role requirements
+   such as "finance + security", no-self-approval, proposer/executor
+   exclusion) -- this is a natural companion payload type for the
+   `PolicyBundle` envelope built in Phase 2 (`policy_type =
+   "approval.v1"`), reusing the same signed-bundle infrastructure rather
+   than inventing a new one.
+3. Extend `engine.authorize()` (or add a new `engine.authorize_with_quorum()`
+   entry point, preserving the existing single-issuer `authorize()` for
+   backward compatibility per the mission's explicit requirement) to
+   accept an `ApprovalSet`, verify each statement (signature, expiry,
+   manifest/policy binding, no duplicate/self approvers), evaluate it
+   against the bound `ApprovalPolicy`'s quorum rule, and only then issue
+   the grant.
+4. This is also the natural point to read
+   `EffectAssessment.required_human_approvals`/
+   `required_witness_quorum` from Phase 1 and make it feed the quorum
+   requirement -- turning the advisory recommendation into a structural
+   requirement for the first time, now that both the policy (Phase 2)
+   and the approval set (Phase 3) are cryptographically pinned.
+5. Extend the CLI (`karmasakshi approve`/`karmasakshi approvals inspect`)
+   and API accordingly.
