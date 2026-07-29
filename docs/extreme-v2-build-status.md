@@ -629,13 +629,13 @@ fail-closed unknown adapters.
 
 - last merged phase on main: Phase 15 (`a5f3ae5`, PR #30)
 - current branch: `cursor/phase16-production-signers-ffca`
-- open PR: (pending)
+- open PR: https://github.com/nishanttyagi28/karmasakshi-protocol/pull/31
 - test counts: **666 passed, 8 skipped**; coverage **90.01%**
 - exact next phase: 17 — Trusted adapter registry
 
 ## Phase 16: Production signer interfaces
 
-**Status: implemented on branch.**
+**Status: implemented on branch (PR #31).**
 
 ### What landed
 
