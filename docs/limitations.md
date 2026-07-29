@@ -66,6 +66,14 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
 - **API resource protection is process-local** (extreme-v2 Phase 20).
   Body-size and per-client rate ceilings; not a WAF. See
   [docs/resource-protection.md](resource-protection.md).
+- **Bounded lifecycle model checking is not formal verification**
+  (extreme-v2 Phase 22). `check_lifecycle_model()` exhausts a small graph;
+  it is not a theorem prover. See
+  [docs/state-machine-model-checking.md](state-machine-model-checking.md).
+- **Action Passport V2 is additive** (extreme-v2 Phase 23). Default
+  emission remains v1; V2 `passport_hash` is content-binding, not a
+  separately signed credential. See
+  [docs/action-passport-v2.md](action-passport-v2.md).
 - **No production key management.** Dev-mode key generation writes raw
   private key bytes to a local file with best-effort file permissions.
   There's no HSM/KMS integration, no automated rotation workflow, and no
@@ -82,14 +90,11 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
 - **Transactional outbox is single-node** (extreme-v2 Phase 15).
   `outbox.db` records commit intent; pending is not verified
   completion. See [docs/transactional-outbox.md](transactional-outbox.md).
-- **No rate limiting, DoS protection, or resource-exhaustion defense**
-  anywhere in the CLI, API, or engine.
-- **No formal verification.** The documented invariants
-  ([docs/security-model.md](security-model.md)) are backed by unit tests,
-  property-based tests (Hypothesis), and adversarial-input tests — not by
-  a theorem prover or model checker. Passing tests demonstrate the stated
+- **Documented invariants are not a formal proof.** They are backed by
+  unit, property (Hypothesis), adversarial, and bounded model-check
+  tests — not by a theorem prover. Passing tests demonstrate the stated
   behavior under the scenarios exercised; they are not an exhaustive
-  proof.
+  proof. See [docs/security-model.md](security-model.md).
 - **The FastAPI control plane is process-local state.** `ApiState` is not
   designed for horizontal scaling as shipped; a real multi-instance
   deployment would need a shared grant store (Redis) and a shared audit

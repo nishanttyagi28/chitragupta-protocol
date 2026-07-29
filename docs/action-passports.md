@@ -65,7 +65,14 @@ shows `grant_id=None`, `commit_attempted=False`.
 - `render_passport_html(passport)` — the Markdown wrapped in an escaped
   `<pre>` block (no HTML injection risk from manifest content).
 
+## Action Passport V2
+
+Extreme-v2 Phase 23 adds an additive schema (`action_passport.v2` /
+`2.0`) with `outcome_status`, `passport_hash`, and optional `tenant_id`.
+See [action-passport-v2.md](action-passport-v2.md). V1 remains the
+default on CLI and API.
+
 ## Where you can get one
 
-- CLI: `karmasakshi passport <manifest-id> [--format json|markdown|html] [--grant-id ...] [-o file]`
-- API: `GET /passports/{manifest_id}?fmt=json|markdown|html`
+- CLI: `karmasakshi passport <manifest-id> [--format json|markdown|html] [--version v1|v2] [--grant-id ...] [-o file]`
+- API: `GET /passports/{manifest_id}?fmt=json|markdown|html&version=v1|v2`

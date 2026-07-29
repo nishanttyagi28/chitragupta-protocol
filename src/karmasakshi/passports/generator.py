@@ -18,6 +18,7 @@ from karmasakshi.grants.model import ExecutionGrant
 from karmasakshi.grants.verifier import verify_grant_signature
 from karmasakshi.intelligence.model import EffectAssessment
 from karmasakshi.passports.model import ActionPassport, PassportVerificationStatus
+from karmasakshi.passports.v2 import ActionPassportV2, upgrade_passport_v1_to_v2
 from karmasakshi.stores.base import GrantStore
 
 _ROLE_METADATA_PREFIX = "role:"
@@ -190,4 +191,61 @@ def build_passport(
     )
 
 
-__all__ = ["build_passport"]
+def build_passport_v2(
+    *,
+    sealed: SealedManifest,
+    keyring: Keyring,
+    audit: AuditJournal,
+    lifecycle_state: str,
+    grant: ExecutionGrant | None = None,
+    grant_store: GrantStore | None = None,
+    commit_result: CommitResult | None = None,
+    outcome_proof: OutcomeProof | None = None,
+    compensation_result: CompensationResult | None = None,
+    assessment: EffectAssessment | None = None,
+    role_assignment: RoleAssignment | None = None,
+    causal_graph: CausalEffectGraph | None = None,
+    witness_set_hash: str | None = None,
+    witness_policy_hash: str | None = None,
+    witness_quorum_satisfied: bool | None = None,
+    accepted_witness_ids: tuple[str, ...] = (),
+    evidence_set_hash: str | None = None,
+    evidence_policy_hash: str | None = None,
+    evidence_acceptable: bool | None = None,
+    evidence_strongest_kind: str | None = None,
+    compensation_manifest_hash: str | None = None,
+    compensation_passport_status: str | None = None,
+    tenant_id: str | None = None,
+) -> ActionPassportV2:
+    """Build an Action Passport V2 (schema 2.0) from the same facts as v1.
+
+    V1 remains the default surface; this is an additive versioned format.
+    """
+    v1 = build_passport(
+        sealed=sealed,
+        keyring=keyring,
+        audit=audit,
+        lifecycle_state=lifecycle_state,
+        grant=grant,
+        grant_store=grant_store,
+        commit_result=commit_result,
+        outcome_proof=outcome_proof,
+        compensation_result=compensation_result,
+        assessment=assessment,
+        role_assignment=role_assignment,
+        causal_graph=causal_graph,
+        witness_set_hash=witness_set_hash,
+        witness_policy_hash=witness_policy_hash,
+        witness_quorum_satisfied=witness_quorum_satisfied,
+        accepted_witness_ids=accepted_witness_ids,
+        evidence_set_hash=evidence_set_hash,
+        evidence_policy_hash=evidence_policy_hash,
+        evidence_acceptable=evidence_acceptable,
+        evidence_strongest_kind=evidence_strongest_kind,
+        compensation_manifest_hash=compensation_manifest_hash,
+        compensation_passport_status=compensation_passport_status,
+    )
+    return upgrade_passport_v1_to_v2(v1, tenant_id=tenant_id)
+
+
+__all__ = ["build_passport", "build_passport_v2"]

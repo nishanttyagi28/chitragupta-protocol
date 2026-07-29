@@ -66,7 +66,14 @@ from karmasakshi.errors import KarmaSakshiError
 from karmasakshi.grants.model import ScopeConstraints
 from karmasakshi.intelligence import AssessmentFacts, IntelligencePolicy, derive_facts_from_audit
 from karmasakshi.intelligence.policy import build_policy_bundle
-from karmasakshi.passports import build_passport, render_passport_html, render_passport_markdown
+from karmasakshi.passports import (
+    build_passport,
+    build_passport_v2,
+    render_passport_html,
+    render_passport_markdown,
+    render_passport_v2_html,
+    render_passport_v2_markdown,
+)
 from karmasakshi.policy import seal_policy_bundle, verify_policy_bundle
 
 router = APIRouter()
@@ -1141,18 +1148,56 @@ def audit_verify(request: Request) -> dict[str, Any]:
 
 
 @router.get("/passports/{manifest_id}", dependencies=[Depends(require_auth)])
-def get_passport(manifest_id: str, request: Request, fmt: str = "json") -> Any:
+def get_passport(
+    manifest_id: str,
+    request: Request,
+    fmt: str = "json",
+    version: str = "v1",
+) -> Any:
+    """Emit an Action Passport.
+
+    ``version=v1`` (default) returns the classic Action Passport.
+    ``version=v2`` returns Action Passport V2 (schema 2.0) with
+    ``passport_format``, ``outcome_status``, and ``passport_hash``.
+    """
     state = _state(request)
     sealed = state.sealed_manifests.get(manifest_id)
     if sealed is None:
         raise HTTPException(404, "manifest not found")
     grant_ids = state.grants_by_manifest.get(manifest_id, [])
     grant = state.grants[grant_ids[-1]] if grant_ids else None
+    lifecycle_state = state.engine.get_lifecycle_state(manifest_id).value
+    ver = version.strip().lower()
+    if ver in {"v2", "2", "2.0"}:
+        passport_v2 = build_passport_v2(
+            sealed=sealed,
+            keyring=state.keyring,
+            audit=state.engine.context.audit,
+            lifecycle_state=lifecycle_state,
+            grant=grant,
+            grant_store=state.engine.context.grant_store,
+            commit_result=state.commit_results.get(manifest_id),
+            outcome_proof=state.outcome_proofs.get(manifest_id),
+            compensation_result=state.compensation_results.get(manifest_id),
+            assessment=state.assessments.get(manifest_id),
+            tenant_id=state.engine.context.tenant_id,
+        )
+        if fmt == "html":
+            from fastapi.responses import HTMLResponse
+
+            return HTMLResponse(render_passport_v2_html(passport_v2))
+        if fmt == "markdown":
+            from fastapi.responses import PlainTextResponse
+
+            return PlainTextResponse(render_passport_v2_markdown(passport_v2))
+        return passport_v2.model_dump(mode="json")
+    if ver not in {"v1", "1", "1.0"}:
+        raise HTTPException(400, "version must be v1 or v2")
     passport = build_passport(
         sealed=sealed,
         keyring=state.keyring,
         audit=state.engine.context.audit,
-        lifecycle_state=state.engine.get_lifecycle_state(manifest_id).value,
+        lifecycle_state=lifecycle_state,
         grant=grant,
         grant_store=state.engine.context.grant_store,
         commit_result=state.commit_results.get(manifest_id),
