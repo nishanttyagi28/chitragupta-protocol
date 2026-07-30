@@ -18,7 +18,7 @@ separately.
 | RA-001 | Critical | **Fixed** | `eec969f` |
 | RA-002 | High | **Fixed** | `1e43929` |
 | RA-003 | High | **Fixed** | `ef9058e` |
-| RA-004 | High | Pending | |
+| RA-004 | High | **Fixed** | `4c25b2b` |
 | RA-005 | High | Pending | |
 | RA-006 | Medium | Pending | |
 | RA-007 | Medium | Pending | |
@@ -196,4 +196,72 @@ never consulted the activated bundle at all.
 passed**.
 
 **Full suite after this fix:** `1023 passed, 8 skipped`. `ruff check`, `ruff
+format --check`, and `mypy src` all clean.
+
+## RA-004 — High — Ambiguous recovery produces contradictory truth surfaces
+
+**Status: Fixed** (`4c25b2b`)
+
+**Root cause:** a settle-then-timeout commit left the lifecycle terminal
+`FAILED` (`engine/core.py`). `recover_ambiguous_commit()` recorded an audit
+event, an idempotent outcome, and an outbox confirmation, but never
+transitioned the lifecycle. Three surfaces then derived their own
+independent, disagreeing conclusions from the same underlying facts: the
+Gateway read model's `verification_status` correctly prioritized the
+recovery proof (`verified_match`), the raw `lifecycle_state` it also
+returned stayed `failed`, and Action Passport V2's `derive_outcome_status()`
+checked `lifecycle_state == "failed"` first and reported `FAILED`,
+ignoring a matched proof entirely.
+
+**Fix:**
+
+- New `LifecycleState.RECOVERED_COMMITTED`, reachable only from `FAILED`
+  (`state_machine/states.py`). `FAILED` is removed from `TERMINAL_STATES`
+  since it now has this one narrow, honestly-labeled exit; `FAILED` itself
+  is never rewritten in place, and the model-check invariants (terminal
+  states have no exits, no orphan states, bounded paths legal) still hold
+  with the new state and edge.
+- `KarmaSakshiEngine.recover_ambiguous_commit()` now transitions to
+  `RECOVERED_COMMITTED` when the independent proof matches, but only when
+  that transition is actually legal for the manifest's current state --
+  a no-op for the (pre-existing, still-tested) crash-before-commit-was-
+  ever-attempted scenarios, so no crash-recovery test needed to change
+  behavior.
+- `passports.v2.derive_outcome_status()` reordered so a matched
+  independent observation (`observed_matched_expected is True/False`)
+  outranks both the stale `"failed"` lifecycle check and free-text
+  `"ambiguous"` commit-detail sniffing, while still yielding to a later,
+  separately-authorized compensation outcome (compensation checks stay
+  first). Two existing tests that had encoded the old (buggy) priority --
+  `test_derive_outcome_status_failed_ambiguous_compensation` and the
+  gateway `test_ambiguous_outcome_recovered_honestly` acceptance test --
+  were updated to assert the corrected, reconciled behavior instead of the
+  bug.
+
+**Tests added/updated:**
+
+- `tests/unit/test_state_machine.py` -- `FAILED` is no longer a zero-exit
+  terminal and has exactly one legal exit (`RECOVERED_COMMITTED`); updated
+  the terminal-states test accordingly.
+- `tests/unit/test_passport_v2.py` -- matched proof overrides stale
+  `failed` lifecycle; no-evidence `failed` case still correctly reports
+  `FAILED`; compensation-after-verification cases still take priority over
+  the original effect's own verification (unaffected by the reorder).
+- `tests/integration/test_gateway_refunds.py` -- extended the exact
+  audited scenario (settle-then-timeout, recover, matched) with
+  cross-surface assertions: refund detail's `lifecycle_state`,
+  `verification_status`, and Passport V2's `outcome_status` and
+  `lifecycle_state` all now agree (`recovered_committed`/`verified_match`).
+  Added the mirror case (`recover` finds no evidence): all surfaces
+  honestly agree on `failed`/`verified_mismatch`. Confirmed both new
+  acceptance tests fail against the pre-fix code with the exact
+  contradiction the audit described.
+
+**Focused tests:** `tests/unit/test_state_machine.py`,
+`tests/unit/test_lifecycle_model_check.py`, `tests/unit/test_passport_v2.py`,
+`tests/unit/test_crash_recovery.py`, `tests/unit/test_transactional_outbox.py`,
+`tests/unit/test_engine.py`, `tests/integration/test_gateway_refunds.py` --
+**110 passed**.
+
+**Full suite after this fix:** `1025 passed, 8 skipped`. `ruff check`, `ruff
 format --check`, and `mypy src` all clean.
