@@ -76,3 +76,8 @@ def test_real_buyer_acceptance_journey(
         "Offline passport and audit verification successful",
         "Cross-tenant access rejected",
     } <= names
+    # RA-007: the Passport itself is a deterministic content hash, not a
+    # separately signed credential -- the check label must never claim
+    # otherwise again.
+    assert "Action Passport generated (seal/grant/audit signatures verified)" in names
+    assert not any("signed action passport" in name.lower() for name in names)

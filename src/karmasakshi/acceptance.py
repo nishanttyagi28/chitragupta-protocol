@@ -411,7 +411,12 @@ def run_acceptance(
                 passport.verification.seal_verified
                 and passport.verification.grant_verified
                 and passport.verification.audit_chain_verified,
-                "Signed Action Passport generated",
+                # RA-007: the Passport itself is a deterministic content
+                # hash, not a separately signed credential -- what is
+                # actually signed and re-verified here are its embedded
+                # seal, grant, and audit-chain anchors. See
+                # docs/action-passport-v2.md.
+                "Action Passport generated (seal/grant/audit signatures verified)",
                 f"passport hash {passport.passport_hash}",
             )
 

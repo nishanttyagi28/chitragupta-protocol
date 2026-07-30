@@ -118,8 +118,10 @@ canonical **Effect Manifest**, seals it cryptographically, binds
 authorization to that *sealed effect* rather than to a tool name,
 re-validates external state immediately before committing, executes with
 exactly-once semantics, and independently verifies the actual outcome
-afterward — producing a signed **Action Passport** as proof of what really
-happened.
+afterward — producing an **Action Passport**, whose embedded seal, grant,
+and audit-chain signatures are independently re-verified, as proof of
+what really happened (the Passport's own content hash is not itself a
+separate signature — see docs/action-passport-v2.md).
 
 ## Not another agent permission layer
 

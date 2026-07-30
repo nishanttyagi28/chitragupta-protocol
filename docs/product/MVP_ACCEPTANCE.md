@@ -15,7 +15,9 @@ A commercial MVP is **not claimed** until this checklist passes as an automated 
 - [x] Required quorum completed
 - [x] Effect committed exactly once through the simulator
 - [x] Independent ledger observation
-- [x] Signed Action Passport generated
+- [x] Action Passport generated (seal/grant/audit signatures verified;
+      the Passport's own content hash is not itself a separate signature
+      -- see docs/action-passport-v2.md)
 - [x] Audit trail searchable
 - [x] Modified amount or recipient rejected
 - [x] Duplicate retry prevented

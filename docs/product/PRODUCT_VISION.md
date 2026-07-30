@@ -33,7 +33,7 @@ PROPOSE → PREPARE → ASSESS → SEAL → AUTHORIZE → COMMIT → VERIFY → 
 
 ## First commercial use case
 
-**AI-operated customer refund** — an agent proposes an exact refund effect; policy and humans authorize; the payment simulator (or real adapter) commits; independent ledger observation produces a signed Action Passport.
+**AI-operated customer refund** — an agent proposes an exact refund effect; policy and humans authorize; the payment simulator (or real adapter) commits; independent ledger observation produces an Action Passport whose embedded seal, grant, and audit anchors are independently re-verified (the Passport itself is a deterministic content hash, not a separately signed credential — see docs/action-passport-v2.md).
 
 ## Honesty
 
