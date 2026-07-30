@@ -19,7 +19,7 @@ separately.
 | RA-002 | High | **Fixed** | `1e43929` |
 | RA-003 | High | **Fixed** | `ef9058e` |
 | RA-004 | High | **Fixed** | `4c25b2b` |
-| RA-005 | High | Pending | |
+| RA-005 | High | **Fixed** | `32b183e` |
 | RA-006 | Medium | Pending | |
 | RA-007 | Medium | Pending | |
 | RA-008 | Medium | Pending | |
@@ -264,4 +264,58 @@ ignoring a matched proof entirely.
 **110 passed**.
 
 **Full suite after this fix:** `1025 passed, 8 skipped`. `ruff check`, `ruff
+format --check`, and `mypy src` all clean.
+
+## RA-005 — High — "Three-person human quorum" has no meaningful user authorization
+
+**Status: Partially fixed (code); wording/identity gap remains** (`32b183e`)
+
+**Root cause:** `POST /organizations/{org_id}/users` (`gateway/api.py`)
+checked only organization membership (`_assert_org_scope`), not role.
+`GatewayUserRole` was documented as pure metadata, never checked by any
+authorization decision. Any authenticated member could create arbitrary
+additional accounts, log into them, and satisfy the refund approval
+quorum by itself. Separately, `POST /organizations/{org_id}/policy`
+(`gateway/refunds.py`) had the same gap, which became more consequential
+after RA-003 made the active policy actually govern assessment: a member
+could activate a lenient policy to weaken risk scoring for their own
+proposals.
+
+**Fix:**
+
+- `create_organization_user()` now requires `user.role ==
+  GatewayUserRole.OWNER`, checked after `_assert_org_scope` (so cross-org
+  rejection still takes priority) and before any store write.
+- `activate_policy()` gained the same `OWNER`-only check.
+- Corrected the several docstrings/docs (`GatewayUserRole`,
+  `docs/limitations.md`, `docs/gateway.md`) that flatly claimed no role is
+  ever checked -- they now name exactly the two actions that are
+  restricted and are explicit that this is not general RBAC (every other
+  action -- approve, deny, execute, register agents/adapters -- remains
+  unrestricted among members).
+
+**Explicitly not fixed in this pass** (matches the audit's own framing:
+the deeper issue is "distinct accounts" vs. "distinct verified humans"):
+per-user signing keys, SSO/independent identity assurance, and the
+buyer-facing "three-person"/"human" wording in the README and media are
+unchanged. `docs/gateway.md` and `docs/limitations.md` now describe
+"owner" as "an authenticated account, not an independently verified human
+identity" rather than silently implying otherwise, but the broader
+documentation correction (remediation item #14) is deferred to the final
+documentation pass in this remediation, not claimed as resolved here.
+
+**Tests added:**
+
+- `tests/integration/test_gateway_api.py::test_member_cannot_self_provision_additional_users`
+  -- exact regression: an owner-created member can no longer create
+  further users; the owner still can. Confirmed to fail (200, not 403)
+  against the pre-fix code.
+- `tests/integration/test_gateway_refunds.py::test_member_cannot_activate_policy`
+  -- same pattern for policy activation. Confirmed to fail against the
+  pre-fix code.
+
+**Focused tests:** `tests/integration/test_gateway_api.py`,
+`tests/integration/test_gateway_refunds.py` -- **49 passed**.
+
+**Full suite after this fix:** `1027 passed, 8 skipped`. `ruff check`, `ruff
 format --check`, and `mypy src` all clean.
