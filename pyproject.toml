@@ -41,6 +41,10 @@ dependencies = [
     "typer>=0.12,<1.0",
     "rich>=13.7,<16",
     "orjson>=3.10,<4",
+    # RA-006: the base package installs the `karmasakshi-acceptance`
+    # console script (project.scripts below), and it needs httpx at
+    # runtime -- it must not be an optional extra a base install can omit.
+    "httpx>=0.27,<1.0",
 ]
 
 [project.optional-dependencies]

@@ -112,6 +112,25 @@ jobs:
       - run: karmasakshi version
       - run: karmasakshi --help
       - run: karmasakshi-acceptance --help
+      # RA-006: --help exits before the command's runtime imports run at
+      # all, so it never caught the base wheel missing httpx. Point at an
+      # unreachable port so the command actually reaches its httpx-using
+      # code path; a connection-refused failure (not ModuleNotFoundError)
+      # proves the base wheel installs every runtime dependency it needs.
+      - run: |
+          set +e
+          karmasakshi-acceptance --base-url http://127.0.0.1:1 --org-id ci-smoke > /tmp/acceptance-smoke.log 2>&1
+          status=$?
+          cat /tmp/acceptance-smoke.log
+          if grep -qi "ModuleNotFoundError" /tmp/acceptance-smoke.log; then
+            echo "karmasakshi-acceptance is missing a runtime dependency in the base wheel"
+            exit 1
+          fi
+          if [ "$status" -eq 0 ]; then
+            echo "expected karmasakshi-acceptance to fail against an unreachable base URL"
+            exit 1
+          fi
+          exit 0
       - run: karmasakshi doctor || true  # workspace not initialized yet; exercises the command path
       - run: karmasakshi demo --all
 
