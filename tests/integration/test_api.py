@@ -10,7 +10,7 @@ pytest.importorskip("jinja2")
 
 from fastapi.testclient import TestClient
 
-from karmasakshi.api.app import create_app
+from karmasakshi.api.app import MissingApiTokenError, create_app
 from karmasakshi.api.auth import DEV_MODE_ENV, TOKEN_ENV
 
 
@@ -48,10 +48,40 @@ def _approve(client, manifest_id):
 
 def test_health_and_ready(dev_client):
     assert dev_client.get("/health").json() == {"status": "ok"}
-    ready = dev_client.get("/ready").json()
+    resp = dev_client.get("/ready")
+    assert resp.status_code == 200
+    ready = resp.json()
     assert ready["status"] == "ready"
     assert ready["dev_mode"] is True
     assert ready["audit_chain_verified"] is True
+    assert ready["gateway_store_reachable"] is True
+
+
+def test_ready_returns_503_and_degraded_when_gateway_store_is_unreachable(dev_client):
+    """RA-010: /health always returns 200 unconditionally (liveness only).
+    /ready must actually fail an HTTP-status-only probe (not just say
+    "degraded" in a JSON body a naive healthcheck never parses) when the
+    Gateway's durable store is not usable."""
+    client = dev_client
+    app = client.app
+    gateway_state = app.state.karmasakshi_gateway
+
+    class _BrokenStore:
+        def list_organizations(self):
+            from karmasakshi.errors import StoreUnavailableError
+
+            raise StoreUnavailableError("simulated unavailable store")
+
+    original_store = gateway_state.store
+    gateway_state.store = _BrokenStore()
+    try:
+        resp = client.get("/ready")
+        assert resp.status_code == 503
+        body = resp.json()
+        assert body["status"] == "degraded"
+        assert body["gateway_store_reachable"] is False
+    finally:
+        gateway_state.store = original_store
 
 
 def test_full_lifecycle_happy_path(dev_client):
@@ -659,12 +689,14 @@ def test_console_approve_form_issues_grant(dev_client):
 
 class TestAuthEnforcement:
     def test_missing_token_config_fails_closed(self, monkeypatch, tmp_path):
+        """RA-010: this used to be discovered lazily, per-request (a 500
+        on the first protected route hit) -- health/readiness had no way
+        to see the misconfiguration, so an unusable deployment could
+        still report healthy. It must now fail at startup instead."""
         monkeypatch.delenv(DEV_MODE_ENV, raising=False)
         monkeypatch.delenv(TOKEN_ENV, raising=False)
-        app = create_app(data_dir=tmp_path / "api-data")
-        client = TestClient(app)
-        response = client.get("/manifests")
-        assert response.status_code == 500
+        with pytest.raises(MissingApiTokenError):
+            create_app(data_dir=tmp_path / "api-data")
 
     def test_wrong_token_rejected(self, monkeypatch, tmp_path):
         monkeypatch.delenv(DEV_MODE_ENV, raising=False)
@@ -684,7 +716,7 @@ class TestAuthEnforcement:
 
     def test_health_and_ready_never_require_auth(self, monkeypatch, tmp_path):
         monkeypatch.delenv(DEV_MODE_ENV, raising=False)
-        monkeypatch.delenv(TOKEN_ENV, raising=False)
+        monkeypatch.setenv(TOKEN_ENV, "correct-token")
         app = create_app(data_dir=tmp_path / "api-data")
         client = TestClient(app)
         assert client.get("/health").status_code == 200

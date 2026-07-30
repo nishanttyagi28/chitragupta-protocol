@@ -12,7 +12,10 @@ services:
     volumes:
       - karmasakshi-data:/data
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      # RA-010: gate on /ready, not just /health -- /health is unconditional
+      # liveness only, while /ready fails (HTTP 503) if the audit chain or
+      # the Gateway's durable store is not actually usable.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2)"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -51,7 +54,10 @@ services:
     volumes:
       - karmasakshi-demo-data:/data
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      # RA-010: gate on /ready, not just /health -- /health is unconditional
+      # liveness only, while /ready fails (HTTP 503) if the audit chain or
+      # the Gateway's durable store is not actually usable.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2)"]
       interval: 5s
       timeout: 3s
       retries: 12

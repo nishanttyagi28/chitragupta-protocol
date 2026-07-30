@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from karmasakshi import __version__
-from karmasakshi.api.auth import is_dev_mode, is_public_demo
+from karmasakshi.api.auth import TOKEN_ENV, is_dev_mode, is_public_demo
 from karmasakshi.api.routes import router
 from karmasakshi.api.state import ApiState, build_default_state
 from karmasakshi.gateway.api import GatewayApiState, rehydrate_tenant_registrations
@@ -24,6 +24,15 @@ class PublicDemoMisconfiguredError(RuntimeError):
     copy of the real control-plane API/console -- refuse to start rather than risk that."""
 
 
+class MissingApiTokenError(RuntimeError):
+    """Raised at startup (RA-010) outside dev mode when KARMASAKSHI_API_TOKEN is not
+    configured. Previously this was only discovered per-request, lazily, the first time
+    a protected route was hit (karmasakshi.api.auth.require_auth) -- health checks and
+    orchestrator readiness probes had no way to see it, so a completely unusable
+    deployment (every authenticated route 500s) could still report healthy. Failing
+    at startup instead means the process never comes up in the first place."""
+
+
 def create_app(
     *,
     state: ApiState | None = None,
@@ -36,8 +45,18 @@ def create_app(
             "the public demo is meant to be the only unauthenticated surface exposed. Unset "
             "KARMASAKSHI_API_DEV_MODE for any deployment that sets KARMASAKSHI_PUBLIC_DEMO."
         )
-
     public_demo = is_public_demo()
+    # RA-010: a public-demo deployment's own unauthenticated surface
+    # (/demo/*) does not need KARMASAKSHI_API_TOKEN, so it is deliberately
+    # exempted here -- but any other non-dev deployment that omits it
+    # would 500 on every authenticated route, so refuse to start at all
+    # rather than let that surface as a misleadingly "healthy" process.
+    if not is_dev_mode() and not public_demo and not os.environ.get(TOKEN_ENV):
+        raise MissingApiTokenError(
+            f"{TOKEN_ENV} is not configured and KARMASAKSHI_API_DEV_MODE is not set; "
+            "refusing to start a server that would 500 on every authenticated route. "
+            f"Set {TOKEN_ENV} or KARMASAKSHI_API_DEV_MODE=1 (local development only)."
+        )
     app = FastAPI(
         title="KarmaSakshi Protocol Control Plane",
         version=__version__,
