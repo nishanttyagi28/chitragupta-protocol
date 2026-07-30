@@ -16,7 +16,7 @@ separately.
 | Finding | Severity | Status | Fix commit |
 |---|---|---|---|
 | RA-001 | Critical | **Fixed** | `eec969f` |
-| RA-002 | High | Pending | |
+| RA-002 | High | **Fixed** | `1e43929` |
 | RA-003 | High | Pending | |
 | RA-004 | High | Pending | |
 | RA-005 | High | Pending | |
@@ -90,3 +90,54 @@ databases outside the configured tenant root.
 **Full suite after this fix:** `1013 passed, 8 skipped` (baseline was `910
 passed, 8 skipped`; the delta is the new tests above). `ruff check`, `ruff
 format --check`, and `mypy src` all clean on touched files.
+
+## RA-002 — High — Named volume does not restore the Gateway refund product
+
+**Status: Fixed** (`1e43929`)
+
+**Root cause:** `MultiTenantControlPlane` starts each process with an empty
+registry and no built `ApiState`s. A durable Gateway organization (rows in
+`gateway.db` survive restart) had no corresponding tenant registration in a
+new process, so `resolve_org_runtime()` raised an unhandled
+`UnknownTenantError` on any org-scoped route -- surfaced to callers as HTTP
+500 in production (`fastapi`'s `TestClient` re-raises it directly in tests,
+which is how the regression test below proves the pre-fix crash).
+
+**Fix:**
+
+- `karmasakshi.gateway.api.rehydrate_tenant_registrations()`, called once at
+  Gateway app startup (`api/app.py::create_app`): lists every durable
+  organization from `GatewayStore` and, for any not already registered in
+  this process, registers it in the tenant control plane and rebuilds its
+  `ApiState` -- which reopens that tenant's already-durable audit, grant,
+  and lifecycle SQLite stores under its tenant directory. Idempotent (skips
+  orgs already registered) and preserves suspended status.
+- `resolve_org_runtime()` now catches `UnknownTenantError` alongside
+  `TenantIsolationError` and fails closed with a safe 404 instead of an
+  unhandled 500, for any tenant that still can't be resolved after
+  rehydration (e.g. a tenant directory removed out of band).
+- Documented in `docs/limitations.md` exactly what does and does not
+  survive a restart, rather than leaving the boundary implicit: durable
+  Gateway rows and per-tenant audit/grant/lifecycle stores do; the
+  per-process signing key, in-flight sealed-manifest/assessment/active-policy
+  caches, and the in-memory payment-simulator ledger do not.
+
+**Tests added:**
+
+- `tests/integration/test_gateway_restart.py` -- exact reproduction (bootstrap
+  on one `create_app()`, simulate restart with a second `create_app()`
+  against the same data dir, confirm a previously-500ing org-scoped route
+  now returns 200), a genuinely-unknown-org safe-rejection case, and a
+  multi-organization rehydration case. Confirmed to fail with the original
+  `UnknownTenantError` against the pre-fix code.
+- `tests/unit/test_gateway_rehydration.py` -- direct unit tests of
+  `rehydrate_tenant_registrations` (registers all orgs, preserves suspended
+  status, idempotent, no-op with zero orgs).
+
+**Focused tests:** `tests/integration/test_gateway_api.py`,
+`tests/integration/test_gateway_restart.py`,
+`tests/unit/test_gateway_rehydration.py`, `tests/unit/test_gateway_store.py`
+-- **68 passed**.
+
+**Full suite after this fix:** `1020 passed, 8 skipped`. `ruff check`, `ruff
+format --check`, and `mypy src` all clean.
