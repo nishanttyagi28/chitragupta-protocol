@@ -54,6 +54,33 @@ def test_bootstrap_organization_creates_org_and_owner(dev_client):
     assert body["owner"]["role"] == "owner"
 
 
+def test_bootstrap_rejects_empty_or_too_short_owner_password(dev_client):
+    """RA-009 exact regression: bootstrap and login previously both
+    returned 200 for an empty owner password."""
+    for password in ("", "a", "abcde"):
+        resp = _bootstrap(dev_client, owner_password=password)
+        assert resp.status_code == 422
+    ok = _bootstrap(dev_client, owner_password="abcdef")
+    assert ok.status_code == 200
+
+
+def test_create_user_rejects_empty_or_too_short_password(dev_client):
+    _bootstrap(dev_client)
+    token = _login(dev_client).json()["session_token"]
+    resp = dev_client.post(
+        "/gateway/organizations/acme/users",
+        json={
+            "user_id": "bob",
+            "email": "bob@acme.com",
+            "display_name": "Bob",
+            "password": "",
+            "role": "member",
+        },
+        headers=_auth_headers(token),
+    )
+    assert resp.status_code == 422
+
+
 def test_bootstrap_duplicate_organization_conflicts(dev_client):
     _bootstrap(dev_client)
     resp = _bootstrap(dev_client)
