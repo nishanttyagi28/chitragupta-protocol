@@ -22,7 +22,7 @@ separately.
 | RA-005 | High | **Fixed** | `32b183e` |
 | RA-006 | Medium | **Fixed** | `5e9aa02` |
 | RA-007 | Medium | **Fixed** | `c5722f8` |
-| RA-008 | Medium | Pending | |
+| RA-008 | Medium | **Fixed (partial)** | `b6e0350` |
 | RA-009 | Medium | Pending | |
 | RA-010 | Medium | Pending | |
 | RA-011 | Medium | Pending | |
@@ -319,3 +319,80 @@ documentation pass in this remediation, not claimed as resolved here.
 
 **Full suite after this fix:** `1027 passed, 8 skipped`. `ruff check`, `ruff
 format --check`, and `mypy src` all clean.
+
+## RA-006 — Medium — Installed acceptance command lacks a required dependency
+
+**Status: Fixed** (`5e9aa02`)
+
+**Root cause:** `karmasakshi-acceptance` (`project.scripts`) is installed
+unconditionally by a base `pip install karmasakshi-protocol`, but `httpx`
+-- which it imports at runtime -- lived only in the optional `api`/`sdk`
+extras. CI's wheel smoke job ran only `karmasakshi-acceptance --help`,
+which exits before the lazy `import httpx`, so it never caught this. A
+fresh isolated venv with only the base wheel raised
+`ModuleNotFoundError: No module named 'httpx'` on the real command.
+
+**Fix:** moved `httpx` into `[project] dependencies`. Strengthened the CI
+`install-smoke-test` job to actually invoke the command against an
+unreachable base URL, failing the job if the output ever contains
+`ModuleNotFoundError` again. Verified the fix by building a fresh wheel
+and installing it into an isolated venv: `httpx` now imports successfully
+and the command fails only with a connection error, exactly as expected
+against an unreachable port.
+
+**Tests added:** `tests/unit/test_packaging.py` -- a fast, deterministic
+guard that `httpx` is present in `pyproject.toml`'s base dependencies
+(not just an extra), the console script is registered, and the `import
+httpx` stays function-scoped (not moved back to module scope, which
+would break `--help`). Confirmed the base-dependency check fails against
+the pre-fix `pyproject.toml`.
+
+**Focused tests:** `tests/unit/test_packaging.py` -- **3 passed**. Full
+suite after this fix: `1030 passed, 8 skipped`. `ruff check`, `ruff format
+--check`, and `mypy src` all clean.
+
+## RA-007 — Medium — "Signed Action Passport" is false
+
+**Status: Fixed** (`c5722f8`)
+
+Renamed the acceptance check label from "Signed Action Passport generated"
+to "Action Passport generated (seal/grant/audit signatures verified)" and
+corrected the matching claims in `docs/product/MVP_ACCEPTANCE.md`,
+`docs/product/PRODUCT_VISION.md`, and `README.md` -- Passport V2 has a
+deterministic content hash, not a separate signature over the Passport
+itself (`docs/action-passport-v2.md` already said so; the surrounding
+docs and the check label did not agree). Extended
+`test_real_buyer_acceptance_journey` to assert the honest label is
+present and the old claim never reappears; confirmed the assertion fails
+against the pre-fix label.
+
+**Focused tests:** `tests/integration/test_milestone_a_acceptance.py`,
+`tests/unit/test_acceptance_cli.py` -- **2 passed**.
+
+## RA-008 — Medium — Compensation authorization bypasses the refund approval workflow
+
+**Status: Fixed (partial)** (`b6e0350`)
+
+**Root cause:** `POST /refunds/{manifest_id}/compensate` checked only
+organization membership. One authenticated caller -- any member, with no
+requirement they had any part in the original refund -- could prepare,
+seal, authorize, and commit the compensation (reversal) in a single call.
+
+**Fix:** require the caller to be one of the original refund's distinct
+quorum approvers (`state.approval_statements`), narrowing this from "any
+member" to "someone who already exercised approval authority over this
+exact effect." Real and backward-compatible (every existing test's caller
+was already an approver).
+
+**Explicitly not fixed:** this is not the full separate
+compensation-quorum/review step the remediation plan describes --
+compensation is still one HTTP call that itself prepares, seals,
+authorizes, and commits. `docs/limitations.md` and the route's docstring
+now say so explicitly rather than implying full resolution.
+
+**Tests added:** `tests/integration/test_gateway_refunds.py::test_compensation_requires_the_caller_to_have_approved_the_original_refund`
+-- confirmed to fail (200, not 403) against the pre-fix code.
+
+**Focused tests:** `tests/integration/test_gateway_refunds.py` -- **26
+passed** (with the RA-007 acceptance test also included in this run).
+`ruff check`, `ruff format --check`, and `mypy src` all clean.
