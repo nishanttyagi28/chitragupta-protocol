@@ -84,6 +84,20 @@ MIGRATIONS: tuple[Migration, ...] = (
             )
         """,
     ),
+    Migration(
+        id=5,
+        name="create_gateway_refund_state",
+        sql="""
+            CREATE TABLE gateway_refund_state (
+                org_id TEXT NOT NULL REFERENCES organizations(org_id),
+                bucket TEXT NOT NULL,
+                item_key TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(org_id, bucket, item_key)
+            )
+        """,
+    ),
 )
 
 

@@ -57,6 +57,13 @@ class ApiState:
     compensation_results: dict[str, CompensationResult] = field(default_factory=dict)
     assessments: dict[str, EffectAssessment] = field(default_factory=dict)
     policy_bundles: dict[str, SealedPolicyBundle] = field(default_factory=dict)
+    #: The exact policy bundle that actually produced a manifest's risk
+    #: assessment at proposal time (see `karmasakshi.gateway.refunds`).
+    #: Approval binds to this, not to whatever policy is active *now* --
+    #: an org switching policies between propose and approve must not
+    #: silently rebind an already-shown assessment to a policy that never
+    #: scored it.
+    assessment_policy_bundles: dict[str, SealedPolicyBundle] = field(default_factory=dict)
     approval_policy_bundles: dict[str, SealedPolicyBundle] = field(default_factory=dict)
     approval_statements: dict[str, list[ApprovalStatement]] = field(default_factory=dict)
     witness_statements: dict[str, list[WitnessStatement]] = field(default_factory=dict)

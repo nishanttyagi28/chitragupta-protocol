@@ -437,3 +437,53 @@ def test_reopening_store_does_not_reapply_migrations(tmp_path):
     store2 = GatewayStore(path)
     org = store2.get_organization("org-1")
     assert org.name == "Acme Corp"
+
+
+# --- refund-journey durable state (RA-002 follow-up) ------------------------
+
+
+def test_put_and_load_refund_state_round_trips(store):
+    store.create_organization("org-1", "Acme Corp")
+    store.put_refund_state("org-1", "sealed_manifest", "m1", {"a": 1, "b": [1, 2, 3]})
+    store.put_refund_state("org-1", "assessment", "m1", {"score": 87})
+
+    buckets = store.load_refund_state("org-1")
+    assert buckets["sealed_manifest"]["m1"] == {"a": 1, "b": [1, 2, 3]}
+    assert buckets["assessment"]["m1"] == {"score": 87}
+
+
+def test_put_refund_state_overwrites_on_conflict(store):
+    store.create_organization("org-1", "Acme Corp")
+    store.put_refund_state("org-1", "outcome_proof", "m1", {"matched_expected": False})
+    store.put_refund_state("org-1", "outcome_proof", "m1", {"matched_expected": True})
+
+    buckets = store.load_refund_state("org-1")
+    assert buckets["outcome_proof"]["m1"] == {"matched_expected": True}
+
+
+def test_load_refund_state_is_scoped_per_organization(store):
+    store.create_organization("org-1", "Acme Corp")
+    store.create_organization("org-2", "Beta Inc")
+    store.put_refund_state("org-1", "sealed_manifest", "m1", {"org": "org-1"})
+    store.put_refund_state("org-2", "sealed_manifest", "m2", {"org": "org-2"})
+
+    assert list(store.load_refund_state("org-1")["sealed_manifest"].keys()) == ["m1"]
+    assert list(store.load_refund_state("org-2")["sealed_manifest"].keys()) == ["m2"]
+
+
+def test_load_refund_state_empty_org_returns_empty_dict(store):
+    store.create_organization("org-1", "Acme Corp")
+    assert store.load_refund_state("org-1") == {}
+
+
+def test_put_refund_state_accepts_null_and_list_payloads(store):
+    """The active-policy-bundle-id bucket stores a bare string (or null),
+    not an object -- the generic store must not assume every payload is a
+    JSON object."""
+    store.create_organization("org-1", "Acme Corp")
+    store.put_refund_state("org-1", "active_policy_bundle_id", "_", "bundle-a")
+    store.put_refund_state("org-1", "grants_by_manifest", "m1", ["g1", "g2"])
+
+    buckets = store.load_refund_state("org-1")
+    assert buckets["active_policy_bundle_id"]["_"] == "bundle-a"
+    assert buckets["grants_by_manifest"]["m1"] == ["g1", "g2"]

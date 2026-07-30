@@ -181,3 +181,18 @@ def test_tenant_model_and_registry_edges(tmp_path: Path):
     plane.create_tenant(Tenant(tenant_id="org-dup", display_name="D", created_at=NOW))
     with pytest.raises(TenantIsolationError, match="already exists"):
         plane.create_tenant(Tenant(tenant_id="org-dup", display_name="D2", created_at=NOW))
+
+
+def test_get_state_unchecked_bypasses_active_gate_but_not_existence(tmp_path: Path):
+    plane = MultiTenantControlPlane(data_root=tmp_path)
+    with pytest.raises(TenantIsolationError, match="no control-plane state"):
+        plane.get_state_unchecked("never-registered")
+
+    plane.create_tenant(Tenant(tenant_id="org-a", display_name="A", created_at=NOW))
+    plane.registry.suspend("org-a")
+    # get_state() fails closed on a suspended tenant (the request-serving path)...
+    with pytest.raises(TenantIsolationError, match="suspended"):
+        plane.get_state("org-a")
+    # ...but get_state_unchecked() still returns the built runtime, for
+    # internal maintenance use (RA-002 follow-up rehydration).
+    assert plane.get_state_unchecked("org-a") is plane.get_state_unchecked("org-a")

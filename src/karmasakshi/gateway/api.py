@@ -44,6 +44,7 @@ from karmasakshi.gateway.models import (
     Organization,
     OrganizationStatus,
 )
+from karmasakshi.gateway.refund_state import rehydrate_refund_state
 from karmasakshi.gateway.schemas import (
     GatewayAdapterListOut,
     GatewayAdapterRegisterIn,
@@ -99,12 +100,19 @@ def rehydrate_tenant_registrations(gateway_state: GatewayApiState) -> None:
     ``ApiState``, which reopens the tenant's already-durable audit, grant,
     lifecycle, and ledger SQLite stores.
 
-    This does not restore process-local state that was never durable:
-    the per-process signing key identity, in-flight sealed
-    manifests/assessments/policy-activation caches, and the payment
-    simulator's ledger are still lost on restart -- see
-    docs/limitations.md. Idempotent: organizations already registered in
-    this process (the common, non-restart case) are skipped.
+    Also rehydrates the refund journey itself (RA-002 follow-up): sealed
+    manifests, assessments, grants, commit results, outcome proofs, policy
+    bundles, and approval statements are written through to durable Gateway
+    storage as they're produced (see `karmasakshi.gateway.refund_state`) and
+    rebuilt here, so a refund that was fully committed and independently
+    verified before a restart remains visible (detail, Passport, list)
+    afterward -- not just a bare "the organization still exists."
+
+    This does not restore process-local state that was never durable: the
+    per-process signing key identity and the payment simulator's ledger are
+    still lost on restart -- see docs/limitations.md. Idempotent:
+    organizations already registered in this process (the common,
+    non-restart case) are skipped.
     """
     control_plane = gateway_state.control_plane
     for org in gateway_state.store.list_organizations():
@@ -121,6 +129,8 @@ def rehydrate_tenant_registrations(gateway_state: GatewayApiState) -> None:
                 created_at=org.created_at,
             )
         )
+        runtime = control_plane.get_state_unchecked(org.org_id)
+        rehydrate_refund_state(gateway_state.store, org.org_id, runtime)
 
 
 def _user_out(user: GatewayUser) -> GatewayUserOut:
