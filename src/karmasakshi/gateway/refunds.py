@@ -34,7 +34,7 @@ from karmasakshi.gateway.api import (
     require_registered_refund_resources,
     resolve_org_runtime,
 )
-from karmasakshi.gateway.models import GatewayUser
+from karmasakshi.gateway.models import GatewayUser, GatewayUserRole
 from karmasakshi.gateway.refund_schemas import (
     RefundAssessmentOut,
     RefundDenyIn,
@@ -361,6 +361,12 @@ def activate_policy(
     is the authenticated session user, never a client-supplied identity
     claim."""
     state = resolve_org_runtime(request, user, org_id)
+    # RA-005: the active policy now actually governs assessment (RA-003),
+    # so any member being able to activate a lenient policy would let them
+    # weaken risk scoring for their own proposals. Restrict activation to
+    # owners, same as user creation.
+    if user.role != GatewayUserRole.OWNER:
+        raise HTTPException(403, "only an organization owner may activate a policy")
     now = datetime.now(timezone.utc)
     policy = IntelligencePolicy(
         policy_id=body.bundle_id,

@@ -72,9 +72,12 @@ out of order over a failed one.
   authenticate against a different organization even with the exact
   right email + password.
 - **This is local development authentication only.** There is no SSO, no
-  MFA, and no server-enforced RBAC yet (`GatewayUserRole` is metadata,
-  not currently checked by any authorization decision) — those are
-  Milestone B/C. See [docs/limitations.md](limitations.md) and
+  MFA, and no general server-enforced RBAC yet — a full admin/member
+  permission model is Milestone B/C. `GatewayUserRole` does gate two
+  specific, quorum-relevant actions to `OWNER`: creating additional
+  organization users and activating a risk policy (RA-005 remediation);
+  every other action remains unrestricted among authenticated members.
+  See [docs/limitations.md](limitations.md) and
   [docs/product/SECURITY_FAQ.md](product/SECURITY_FAQ.md).
 
 ## HTTP API
@@ -186,7 +189,9 @@ every adversarial case exercised end to end through HTTP.
 - Single-node SQLite, same posture as the protocol core's other SQLite
   backends: safe for multiple processes sharing one database file under
   SQLite's writer lock, not a multi-node distributed store.
-- No RBAC enforcement, no SSO yet (`GatewayUserRole` is metadata only).
+- No general RBAC enforcement, no SSO yet. `GatewayUserRole` gates only
+  user creation and policy activation to `OWNER` (RA-005); every other
+  action is unrestricted among authenticated members.
 - **Sessions are process-local, in-memory, non-durable** — restarting
   the Gateway process invalidates every session (users must log in
   again). Horizontally scaling the Gateway across multiple processes
@@ -199,11 +204,15 @@ every adversarial case exercised end to end through HTTP.
   provider. Agent and adapter registrations are explicit and durable,
   but adapter registration can select only a concrete version already
   wired into and trusted by this Gateway runtime.
-- **Quorum has no role/group policy in Milestone A.** The Gateway enforces
-  the assessment's distinct-human count and binds the accepted set
-  cryptographically, but any authenticated member of the organization
-  may contribute. Owner-only decisions, finance/security groups, SSO
-  claims, and per-user signing keys remain Milestone B work.
+- **Quorum has no role/group *eligibility* policy in Milestone A.** The
+  Gateway enforces the assessment's distinct-account count and binds the
+  accepted set cryptographically, and only an owner can provision the
+  accounts that could contribute or activate the policy that governs
+  them (RA-005) -- but any authenticated member (once provisioned) may
+  still approve/deny/execute. Finance/security approver groups, SSO
+  claims, and per-user signing keys remain Milestone B work. "Owner"
+  is still an authenticated account, not an independently verified human
+  identity.
 - The Control Center is a server-rendered Milestone A UI with no
   client-side SPA build. Role-based decision permissions remain deferred
   with the RBAC limitation above.

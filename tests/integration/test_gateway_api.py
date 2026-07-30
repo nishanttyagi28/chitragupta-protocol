@@ -251,6 +251,58 @@ def test_create_user_rejects_cross_org_session(dev_client):
     assert resp.status_code == 403
 
 
+def test_member_cannot_self_provision_additional_users(dev_client):
+    """RA-005 exact regression: before this fix, any authenticated member
+    (not just the owner) could create arbitrary additional accounts and
+    satisfy an approval quorum themselves. An owner-created member must
+    not be able to create further users."""
+    _bootstrap(dev_client)
+    owner_token = _login(dev_client).json()["session_token"]
+    created = dev_client.post(
+        "/gateway/organizations/acme/users",
+        json={
+            "user_id": "bob",
+            "email": "bob@acme.com",
+            "display_name": "Bob",
+            "password": "password123",
+            "role": "member",
+        },
+        headers=_auth_headers(owner_token),
+    )
+    assert created.status_code == 200
+    assert created.json()["role"] == "member"
+
+    member_token = _login(dev_client, email="bob@acme.com", password="password123").json()[
+        "session_token"
+    ]
+    escalation = dev_client.post(
+        "/gateway/organizations/acme/users",
+        json={
+            "user_id": "quorum-sock-puppet",
+            "email": "puppet@acme.com",
+            "display_name": "Sock Puppet",
+            "password": "password123",
+            "role": "member",
+        },
+        headers=_auth_headers(member_token),
+    )
+    assert escalation.status_code == 403
+
+    # The owner is unaffected and can still create additional users.
+    owner_created = dev_client.post(
+        "/gateway/organizations/acme/users",
+        json={
+            "user_id": "carol",
+            "email": "carol@acme.com",
+            "display_name": "Carol",
+            "password": "password123",
+            "role": "member",
+        },
+        headers=_auth_headers(owner_token),
+    )
+    assert owner_created.status_code == 200
+
+
 def test_list_users_rejects_cross_org_session(dev_client):
     _bootstrap(dev_client, org_id="acme")
     _bootstrap(dev_client, org_id="beta", owner_email="bob@beta.com", owner_password="password123")

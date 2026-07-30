@@ -349,6 +349,11 @@ def create_organization_user(
     user: Annotated[GatewayUser, Depends(require_gateway_session)],
 ) -> GatewayUserOut:
     _assert_org_scope(request, user, org_id)
+    # RA-005: user creation controls who can satisfy the refund-approval
+    # quorum. Membership alone must not be sufficient to self-provision
+    # additional accounts -- only an owner may add organization users.
+    if user.role != GatewayUserRole.OWNER:
+        raise HTTPException(403, "only an organization owner may create additional users")
     state = _state(request)
     try:
         created = state.store.create_user(

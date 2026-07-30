@@ -339,6 +339,46 @@ def test_policy_activation_binds_grant(dev_client):
     assert execute.json()["success"] is True
 
 
+def test_member_cannot_activate_policy(dev_client):
+    """RA-005: since RA-003 made the active policy actually govern
+    assessment, a non-owner member activating a lenient policy would let
+    them weaken risk scoring for their own refund proposals. Only the
+    owner may activate a policy."""
+    client, _app = dev_client
+    owner_headers = _bootstrap_and_login(client)
+    created = client.post(
+        "/gateway/organizations/acme/users",
+        json={
+            "user_id": "bob",
+            "email": "bob@acme.com",
+            "display_name": "Bob",
+            "password": "password123",
+            "role": "member",
+        },
+        headers=owner_headers,
+    )
+    assert created.status_code == 200
+    member_token = client.post(
+        "/gateway/auth/login",
+        json={"org_id": "acme", "email": "bob@acme.com", "password": "password123"},
+    ).json()["session_token"]
+    member_headers = {"Authorization": f"Bearer {member_token}"}
+
+    resp = client.post(
+        "/gateway/organizations/acme/policy",
+        json={"bundle_id": "member-lenient", "block_threshold": 100, "review_threshold": 99},
+        headers=member_headers,
+    )
+    assert resp.status_code == 403
+
+    owner_resp = client.post(
+        "/gateway/organizations/acme/policy",
+        json={"bundle_id": "owner-policy"},
+        headers=owner_headers,
+    )
+    assert owner_resp.status_code == 200
+
+
 def test_duplicate_execute_retry_is_prevented(dev_client):
     client, _app = dev_client
     headers = _bootstrap_and_login(client)

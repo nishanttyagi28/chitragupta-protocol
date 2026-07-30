@@ -186,21 +186,27 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   [docs/agenteval-integration.md](agenteval-integration.md).
 - **The Gateway's organization/user model (`karmasakshi.gateway`) is
   local development authentication only** -- PBKDF2 password hashing,
-  no SSO, no MFA, and no server-enforced RBAC (`GatewayUserRole` is
-  metadata, not currently checked by any authorization decision).
-  Single-node SQLite only. Gateway sessions are process-local, in-memory,
-  and non-durable -- a process restart invalidates every session; a
-  horizontally scaled Gateway would need a shared session backend
-  (Milestone B). The current session can be revoked by logout; password
-  reset and user-removal endpoints do not exist yet. See
+  no SSO, no MFA, and no general server-enforced RBAC. `GatewayUserRole`
+  now gates two specific, quorum-relevant actions to `OWNER` (RA-005
+  remediation): creating additional organization users and activating a
+  risk policy. Every other action (approve, deny, execute, register
+  agents/adapters, ...) remains unrestricted among an organization's
+  authenticated members -- this is not a full admin/member permission
+  model. Single-node SQLite only. Gateway sessions are process-local,
+  in-memory, and non-durable -- a process restart invalidates every
+  session; a horizontally scaled Gateway would need a shared session
+  backend (Milestone B). The current session can be revoked by logout;
+  password reset and user-removal endpoints do not exist yet. See
   [docs/gateway.md](gateway.md).
 - **The Gateway refund journey (`karmasakshi.gateway.refunds`) is
   payment-simulator-only** -- no real payment provider. Agent and adapter
   inventory is durable and organization-scoped, and human approval count
   is enforced with distinct authenticated users plus a quorum-bound
-  grant. There is still no role/group eligibility, SSO-derived approval
-  policy, per-user signing key, durable background worker, or real
-  provider implied by the server-rendered Control Center. See
+  grant; only an owner can provision the accounts that satisfy that
+  quorum or activate the policy that governs it (RA-005). There is still
+  no per-user signing key, durable background worker, or real provider
+  implied by the server-rendered Control Center, and "owner" remains an
+  authenticated account, not a verified human identity. See
   [docs/gateway.md](gateway.md) and
   [docs/control-center.md](control-center.md).
 - **A Gateway process restart reconnects durable per-tenant storage, but

@@ -55,9 +55,16 @@ class Organization(BaseModel):
 
 
 class GatewayUserRole(str, Enum):
-    """Milestone A has no server-enforced RBAC yet (that is Milestone B) --
-    this is metadata only, not currently checked by any authorization
-    decision. See docs/limitations.md."""
+    """Milestone A has no general server-enforced RBAC yet (that is
+    Milestone B). Two specific, quorum-relevant actions are restricted to
+    ``OWNER`` (RA-005 remediation): creating additional organization users
+    (`POST /organizations/{org_id}/users`) and activating a risk policy
+    (`POST /organizations/{org_id}/policy`), since either would otherwise
+    let any member self-provision approval-quorum accounts or weaken the
+    policy that governs their own proposals. Every other action (approve,
+    deny, execute, register agents/adapters, ...) is still unrestricted
+    among an organization's authenticated members. See
+    docs/limitations.md."""
 
     OWNER = "owner"
     MEMBER = "member"
