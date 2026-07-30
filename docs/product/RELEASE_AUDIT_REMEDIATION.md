@@ -34,6 +34,26 @@ Low-severity findings (RA-012/013/014) were not release blockers per the
 audit's own recommendation and are out of scope for this remediation pass
 unless later work reopens them.
 
+## Final quality gates (after all eleven fixes, on this branch's HEAD)
+
+| Gate | Result |
+|---|---|
+| Full local suite (`pytest -q`) | `1034 passed, 8 skipped` |
+| Coverage (`--cov-fail-under=90`) | `90.46%` (gate met) |
+| `ruff format --check .` | Clean (370 files) |
+| `ruff check .` | Clean |
+| `mypy src` | Clean (185 source files) |
+| `bandit -r src/karmasakshi -c pyproject.toml` | No issues (24,507 lines scanned) |
+| `pip-audit` | No known vulnerabilities |
+| `python -m build` + `twine check` | Both artifacts `PASSED` |
+| Isolated base-wheel install + `karmasakshi-acceptance` past `--help` | httpx imports; fails only with a connection error against an unreachable port (RA-006 verified end-to-end again) |
+| Docker Compose acceptance | Not run locally (Docker unavailable in this environment, same limitation the original audit disclosed); left to this PR's GitHub Actions `compose-acceptance` job |
+
+Baseline for comparison (`docs/product/RELEASE_AUDIT.md`, audited commit
+`cea2496`): `910 passed, 8 skipped`, coverage `90.42%`. The delta is the new
+regression/adversarial/property tests added by this remediation, with no
+prior test weakened or deleted to make a gate pass.
+
 ## RA-001 — Critical — Organization ID permits tenant filesystem escape
 
 **Status: Fixed** (`eec969f`)
