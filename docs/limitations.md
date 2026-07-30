@@ -203,6 +203,20 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   provider implied by the server-rendered Control Center. See
   [docs/gateway.md](gateway.md) and
   [docs/control-center.md](control-center.md).
+- **A Gateway process restart reconnects durable per-tenant storage, but
+  not process-local refund-runtime state (RA-002).** At startup, every
+  durable organization's tenant is re-registered and its `ApiState` is
+  rebuilt, reopening that tenant's already-durable audit, grant, lifecycle,
+  and payment-ledger-adjacent SQLite stores (`karmasakshi.gateway.api.rehydrate_tenant_registrations`),
+  so organization/user rows, audit history, grants, and lifecycle records
+  survive a restart and no longer 500 on the first request afterward. What
+  does **not** survive: the per-process Ed25519 signing key identity (a
+  fresh key is generated each process start), in-flight sealed-manifest/
+  assessment/active-policy-bundle caches for anything not yet committed,
+  and the in-memory `PaymentSimulator` ledger balance (`api/state.py`). A
+  restart mid-journey can therefore still lose an uncommitted refund's
+  in-progress state even though the organization itself is not lost. See
+  [docs/gateway.md](gateway.md).
 - **The Gateway SDK (`karmasakshi.sdk`) is a client for the Gateway
   surface above only** -- not a general client for every protocol
   feature (decision envelopes, causal graphs, witness quorum, ...). One

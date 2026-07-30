@@ -11,7 +11,7 @@ from karmasakshi import __version__
 from karmasakshi.api.auth import is_dev_mode, is_public_demo
 from karmasakshi.api.routes import router
 from karmasakshi.api.state import ApiState, build_default_state
-from karmasakshi.gateway.api import GatewayApiState
+from karmasakshi.gateway.api import GatewayApiState, rehydrate_tenant_registrations
 from karmasakshi.gateway.api import router as gateway_router
 from karmasakshi.gateway.refunds import router as gateway_refunds_router
 from karmasakshi.gateway.store import GatewayStore, default_gateway_db_path
@@ -68,6 +68,10 @@ def create_app(
         store=GatewayStore(default_gateway_db_path(resolved_data_dir)),
         control_plane=MultiTenantControlPlane(data_root=resolved_data_dir / "tenants"),
     )
+    # RA-002: reconnect every durable organization's tenant runtime at
+    # startup so a process restart against existing data does not leave
+    # org-scoped routes failing with an unhandled unknown-tenant error.
+    rehydrate_tenant_registrations(app.state.karmasakshi_gateway)
     app.include_router(gateway_router)
     app.include_router(gateway_refunds_router)
 
