@@ -13,6 +13,7 @@ from karmasakshi.gateway.models import (
     GatewayUserRole,
     OrganizationStatus,
 )
+from karmasakshi.tenant.org_id import validate_canonical_org_id
 
 #: Same charset `karmasakshi.domain.common.Principal.principal_id` requires
 #: -- `user_id` doubles as the refund-journey's approving/activating
@@ -41,6 +42,14 @@ class OrganizationBootstrapIn(BaseModel):
     owner_email: str
     owner_display_name: str
     owner_password: str
+
+    @field_validator("org_id")
+    @classmethod
+    def _validate_org_id(cls, v: str) -> str:
+        # RA-001: org_id becomes a tenant filesystem path segment; reject
+        # anything unsafe here, at the outermost HTTP boundary, before any
+        # organization row or tenant directory is created.
+        return validate_canonical_org_id(v)
 
 
 class OrganizationOut(BaseModel):

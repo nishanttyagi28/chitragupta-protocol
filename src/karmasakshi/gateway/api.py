@@ -27,6 +27,7 @@ from karmasakshi.errors import (
     GatewayAgentNotFoundError,
     GatewayAuthenticationError,
     GatewayUserAlreadyExistsError,
+    InvalidOrganizationIdError,
     KarmaSakshiError,
     OrganizationAlreadyExistsError,
     OrganizationNotFoundError,
@@ -60,6 +61,7 @@ from karmasakshi.gateway.sessions import GatewaySessionStore
 from karmasakshi.gateway.store import GatewayStore
 from karmasakshi.tenant.control_plane import MultiTenantControlPlane
 from karmasakshi.tenant.model import Tenant
+from karmasakshi.tenant.org_id import validate_canonical_org_id
 
 router = APIRouter(prefix="/gateway", tags=["gateway"])
 
@@ -124,6 +126,13 @@ async def require_gateway_session(
 
 
 def _assert_org_scope(request: Request, user: GatewayUser, org_id: str) -> None:
+    # RA-001: every org-scoped route (including path-param routes that never
+    # go through `OrganizationBootstrapIn`) funnels through here, so reject a
+    # malformed org_id before any store lookup or control-plane access.
+    try:
+        validate_canonical_org_id(org_id)
+    except InvalidOrganizationIdError as exc:
+        raise HTTPException(400, str(exc)) from exc
     state = _state(request)
     try:
         state.store.assert_user_belongs_to_organization(user, org_id)
@@ -206,6 +215,11 @@ def bootstrap_organization(
         state.control_plane.create_tenant(
             Tenant(tenant_id=body.org_id, display_name=body.name, created_at=org.created_at)
         )
+    except InvalidOrganizationIdError as exc:
+        # Defense in depth: `OrganizationBootstrapIn.org_id` already rejects
+        # this at the schema boundary, so this should be unreachable in
+        # practice, but this call site must not trust that upstream check.
+        raise HTTPException(400, str(exc)) from exc
     except TenantIsolationError as exc:
         raise HTTPException(409, str(exc)) from exc
     return OrganizationBootstrapOut(

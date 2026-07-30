@@ -450,6 +450,16 @@ class TenantIsolationError(TenantError):
     """Cross-tenant access, suspended tenant, or tenant uncertainty (fail closed)."""
 
 
+class InvalidOrganizationIdError(TenantError, ValueError):
+    """Organization/tenant id fails canonical validation (RA-001): it must
+    never be usable as anything other than a single, contained filesystem
+    path segment under the configured tenant data root.
+
+    Also a ``ValueError`` so it is caught by ``dataclass``/Pydantic
+    validators exactly like the ``ValueError``s they already raise for other
+    fields (e.g. ``Tenant.display_name``)."""
+
+
 # --- Resource / DoS protection (extreme-v2 Phase 20) ------------------------------
 
 

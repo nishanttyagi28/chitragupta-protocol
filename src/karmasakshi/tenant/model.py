@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Literal
 
 from karmasakshi.canonical.serialize import canonical_hash
+from karmasakshi.tenant.org_id import validate_canonical_org_id
 
 TenantStatus = Literal["active", "suspended"]
 
@@ -25,8 +26,10 @@ class Tenant:
     created_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        if not self.tenant_id or len(self.tenant_id) > 128:
-            raise ValueError("tenant_id must be 1-128 chars")
+        # RA-001: tenant_id is used as a filesystem path segment by the
+        # control plane, so it must satisfy the canonical id rules here at
+        # the model boundary, not only at the HTTP schema boundary.
+        validate_canonical_org_id(self.tenant_id)
         if not self.display_name or len(self.display_name) > 256:
             raise ValueError("display_name must be 1-256 chars")
         if self.status not in ("active", "suspended"):
