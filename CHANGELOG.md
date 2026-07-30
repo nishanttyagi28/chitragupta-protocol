@@ -3,7 +3,11 @@
 All notable changes to this project are documented in this file. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] - extreme-v2 complete; commercial Milestone A in progress
+## [Unreleased] - extreme-v2 complete; Milestone A evaluation-ready self-hosted software
+
+Release-audit remediation (original Critical/High/Medium findings, RA-002 residual,
+proposal-time policy binding, signing-key durability, fail-closed key material) is
+merged on `main` via PRs #48 and #49. See `docs/product/FINAL_RELEASE_REVIEW.md`.
 
 ### Added
 
