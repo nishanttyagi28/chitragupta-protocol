@@ -17,7 +17,7 @@ separately.
 |---|---|---|---|
 | RA-001 | Critical | **Fixed** | `eec969f` |
 | RA-002 | High | **Fixed** | `1e43929` |
-| RA-003 | High | Pending | |
+| RA-003 | High | **Fixed** | `ef9058e` |
 | RA-004 | High | Pending | |
 | RA-005 | High | Pending | |
 | RA-006 | Medium | Pending | |
@@ -140,4 +140,60 @@ which is how the regression test below proves the pre-fix crash).
 -- **68 passed**.
 
 **Full suite after this fix:** `1020 passed, 8 skipped`. `ruff check`, `ruff
+format --check`, and `mypy src` all clean.
+
+## RA-003 — High — Activated organization policy is ignored during assessment
+
+**Status: Fixed** (`ef9058e`)
+
+**Root cause:** `KarmaSakshiEngine.assess()` always scored against
+`self._ctx.intelligence`, an `EffectIntelligenceEngine` bound once to the
+engine context's fixed default `IntelligencePolicy`. `POST .../policy`
+built and stored a signed bundle and set `active_policy_bundle_id`, but
+`propose_refund()` called `state.engine.assess(manifest)` with no reference
+to it -- the active bundle was only read later, at approval time, purely
+for grant hash binding. Exact repro: a refund scoring 87 was recommended
+`BLOCK` under the default policy (`block_threshold=85`) even after
+activating a lenient policy (`block_threshold=95`), because assessment
+never consulted the activated bundle at all.
+
+**Fix:**
+
+- `KarmaSakshiEngine.assess()` gained an optional keyword-only `policy:
+  IntelligencePolicy | None` parameter (default `None` preserves existing
+  behavior for every other caller -- `api/routes.py`, `cli/assess_cmd.py`).
+  When given, that call is scored against the supplied policy via a
+  throwaway `EffectIntelligenceEngine`, without mutating the engine's own
+  bound default or affecting any other assessment.
+- `propose_refund()` now resolves the organization's `active_policy_bundle_id`
+  and, via a new `_active_intelligence_policy()` helper,
+  cryptographically verifies it (`policy.sealing.verify_policy_bundle`:
+  signature, tamper, type, effective window) before assessing. If no
+  policy is active, behavior is unchanged (assess against the engine
+  default). If an active bundle exists but fails verification, the
+  request fails closed with a safe 409 rather than silently falling back
+  to the default policy -- silently scoring under a different, possibly
+  more lenient policy than the one the organization believes is active
+  would defeat the point of this fix.
+- `activate_policy()` now sets `IntelligencePolicy.policy_id =
+  body.bundle_id` (previously always `"default"`, which is exactly why
+  the audit's reproduction showed `ASSESSMENT_POLICY_ID=default` even
+  after activation) so a resulting assessment honestly reports which
+  policy actually scored it.
+
+**Tests added** (`tests/integration/test_gateway_refunds.py`):
+
+- Exact audit reproduction: default policy scores the fixture refund at 87
+  and recommends `block`; activating a lenient policy changes the very
+  next proposal's `policy_id` and recommendation (`allow`) -- confirmed to
+  fail against the pre-fix code with `policy_id == "default"`.
+- No-active-policy backward-compatibility case.
+- Fail-closed case: a tampered active bundle causes proposal to 409
+  instead of silently scoring under the default policy -- confirmed to
+  fail (200, not 409) against the pre-fix code.
+
+**Focused tests:** `tests/integration/test_gateway_refunds.py` -- **22
+passed**.
+
+**Full suite after this fix:** `1023 passed, 8 skipped`. `ruff check`, `ruff
 format --check`, and `mypy src` all clean.
