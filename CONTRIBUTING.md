@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for considering a contribution. This project is young (v0.1.0) and
+Thanks for considering a contribution. This project is young (v0.2.0) and
 the process below reflects that — expect it to evolve.
 
 ## Getting set up

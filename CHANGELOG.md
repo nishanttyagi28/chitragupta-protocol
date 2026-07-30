@@ -3,229 +3,138 @@
 All notable changes to this project are documented in this file. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] - extreme-v2 complete; Milestone A evaluation-ready self-hosted software
+## [Unreleased]
 
-Release-audit remediation (original Critical/High/Medium findings, RA-002 residual,
-proposal-time policy binding, signing-key durability, fail-closed key material) is
-merged on `main` via PRs #48 and #49. See `docs/product/FINAL_RELEASE_REVIEW.md`.
+## [0.2.0] - 2026-07-30
+
+Evaluation-ready self-hosted Milestone A release of the protocol after the
+full extreme-v2 roadmap and an independent release-audit remediation cycle.
+This is still an experimental package (protocol schema major `1`). It is
+**not** production-ready software, not certified, not a formal proof, and
+not a real payment-provider integration.
+
+Package metadata and `karmasakshi.__version__` are `0.2.0`. Detailed phase
+ledger: [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md).
+Final release review:
+[docs/product/FINAL_RELEASE_REVIEW.md](docs/product/FINAL_RELEASE_REVIEW.md).
 
 ### Added
 
-- **Effect Intelligence Engine** (`karmasakshi.intelligence`): a
-  deterministic, versioned risk-scoring engine over `EffectManifest` +
-  `IntelligencePolicy` + `AssessmentFacts`, producing a structured,
-  audit-recorded `EffectAssessment` (score, risk level, named signals,
-  recommendation, required approvals/witness quorum/verification
-  strength). No LLM in the loop; pure, reproducible arithmetic. Integrated
-  into the engine (`KarmaSakshiEngine.assess()`), the CLI
-  (`karmasakshi assess`), the API (`POST /manifests/{id}/assess`, `GET
-  /manifests/{id}/assessment`), and the Action Passport. **Advisory only
-  in this release** -- see [docs/effect-intelligence.md](docs/effect-intelligence.md)
-  for exactly what is and is not enforced. See
-  [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for
-  the full build ledger and remaining phases of this program.
-- **Signed policy bundles** (`karmasakshi.policy`): a cryptographic
-  envelope (`PolicyBundle`/`SealedPolicyBundle`, sealed/verified the same
-  way `EffectManifest` is) around a versioned `IntelligencePolicy`, with
-  an explicit effective window. `ExecutionGrant.policy_bundle_hash` binds
-  a grant to one exact policy bundle at authorization time;
-  `engine.commit()` requires the identical bundle (by hash) to be
-  re-verified before executing, so a policy edit or swap after approval
-  can never silently change what a grant authorizes (new invariant #31).
-  An agent principal cannot be a policy bundle's issuer (invariant #32,
-  mirroring invariant #30). Integrated into the CLI (`karmasakshi policy
-  create/sign/verify`, `--policy-bundle-id` on `grant issue`/`execute`)
-  and the API (`POST /policy/bundles`, `--policy_bundle_id` on
-  `/approve`/`/execute`). See [docs/policy-bundles.md](docs/policy-bundles.md).
-- **Multi-party (M-of-N) authorization** (`karmasakshi.approval`): signed
-  `ApprovalStatement`s (approve/dissent, bound to one exact manifest +
-  approval-policy-bundle pair) evaluated deterministically and
-  order-independently against a versioned `ApprovalPolicy` (required
-  approval count, required roles, no-self-approval, no-executor-approval,
-  dissent veto, cooling-off period) via
-  `KarmaSakshiEngine.authorize_with_quorum()`. A grant issued this way is
-  structurally impossible without a satisfied quorum (invariant #33); an
-  agent can never sign or count as an approval (invariant #34); the
-  proposer and executing subject can never satisfy their own grant's
-  quorum (invariant #35); evaluation is deterministic regardless of
-  statement order, including conflicting statements from the same
-  approver (invariant #36). Additive: the original single-issuer
-  `authorize()` is unchanged. Integrated into the CLI (`karmasakshi policy
-  create-approval`, `karmasakshi approve`, `karmasakshi approvals
-  inspect`, `karmasakshi grant issue-with-quorum`) and the API (`POST
-  /policy/approval-bundles`, `/manifests/{id}/approvals[/evaluate]`,
-  `/manifests/{id}/approve-with-quorum`). See
-  [docs/multi-party-authorization.md](docs/multi-party-authorization.md).
-- **Separation of duties** (`karmasakshi.duty`): an explicit, closed set
-  of protocol roles (`ProtocolRole`: proposer, resolver, assessor,
-  sealer, approver, executor, verifier, witness, compensator, auditor), a
-  structural per-manifest `RoleAssignment`, and a versioned, signable
-  forbidden-role-pair matrix (`SeparationOfDutyPolicy`, wrapped in the
-  same signed `PolicyBundle` envelope as the other policy types,
-  `policy_type="separation.v1"`). `KarmaSakshiEngine.authorize()` and
-  `.authorize_with_quorum()` take optional `separation_policy_bundle` and
-  `role_assignment` arguments; a violation raises
-  `SeparationOfDutyViolationError` before a grant is ever issued
-  (invariant #37), and evaluation is deterministic and order-independent
-  (invariant #38). Additive: omitting `separation_policy_bundle` leaves
-  both entry points behaving exactly as before this phase. The Action
-  Passport gained a `role_participation` field, populated automatically
-  from the audit trail. Integrated into the CLI (`karmasakshi policy
-  create-separation`, `--separation-policy-bundle-id`/`--role` on `grant
-  issue`/`grant issue-with-quorum`) and the API (`POST
-  /policy/separation-bundles`, the same two optional fields on
-  `/approve` and `/approve-with-quorum`). See
-  [docs/separation-of-duties.md](docs/separation-of-duties.md).
-- **Signed causal effect graphs** (`karmasakshi.causal`): signed links
-  bind exact parent and child manifest hashes into deterministic DAGs.
-  Graph construction rejects missing endpoints, duplicate links,
-  self-links, cycles, excessive depth and excessive size. Action
-  Passports carry verified graph ancestry; the API exposes create and
-  inspect endpoints. Graphs are proof metadata in schema 1.x and do not
-  implicitly authorize or order execution. See
-  [docs/causal-effect-graphs.md](docs/causal-effect-graphs.md).
-- **Constrained Decision Envelopes and atomic plan authorization**
-  (`karmasakshi.envelope`): signed parameter constraints (`exact` /
-  `enum` / `integer_range` / `monetary_range`), deterministic
-  substitution, envelope narrowing that fails closed on widening, and
-  grant bindings to either a Decision Envelope *or* a sealed causal
-  graph (never both). `authorize_with_envelope` /
-  `authorize_plan` bind the hashes; `commit()` re-verifies them
-  (invariants #39–#42). Flexible “authorize envelope first, substitute
-  later” execution wiring is deferred. See
-  [docs/decision-envelopes.md](docs/decision-envelopes.md).
-- **Compensation manifests and Compensation Passports**
-  (`karmasakshi.compensation`): compensation is a separately authorized
-  effect that binds `original_manifest_hash`, consumes its own grant, and
-  emits a Compensation Passport that never mutates the Action Passport
-  (invariants #43–#45). `commit_compensation` calls `adapter.compensate`
-  on the original effect after grant verification. Legacy
-  `engine.compensate()` / `karmasakshi compensate` remain. See
-  [docs/compensation-manifests.md](docs/compensation-manifests.md).
-- **Durable saga orchestration** (`karmasakshi.saga`): deterministic
-  topo-ordered multi-grant runs over a verified causal graph; at-most-once
-  steps; AMBIGUOUS blocks blind retry; reverse Phase 7 compensation
-  recording (invariants #46–#49). Not exactly-once; not multi-node
-  single-grant. See [docs/saga-orchestration.md](docs/saga-orchestration.md).
-- **Independent witness quorum** (`karmasakshi.witness`): signed
-  post-COMMIT observations distinct from AUTHORIZE-time approvals;
-  agents/actor/subject cannot satisfy quorum by default; digest and
-  policy-hash binding; deterministic `witness_set_hash` (invariants
-  #50–#53). Engine `prove_with_witness_quorum`, CLI `witness`, API
-  `/witnesses`. See [docs/witness-quorum.md](docs/witness-quorum.md).
-- **Evidence quality and provenance** (`karmasakshi.evidence`): typed
-  `EvidenceRecord` ladder (provider claim → adapter re-observe →
-  independent ledger → witness), freshness bounds, fail-closed
-  evaluation (invariants #54–#57). See
-  [docs/evidence-quality.md](docs/evidence-quality.md).
-- **Deep delegation revocation** (`karmasakshi.delegation.revocation`):
-  grant stores record lineage; `engine.commit()` walks all ancestors and
-  fails closed on revoked ancestors or missing lineage (invariants
-  #58–#59). See [docs/delegation.md](docs/delegation.md).
-- **Atomic authority budgets** (`karmasakshi.budget`): shared monetary /
-  count ledgers bound via `ExecutionGrant.authority_budget_id`;
-  `commit()` atomically reserves/consumes (invariants #60–#63).
-  Single-process ledger only. See
-  [docs/authority-budgets.md](docs/authority-budgets.md).
-- **Durable lifecycle storage** (`LifecycleStore`): optional SQLite
-  single-node write-through for current lifecycle state; audit remains
-  the tamper-evident record. See
-  [docs/durable-lifecycle-storage.md](docs/durable-lifecycle-storage.md).
-- **Distributed audit journal abstraction**: stabilized `AuditBackend`
-  protocol; optional `RedisAuditBackend` with Lua sequence-checked
-  append (not Raft/etcd). See [docs/audit-journal.md](docs/audit-journal.md).
-- **Production signer interfaces** (`Signer` / `LocalDevSigner` /
-  `EmulatedKmsSigner`): honest KMS-shaped local emulators; no real
-  cloud KMS. See [docs/production-signers.md](docs/production-signers.md).
-- **Transactional outbox** (`karmasakshi.outbox`): durable commit intent
-  (`pending` / `confirmed` / `abandoned`) with crash-recovery wiring.
-  Not exactly-once. See [docs/transactional-outbox.md](docs/transactional-outbox.md).
-- **Trusted adapter registry** (`TrustedAdapterRegistry`): versioned
-  `(adapter_id, adapter_version)` allow-list with fail-closed unknown /
-  revoked / undeclared-effect-type checks when configured (invariants
-  #65–#67). Process-local; no dynamic plugins. See
-  [docs/trusted-adapter-registry.md](docs/trusted-adapter-registry.md).
-- **Adapter conformance kit** (`run_adapter_conformance`): structural
-  contract checks including forged-success rejection before commit
-  (invariant #68). Not a cloud-provider certification. See
-  [docs/adapter-conformance.md](docs/adapter-conformance.md).
-- **Multi-tenant control plane** (`Tenant` / `TenantRegistry` /
-  `MultiTenantControlPlane`): process-local org isolation; policy
-  tenant binding on `EngineContext.tenant_id` (invariants #69–#70). See
-  [docs/multi-tenant.md](docs/multi-tenant.md).
-- **Resource / DoS protection** (`ResourceProtectionMiddleware`):
-  Content-Length and per-client rate ceilings on the control-plane API
-  (invariants #71–#72). Process-local. See
-  [docs/resource-protection.md](docs/resource-protection.md).
-- **Adversarial / fuzz expansion** (Phase 21): Hypothesis properties and
-  gaming tests for tenant isolation and resource protection. See
-  [docs/adversarial-fuzz.md](docs/adversarial-fuzz.md).
-- **Bounded lifecycle state-machine model checking** (Phase 22):
-  `check_lifecycle_model()` exhausts a small transition graph; not a
-  theorem prover. See
-  [docs/state-machine-model-checking.md](docs/state-machine-model-checking.md).
-- **Action Passport V2** (`action_passport.v2` / schema `2.0`): additive
-  versioned passport with deterministic `outcome_status`, content
-  `passport_hash`, and optional `tenant_id` (invariant #73). V1 remains
-  default. See [docs/action-passport-v2.md](docs/action-passport-v2.md).
-- **Portable Evidence Packs** (`karmasakshi.portable`, `evidence_pack.v1`
-  / schema `1.0`): a self-contained, offline-verifiable bundle (Action
-  Passport V2 + sealed manifest + grant + audit slice + public keys) that
-  a recipient can independently re-verify with no access to the original
-  store, database, or live keyring (invariant #74). CLI
-  `evidence-pack build|verify`; API `GET /passports/{id}/evidence-pack`,
-  unauthenticated `POST /evidence-pack/verify`. See
-  [docs/portable-evidence.md](docs/portable-evidence.md).
-- **Observability** (`karmasakshi.observability`): a neutral, versioned
-  lifecycle event (`ObservabilityEvent`) and pluggable sinks
-  (in-memory, JSON-Lines file). Advisory only — `engine.observe()` never
-  gates a lifecycle transition, is never written to the audit journal,
-  and a failing sink never propagates. See
-  [docs/observability.md](docs/observability.md).
-- **AgentEval failure-memory loop** (`karmasakshi.integrations.agenteval.memory`):
-  `FailureMemoryStore` groups exported regression fixtures by a
-  deterministic failure signature (`effect_type` + `adapter_id` +
-  `failure_category` + `invariant`) and reports recurrence counts.
-  Advisory only — nothing in `karmasakshi.engine` reads or writes it. CLI
-  `agenteval record|history`; API `POST /manifests/{id}/agenteval/fixtures`,
-  `GET /agenteval/fixtures/history`. See
-  [docs/agenteval-integration.md](docs/agenteval-integration.md).
+- **25-phase protocol roadmap complete** on top of the v0.1.0 core: Effect
+  Intelligence, signed policy bundles, multi-party authorization, separation
+  of duties, causal effect graphs, decision envelopes, compensation
+  manifests, saga orchestration, witness quorum, authority budgets, Action
+  Passport V2, portable evidence, observability, multi-tenant control plane,
+  trusted adapter registry, resource protection, crash recovery / durable
+  lifecycle stores, production signer interfaces (local/emulated only),
+  transactional outbox, and AgentEval failure-memory tooling. Phase-by-phase
+  evidence lives in the extreme-v2 build status ledger.
 
-### Commercial Milestone A (in progress)
+- **Effect Intelligence and signed policy binding.** Deterministic
+  `karmasakshi.intelligence` assessment over a sealed
+  `IntelligencePolicy` bundle. Grants bind `policy_bundle_hash` at
+  authorization; commit re-verifies the same hash. Gateway refunds freeze
+  the policy that produced the *proposal-time* assessment so a later policy
+  activation cannot silently rebind an already assessed effect (including
+  across process restart).
 
-- **Gateway durable organization model** (`karmasakshi.gateway`):
-  `Organization` / `GatewayUser` with explicit, versioned SQLite
-  migrations (`schema_migrations` table, ordered `Migration` steps —
-  distinct from the ad-hoc scripts used by the protocol core's
-  single-table stores) and local development authentication
-  (PBKDF2-HMAC-SHA256, fails closed on cross-organization access).
-- **Gateway HTTP API** (`karmasakshi.gateway.api`, mounted under
-  `/gateway`): organization bootstrap (platform-auth-gated), login
-  issuing a session token (`GatewaySessionStore`, 12h TTL, no silent
-  renewal), and org-scoped user management -- every org-scoped endpoint
-  independently re-checks the session's user actually belongs to the
-  `org_id` in the URL, returning `403` rather than reading across the
-  organization boundary. See [docs/gateway.md](docs/gateway.md).
-- **Gateway refund vertical slice** (`karmasakshi.gateway.refunds`):
-  the named first commercial use case, end to end through HTTP --
-  signed organization policy activation, propose → assess → approve →
-  commit → verify → passport → evidence-pack, honest ambiguous-outcome
-  recovery, and compensation as a separate authorized effect. Each
-  organization gets an isolated protocol engine/adapters/audit journal
-  by reusing Phase 19's `MultiTenantControlPlane`. The
-  approving/activating identity is always the authenticated Gateway
-  session user, never a client-supplied identity claim. See
+- **Multi-party authorization and separation of duties.** M-of-N
+  `ApprovalStatement` quorums (`karmasakshi.approval`) and optional
+  forbidden-role-pair enforcement (`karmasakshi.duty`) before a grant is
+  issued. Agent principals cannot satisfy human approval quorums.
+
+- **Causal graphs, compensation, and saga capabilities.** Signed causal
+  DAGs (`karmasakshi.causal`); compensation as a *separately* authorized
+  effect with its own passport (`karmasakshi.compensation`); bounded saga
+  orchestration (`karmasakshi.saga`). Compensation is best-effort and not a
+  guaranteed rollback of irreversible external effects.
+
+- **Witness evidence and Action Passport V2.** Witness quorum statements
+  (`karmasakshi.witness`) and additive Action Passport schema 2.0
+  (`karmasakshi.passports.v2`) with content hash and independent
+  seal/grant/audit re-verification. V2 is not a separately signed
+  credential.
+
+- **Durable lifecycle and restart recovery.** Per-tenant SQLite lifecycle,
+  grant, audit, and outbox stores; Gateway write-through refund-journey
+  persistence (`karmasakshi.gateway.refund_state`); startup rehydration of
+  organizations and refund state so a process restart against the same data
+  directory does not 500 org-scoped routes or drop committed refunds,
+  Passports, or audit search.
+
+- **Tenant isolation and fail-closed signing-key restoration.** Canonical
+  organization IDs (RA-001 path containment); per-tenant data directories;
+  durable Ed25519 signing keys with public-identity sidecars; missing,
+  corrupt, or mismatched key material fails closed when durable artifacts
+  already exist (no silent replacement identity).
+
+- **Gateway refund vertical slice.** Organization bootstrap, session auth,
+  agent/adapter inventory, policy activation, propose → assess → approve →
+  commit → verify → Passport → evidence pack, ambiguous-outcome recovery,
+  and compensation as a separate HTTP-authorized effect — each org on an
+  isolated `MultiTenantControlPlane` runtime. See
   [docs/gateway.md](docs/gateway.md).
-- **Typed Python SDK** (`karmasakshi.sdk`, new optional `sdk` extra):
-  `GatewayClient` (sync, `httpx.Client`) and `AsyncGatewayClient` (async,
-  `httpx.AsyncClient`) covering the full Gateway HTTP surface above.
-  Responses are typed by reusing the real server-side pydantic models
-  (`ActionPassport`, `ActionPassportV2`, `EvidencePack`,
-  `EvidencePackVerificationResult`, `AuditEvent`,
-  `karmasakshi.gateway.schemas.*`) wherever the Gateway already returns
-  one of them, rather than a hand-maintained, driftable duplicate schema.
-  See [docs/sdk.md](docs/sdk.md).
 
+- **Typed sync and async Python SDK.** `karmasakshi.sdk.GatewayClient` and
+  `AsyncGatewayClient` covering the Gateway surface with server pydantic
+  models reused for responses. See [docs/sdk.md](docs/sdk.md).
+
+- **Control Center and buyer-facing acceptance.** Server-rendered
+  authenticated UI at `/control-center/` (async SDK + Gateway). Packaged
+  `karmasakshi-acceptance` drives 25 real checks through API, SDK, and UI;
+  Docker Compose evaluation profile and CI `compose-acceptance` job. See
+  [docs/product/BUYER_EVALUATION.md](docs/product/BUYER_EVALUATION.md) and
+  [docs/control-center.md](docs/control-center.md).
+
+### Fixed (release-audit remediation)
+
+Independent Milestone A release audit on `cea2496` returned **NO-GO**
+([docs/product/RELEASE_AUDIT.md](docs/product/RELEASE_AUDIT.md) — preserved
+unchanged). Remediation (PRs #48–#49) closed Critical/High/Medium findings
+including tenant path escape, restart rehydration, active-policy assessment,
+ambiguous recovery consistency, owner-only policy/user gates, packaging and
+dependency audit gaps, and residual durability issues:
+
+- committed/verified refund detail, list, Passport, and audit after restart
+- proposal-time policy hash binding at approve and execute
+- durable per-tenant signing keys so policy propose and Passport
+  `grant_verified` survive restart
+- fail-closed behaviour for missing/corrupt/mismatched signing keys
+
+Evidence:
+[docs/product/RELEASE_AUDIT_REMEDIATION.md](docs/product/RELEASE_AUDIT_REMEDIATION.md),
+[docs/product/POST_REMEDIATION_AUDIT.md](docs/product/POST_REMEDIATION_AUDIT.md),
+[docs/product/FINAL_RELEASE_REVIEW.md](docs/product/FINAL_RELEASE_REVIEW.md).
+
+### Verification (on the evaluation-ready main line)
+
+Recorded on the final release review of merge commit `99c6ec7` (and matching
+local re-runs):
+
+- **1049 passed, 8 skipped** — skips are Redis integration tests when no
+  Redis is reachable at `localhost:6379`; CI Redis jobs still exercise them
+- **90.49%–90.50%** line+branch coverage (`--cov-fail-under=90`)
+- ruff, strict mypy, Bandit, pip-audit, package build, and Twine clean
+- buyer acceptance **25/25 PASS**; Docker Compose acceptance green in Linux CI
+- fresh adversarial checks for restart recovery, proposal-time policy
+  binding, and signing-key durability/fail-closed
+
+### Known limitations
+
+Unchanged in kind; see [docs/limitations.md](docs/limitations.md):
+
+- Payment-simulator account balances are process-local and reset on restart;
+  Gateway/protocol evidence of what happened does not.
+- Local evaluation auth is password + session tokens, not production IAM,
+  SSO, or complete enterprise RBAC.
+- Compensation workflows remain limited (single authorized call; not a full
+  multi-party quorum journey).
+- No third-party certification, formal verification, or real bank / mail /
+  payment-provider connectors.
+- Low-severity deferred audit findings (RA-012–014) remain documented and
+  out of the remediation pass.
+- SQLite single-node only for the evaluation product; Redis tests need a
+  real Redis instance.
 
 ## [0.1.0] - 2026-07-27
 
