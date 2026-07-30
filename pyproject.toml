@@ -66,8 +66,10 @@ Changelog = "https://github.com/nishanttyagi28/karmasakshi-protocol/blob/main/CH
 
 [dependency-groups]
 dev = [
-    "pytest>=8.2,<9",
-    "pytest-asyncio>=0.23,<1.0",
+    # RA-011: pytest<9 excluded the PYSEC-2026-1845 fix (9.0.3). pytest-asyncio
+    # is bumped alongside it since 0.23-0.26 pin pytest<9.
+    "pytest>=9.0.3,<10",
+    "pytest-asyncio>=1.0,<2",
     "pytest-cov>=5.0,<6",
     "hypothesis>=6.100,<7",
     "mypy>=1.10,<2",
