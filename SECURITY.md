@@ -18,7 +18,7 @@ responsibly rather than publicly.
 
 ## Supported versions
 
-This project is at `0.1.0`, an explicitly experimental protocol version
+This project is at `0.2.0`, an explicitly experimental protocol version
 (`schema_version` major `1`). Only the latest published release receives
 fixes. There is no long-term-support branch at this stage.
 

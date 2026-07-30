@@ -35,8 +35,11 @@ def test_init_creates_workspace(workspace_args, tmp_path):
 
 
 def test_version_prints_semver():
+    from karmasakshi import __version__
+
     result = _run(["version"])
-    assert result.output.strip() == "0.1.0"
+    assert result.output.strip() == __version__
+    assert __version__ == "0.2.0"
 
 
 def test_key_generate_and_list(workspace_args):

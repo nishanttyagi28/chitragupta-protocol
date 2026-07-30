@@ -15,7 +15,7 @@ KarmaSakshi is a system that witnesses and proves the relationship between
 an approved action and its actual external outcome — nothing more claimed
 than that.
 
-**Status: v0.1.0 experimental protocol; Milestone A evaluation-ready
+**Status: v0.2.0 experimental protocol; Milestone A evaluation-ready
 self-hosted software.** The AI-operated refund journey ships with the
 Gateway, typed sync/async SDK, authenticated Control Center, explicit
 agent/adapter inventory, assessment-required human quorum, Docker

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "karmasakshi-protocol"
-version = "0.1.0"
+version = "0.2.0"
 description = "Verified Effect Commit Protocol for AI agents: binds approval to one exact resolved effect, revalidates preconditions at commit time, executes exactly once, and independently verifies the real outcome."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
