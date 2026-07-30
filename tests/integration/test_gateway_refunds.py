@@ -379,6 +379,89 @@ def test_member_cannot_activate_policy(dev_client):
     assert owner_resp.status_code == 200
 
 
+def test_approval_binds_to_the_policy_active_at_proposal_time_not_approval_time(dev_client):
+    """Policy-binding timing regression (found by the independent
+    post-remediation audit): approving a refund must bind the grant to
+    whatever policy actually produced its risk assessment at proposal
+    time, not whatever policy happens to be active when it is approved.
+    Otherwise approvers approve against one assessment while the grant
+    silently binds to a different policy that never scored this
+    manifest."""
+    client, _app = dev_client
+    headers = _bootstrap_and_login(client)
+
+    policy_a = client.post(
+        "/gateway/organizations/acme/policy",
+        json={"bundle_id": "policy-a", "block_threshold": 95, "review_threshold": 90},
+        headers=headers,
+    )
+    assert policy_a.status_code == 200
+    bundle_hash_a = policy_a.json()["bundle_hash"]
+
+    propose = _propose(client, headers, idempotency_key="idem-policy-timing")
+    assert propose.status_code == 200
+    assert propose.json()["assessment"]["policy_id"] == "policy-a"
+
+    # Switch the org's active policy *after* proposal, *before* approval.
+    policy_b = client.post(
+        "/gateway/organizations/acme/policy",
+        json={"bundle_id": "policy-b", "block_threshold": 10, "review_threshold": 5},
+        headers=headers,
+    )
+    assert policy_b.status_code == 200
+    bundle_hash_b = policy_b.json()["bundle_hash"]
+    assert bundle_hash_b != bundle_hash_a
+
+    manifest_id = propose.json()["manifest_id"]
+    approve = _approve_to_quorum(client, headers, manifest_id)
+    assert approve.json()["authorized"] is True
+    # Must bind to policy-a (the one that scored the assessment shown to
+    # approvers), never policy-b (merely active now).
+    assert approve.json()["policy_bundle_hash"] == bundle_hash_a
+    assert approve.json()["policy_bundle_hash"] != bundle_hash_b
+
+    # Switching the active policy again before execute must not break a
+    # grant that is legitimately bound to a bundle still on file.
+    client.post(
+        "/gateway/organizations/acme/policy",
+        json={"bundle_id": "policy-c"},
+        headers=headers,
+    )
+    execute = client.post(
+        f"/gateway/organizations/acme/refunds/{manifest_id}/execute",
+        json={"grant_id": approve.json()["grant_id"]},
+        headers=headers,
+    )
+    assert execute.status_code == 200
+    assert execute.json()["success"] is True
+
+
+def test_explicit_policy_bundle_override_at_approval_still_works(dev_client):
+    """The explicit `policy_bundle_id` override on approve must still take
+    priority over the proposal-time snapshot -- this is an intentional,
+    caller-requested exception, not the buggy default."""
+    client, _app = dev_client
+    headers = _bootstrap_and_login(client)
+    client.post(
+        "/gateway/organizations/acme/policy",
+        json={"bundle_id": "policy-a"},
+        headers=headers,
+    )
+    propose = _propose(client, headers, idempotency_key="idem-policy-override")
+    manifest_id = propose.json()["manifest_id"]
+    policy_b = client.post(
+        "/gateway/organizations/acme/policy",
+        json={"bundle_id": "policy-b"},
+        headers=headers,
+    )
+    bundle_hash_b = policy_b.json()["bundle_hash"]
+
+    approve = _approve_to_quorum(
+        client, headers, manifest_id, body={"policy_bundle_id": "policy-b"}
+    )
+    assert approve.json()["policy_bundle_hash"] == bundle_hash_b
+
+
 def test_duplicate_execute_retry_is_prevented(dev_client):
     client, _app = dev_client
     headers = _bootstrap_and_login(client)

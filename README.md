@@ -1,8 +1,8 @@
 # KarmaSakshi Protocol
 
-**Seal the intended effect. Witness the actual outcome.**
+**संकल्प प्रमाण**
 
-**A Verified Effect Commit Protocol for AI Agents.**
+**Runtime trust infrastructure for consequential AI-agent actions**
 
 KarmaSakshi Protocol cryptographically binds approval to one exact
 resolved effect, revalidates its external preconditions at commit time,
@@ -15,14 +15,19 @@ KarmaSakshi is a system that witnesses and proves the relationship between
 an approved action and its actual external outcome — nothing more claimed
 than that.
 
-**Status: v0.1.0 experimental protocol; Milestone A local evaluation
-product complete.** The AI-operated refund journey now ships with the
+**Status: v0.1.0 experimental protocol; Milestone A evaluation-ready
+self-hosted software.** The AI-operated refund journey ships with the
 Gateway, typed sync/async SDK, authenticated Control Center, explicit
 agent/adapter inventory, assessment-required human quorum, Docker
-Compose evaluation, and a 25-check buyer acceptance command.
+Compose evaluation, and a 25-check buyer acceptance command. A process
+restart against the same durable data directory restores organizations,
+committed refunds, Action Passports, audit evidence, activated policy
+bundles, and per-tenant signing identity.
 
-This is not certified, independently audited, "production proven," or a
-real payment integration. See [Limitations](#limitations) and
+This is **evaluation-ready self-hosted software**, not production
+readiness. It is not certified, not a formal proof, not "production
+proven," and not a real payment-provider integration. See
+[Limitations](#limitations) and
 [docs/threat-model.md](docs/threat-model.md). All 25 extreme-v2 protocol
 foundation phases are also implemented; the exact ledger is
 [docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md).
@@ -644,19 +649,29 @@ not hidden.
 
 ## Test count and coverage
 
-From a real run on this branch (`pytest --cov=karmasakshi --cov-report=term-missing`):
+From a real post-remediation run on this branch
+(`pytest --cov=karmasakshi --cov-fail-under=90`):
 
 ```text
-768 passed, 8 skipped (Redis integration tests -- no local Redis in this
+1049 passed, 8 skipped (Redis integration tests -- no local Redis in this
                         environment; the CI Redis service job does run them)
-90.37% overall line+branch coverage (--cov-fail-under=90)
-100%: protocol/, grants/verifier.py, state_machine/, delegation/,
-      portable/builder.py, portable/verify.py, passports/v2.py
+90.50% overall line+branch coverage (--cov-fail-under=90)
+ruff check / ruff format --check: clean
+mypy src (strict): clean (186 source files)
+bandit: no issues
+pip-audit (installed runtime + dev packages): no known vulnerabilities
+python -m build + twine check: both artifacts PASSED
+isolated base-wheel install (Python 3.12): import ok; acceptance --help ok
+karmasakshi-acceptance buyer journey: 25/25 PASS locally
+Docker Compose acceptance: not run locally (Docker unavailable here);
+  required green via this PR's GitHub Actions compose-acceptance job
 ```
 
-These are Phase 24 numbers; see
-[docs/extreme-v2-build-status.md](docs/extreme-v2-build-status.md) for the
-exact count recorded at each subsequent merged phase.
+Release-audit remediation history:
+[docs/product/RELEASE_AUDIT.md](docs/product/RELEASE_AUDIT.md) (original
+NO-GO baseline, preserved unchanged),
+[docs/product/RELEASE_AUDIT_REMEDIATION.md](docs/product/RELEASE_AUDIT_REMEDIATION.md),
+[docs/product/POST_REMEDIATION_AUDIT.md](docs/product/POST_REMEDIATION_AUDIT.md).
 
 CI (`.github/workflows/ci.yml`) runs the full suite across Python
 3.10-3.13, plus lint (`ruff`), strict type checking (`mypy`), security
@@ -665,9 +680,10 @@ push.
 
 ## Limitations
 
-This is a reference implementation, not a certified product. In particular:
+This is evaluation-ready self-hosted software, not a certified or
+production-proven product. In particular:
 
-- No third-party security audit has been performed.
+- No third-party security audit or formal proof has been performed.
 - SQLite storage is single-node only; Redis is required for distributed
   atomic consumption, and the Redis backend's test suite only runs against
   a real reachable Redis instance (skipped otherwise, never faked).
@@ -677,6 +693,11 @@ This is a reference implementation, not a certified product. In particular:
   product.
 - Compensation is best-effort by design (invariant #25) and is not, and
   cannot be, a guaranteed rollback for irreversible effects.
+- The in-memory payment-simulator ledger balance resets on process restart
+  even though Gateway refund records, Passports, audit evidence, and
+  per-tenant signing keys are durable.
+- Local evaluation auth is not production IAM: distinct user IDs enforce
+  quorum counts, but roles are not a full server-enforced RBAC model.
 - The AgentEval export is a versioned, neutral fixture format, not a
   verified-compatible implementation of any specific upstream AgentEval
   schema (which could not be confirmed at the time this was written).

@@ -456,6 +456,48 @@ class GatewayStore:
                 raise StoreUnavailableError(f"list_adapters({org_id!r}) failed") from exc
         return [_row_to_adapter(row) for row in rows]
 
+    # --- refund-journey durable state (RA-002 follow-up) ---------------------
+
+    def put_refund_state(self, org_id: str, bucket: str, item_key: str, payload: object) -> None:
+        """Durably write one item of Gateway refund-journey state (a sealed
+        manifest, assessment, grant, commit result, outcome proof, policy
+        bundle, or approval-statement list) so it survives a process
+        restart. See `karmasakshi.gateway.refund_state`."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            try:
+                self._conn.execute(
+                    "INSERT INTO gateway_refund_state"
+                    "(org_id, bucket, item_key, payload_json, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?) "
+                    "ON CONFLICT(org_id, bucket, item_key) DO UPDATE SET "
+                    "payload_json = excluded.payload_json, updated_at = excluded.updated_at",
+                    (org_id, bucket, item_key, json.dumps(payload), now),
+                )
+                self._conn.commit()
+            except sqlite3.Error as exc:
+                _safe_rollback(self._conn)
+                raise StoreUnavailableError(
+                    f"put_refund_state({org_id!r}, {bucket!r}, {item_key!r}) failed"
+                ) from exc
+
+    def load_refund_state(self, org_id: str) -> dict[str, dict[str, object]]:
+        """Return every durably-stored refund-journey item for ``org_id``,
+        grouped as ``{bucket: {item_key: payload}}``."""
+        with self._lock:
+            try:
+                rows = self._conn.execute(
+                    "SELECT bucket, item_key, payload_json FROM gateway_refund_state "
+                    "WHERE org_id = ?",
+                    (org_id,),
+                ).fetchall()
+            except sqlite3.Error as exc:
+                raise StoreUnavailableError(f"load_refund_state({org_id!r}) failed") from exc
+        buckets: dict[str, dict[str, object]] = {}
+        for row in rows:
+            buckets.setdefault(row["bucket"], {})[row["item_key"]] = json.loads(row["payload_json"])
+        return buckets
+
 
 def default_gateway_db_path(data_dir: Path) -> Path:
     return Path(data_dir) / "gateway.db"

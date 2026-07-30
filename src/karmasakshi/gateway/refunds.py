@@ -45,6 +45,18 @@ from karmasakshi.gateway.refund_schemas import (
     RefundPolicyDecisionOut,
     RefundSummaryOut,
 )
+from karmasakshi.gateway.refund_state import (
+    persist_active_policy_bundle_id,
+    persist_approval_policy_bundle,
+    persist_approval_statements,
+    persist_assessment,
+    persist_assessment_policy_bundle,
+    persist_commit_result,
+    persist_grant_and_index,
+    persist_outcome_proof,
+    persist_policy_bundle,
+    persist_sealed_manifest,
+)
 from karmasakshi.gateway.schemas import validate_principal_safe_id
 from karmasakshi.grants.model import ScopeConstraints
 from karmasakshi.intelligence.policy import (
@@ -124,10 +136,16 @@ def _human(principal_id: str) -> Principal:
     return Principal(principal_id=principal_id, principal_type=PrincipalType.HUMAN)
 
 
-def _active_intelligence_policy(state: Any) -> IntelligencePolicy | None:
-    """Resolve and verify this organization's currently activated
-    `IntelligencePolicy`, or ``None`` if no policy has been activated
-    (RA-003).
+def _gw_store(request: Request) -> Any:
+    """The Gateway's durable SQLite store, for write-through persistence of
+    refund-journey state (RA-002 follow-up). See
+    `karmasakshi.gateway.refund_state`."""
+    return request.app.state.karmasakshi_gateway.store
+
+
+def _active_policy_bundle(state: Any) -> Any | None:
+    """Resolve and verify this organization's currently activated signed
+    policy bundle, or ``None`` if no policy has been activated (RA-003).
 
     Fails closed with an ``HTTPException`` rather than silently falling
     back to the engine's default policy if an activated bundle exists but
@@ -151,7 +169,23 @@ def _active_intelligence_policy(state: Any) -> IntelligencePolicy | None:
         )
     except KarmaSakshiError as exc:
         raise HTTPException(409, f"active policy bundle failed verification: {exc}") from exc
-    return policy_from_bundle_payload(sealed_bundle.bundle.payload)
+    return sealed_bundle
+
+
+def _policy_bundle_by_hash(state: Any, bundle_hash: str) -> Any | None:
+    """Find the sealed policy bundle whose hash matches ``bundle_hash``,
+    regardless of which bundle (if any) is currently active.
+
+    A grant's ``policy_bundle_hash`` binds it to one specific, frozen
+    bundle at authorization time; resolving it by "whatever is active now"
+    instead (the pre-fix behavior) meant a grant issued under a policy
+    that later stopped being the active one would falsely fail here even
+    though the exact bundle it was bound to is still on file.
+    """
+    for bundle in state.policy_bundles.values():
+        if bundle.seal.bundle_hash == bundle_hash:
+            return bundle
+    return None
 
 
 def _assessment_out(assessment: Any) -> RefundAssessmentOut:
@@ -389,6 +423,9 @@ def activate_policy(
         raise HTTPException(422, str(exc)) from exc
     state.policy_bundles[body.bundle_id] = sealed
     state.active_policy_bundle_id = body.bundle_id
+    gw_store = _gw_store(request)
+    persist_policy_bundle(gw_store, org_id, body.bundle_id, sealed)
+    persist_active_policy_bundle_id(gw_store, org_id, body.bundle_id)
     return {
         "bundle_id": body.bundle_id,
         "bundle_hash": sealed.seal.bundle_hash,
@@ -466,7 +503,10 @@ def propose_refund(
         reference=body.reference,
         idempotency_key=body.idempotency_key,
     )
-    active_policy = _active_intelligence_policy(state)
+    active_bundle = _active_policy_bundle(state)
+    active_policy = (
+        policy_from_bundle_payload(active_bundle.bundle.payload) if active_bundle else None
+    )
     try:
         manifest = state.engine.prepare(adapter, payment_request, context=None)
         sealed = state.engine.seal(manifest, state.signing_key)
@@ -475,6 +515,11 @@ def propose_refund(
         raise HTTPException(422, str(exc)) from exc
     state.sealed_manifests[manifest.manifest_id] = sealed
     state.assessments[manifest.manifest_id] = assessment
+    # RA-003/policy-binding follow-up: freeze *which* bundle actually
+    # produced this assessment, so approval later binds to this exact
+    # bundle rather than whatever happens to be active at approval time.
+    if active_bundle is not None:
+        state.assessment_policy_bundles[manifest.manifest_id] = active_bundle
     now = state.engine.context.clock.now()
     approval_policy = build_approval_policy_bundle(
         ApprovalPolicy(
@@ -491,11 +536,18 @@ def propose_refund(
         created_at=now,
         effective_from=now,
     )
-    state.approval_policy_bundles[manifest.manifest_id] = seal_policy_bundle(
+    approval_policy_bundle = seal_policy_bundle(
         approval_policy,
         state.signing_key,
         clock=state.engine.context.clock,
     )
+    state.approval_policy_bundles[manifest.manifest_id] = approval_policy_bundle
+    gw_store = _gw_store(request)
+    persist_sealed_manifest(gw_store, org_id, sealed)
+    persist_assessment(gw_store, org_id, manifest.manifest_id, assessment)
+    persist_approval_policy_bundle(gw_store, org_id, manifest.manifest_id, approval_policy_bundle)
+    if active_bundle is not None:
+        persist_assessment_policy_bundle(gw_store, org_id, manifest.manifest_id, active_bundle)
     return {
         "manifest_id": manifest.manifest_id,
         "manifest_hash": sealed.seal.manifest_hash,
@@ -533,11 +585,19 @@ def approve_refund(
     if any(statement.approver.principal_id == user.user_id for statement in statements):
         raise HTTPException(409, "this user already approved the refund")
     policy_bundle = None
-    bundle_id = body.policy_bundle_id or state.active_policy_bundle_id
-    if bundle_id is not None:
-        policy_bundle = state.policy_bundles.get(bundle_id)
+    if body.policy_bundle_id is not None:
+        policy_bundle = state.policy_bundles.get(body.policy_bundle_id)
         if policy_bundle is None:
-            raise HTTPException(404, f"policy bundle {bundle_id!r} not found")
+            raise HTTPException(404, f"policy bundle {body.policy_bundle_id!r} not found")
+    else:
+        # Policy-binding timing fix: default to the exact bundle that
+        # actually produced this manifest's assessment at proposal time,
+        # not whatever policy happens to be active *now*. Without this,
+        # approvers approve against one risk assessment while the grant
+        # silently binds to a different policy if the org switched
+        # policies between propose and approve -- a policy that never
+        # scored this manifest.
+        policy_bundle = state.assessment_policy_bundles.get(manifest_id)
     now = datetime.now(timezone.utc)
     try:
         statement = sign_approval_statement(
@@ -554,6 +614,7 @@ def approve_refund(
     except KarmaSakshiError as exc:
         raise HTTPException(403, str(exc)) from exc
     statements.append(statement)
+    persist_approval_statements(_gw_store(request), org_id, manifest_id, statements)
     required = max(1, assessment.required_human_approvals)
     state.engine.context.audit.record(
         event_type="approval.statement_recorded",
@@ -597,6 +658,9 @@ def approve_refund(
     except KarmaSakshiError as exc:
         raise HTTPException(403, str(exc)) from exc
     state.register_grant(manifest_id, grant)
+    persist_grant_and_index(
+        _gw_store(request), org_id, manifest_id, grant, state.grants_by_manifest[manifest_id]
+    )
     return {
         "grant_id": grant.grant_id,
         "policy_bundle_hash": grant.policy_bundle_hash,
@@ -666,8 +730,12 @@ def execute_refund(
         raise HTTPException(404, "manifest or grant not found")
     policy_bundle = None
     if grant.policy_bundle_hash is not None:
-        policy_bundle = state.policy_bundles.get(state.active_policy_bundle_id or "")
-        if policy_bundle is None or policy_bundle.seal.bundle_hash != grant.policy_bundle_hash:
+        # Policy-binding timing fix: resolve by the grant's own frozen
+        # hash, not by whatever policy is active *now* -- a policy change
+        # between approve and execute must not falsely block a legitimately
+        # authorized execution whose exact bundle is still on file.
+        policy_bundle = _policy_bundle_by_hash(state, grant.policy_bundle_hash)
+        if policy_bundle is None:
             raise HTTPException(409, "grant is policy-bound but the matching bundle is unavailable")
     adapter = state.adapters[_PAYMENT_ADAPTER_ID]
     try:
@@ -677,6 +745,7 @@ def execute_refund(
     except KarmaSakshiError as exc:
         raise HTTPException(409, str(exc)) from exc
     state.commit_results[manifest_id] = result
+    persist_commit_result(_gw_store(request), org_id, manifest_id, result)
     return {
         "success": result.success,
         "provider_reference": result.provider_reference,
@@ -702,6 +771,7 @@ def verify_refund(
     adapter = state.adapters[_PAYMENT_ADAPTER_ID]
     proof = state.engine.verify(sealed.manifest, result, adapter, context=None)
     state.outcome_proofs[manifest_id] = proof
+    persist_outcome_proof(_gw_store(request), org_id, manifest_id, proof)
     return {"matched_expected": proof.matched_expected, "detail": proof.detail}
 
 
@@ -726,6 +796,7 @@ def recover_refund(
     except KarmaSakshiError as exc:
         raise HTTPException(409, str(exc)) from exc
     state.outcome_proofs[manifest_id] = proof
+    persist_outcome_proof(_gw_store(request), org_id, manifest_id, proof)
     return {"matched_expected": proof.matched_expected, "detail": proof.detail}
 
 
@@ -795,9 +866,20 @@ def compensate_refund(
         )
     except KarmaSakshiError as exc:
         raise HTTPException(409, str(exc)) from exc
-    state.sealed_manifests[compensation_sealed.manifest.manifest_id] = compensation_sealed
-    state.register_grant(compensation_sealed.manifest.manifest_id, grant)
-    state.commit_results[compensation_sealed.manifest.manifest_id] = result
+    compensation_manifest_id = compensation_sealed.manifest.manifest_id
+    state.sealed_manifests[compensation_manifest_id] = compensation_sealed
+    state.register_grant(compensation_manifest_id, grant)
+    state.commit_results[compensation_manifest_id] = result
+    gw_store = _gw_store(request)
+    persist_sealed_manifest(gw_store, org_id, compensation_sealed)
+    persist_grant_and_index(
+        gw_store,
+        org_id,
+        compensation_manifest_id,
+        grant,
+        state.grants_by_manifest[compensation_manifest_id],
+    )
+    persist_commit_result(gw_store, org_id, compensation_manifest_id, result)
     return {
         "compensation_manifest_id": compensation_sealed.manifest.manifest_id,
         "attempted": result.success or result.detail is not None,

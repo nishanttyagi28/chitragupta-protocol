@@ -16,7 +16,7 @@ separately.
 | Finding | Severity | Status | Fix commit |
 |---|---|---|---|
 | RA-001 | Critical | **Fixed** | `eec969f` |
-| RA-002 | High | **Fixed** | `1e43929` |
+| RA-002 | High | **Fixed** (then residual closed) | `1e43929`, residual `facdb3b` |
 | RA-003 | High | **Fixed** | `ef9058e` |
 | RA-004 | High | **Fixed** | `4c25b2b` |
 | RA-005 | High | **Fixed** | `32b183e` |
@@ -34,19 +34,36 @@ Low-severity findings (RA-012/013/014) were not release blockers per the
 audit's own recommendation and are out of scope for this remediation pass
 unless later work reopens them.
 
-## Final quality gates (after all eleven fixes, on this branch's HEAD)
+## Post-merge residual findings (closed on `fix/ra002-and-policy-binding-gaps`)
+
+After the original eleven fixes merged to `main` as PR #48, independent
+post-remediation audits found residual High-severity gaps in the same
+durability surface. Those are closed on this branch:
+
+| Residual | Severity | Status | Fix commit |
+|---|---|---|---|
+| RA-002 residual: committed refund detail/list/Passport empty after restart | High | **Fixed** | `facdb3b` |
+| Proposal-time policy binding (approve/execute used "currently active" policy) | High | **Fixed** | `facdb3b` |
+| Non-durable per-tenant signing key (policy propose + Passport grant_verified after restart) | High | **Fixed** | `25effe7` |
+| Missing/corrupt/mismatched signing key silently regenerated identity | High | **Fixed** | `df9bad1` |
+
+See `docs/product/POST_REMEDIATION_AUDIT.md` for the third-pass independent
+audit that re-verified A/B/C after `df9bad1`.
+
+## Final quality gates (after residual fixes, branch HEAD)
 
 | Gate | Result |
 |---|---|
-| Full local suite (`pytest -q`) | `1034 passed, 8 skipped` |
-| Coverage (`--cov-fail-under=90`) | `90.46%` (gate met) |
-| `ruff format --check .` | Clean (370 files) |
+| Full local suite (`pytest --cov=karmasakshi --cov-fail-under=90 -q`) | `1049 passed, 8 skipped` |
+| Coverage (`--cov-fail-under=90`) | `90.50%` (gate met) |
+| `ruff format --check .` | Clean (372 files) |
 | `ruff check .` | Clean |
-| `mypy src` | Clean (185 source files) |
-| `bandit -r src/karmasakshi -c pyproject.toml` | No issues (24,507 lines scanned) |
-| `pip-audit` | No known vulnerabilities |
+| `mypy src` | Clean (186 source files) |
+| `bandit -r src/karmasakshi -c pyproject.toml` | No issues (24,896 lines scanned) |
+| `pip-audit --skip-editable` | No known vulnerabilities |
 | `python -m build` + `twine check` | Both artifacts `PASSED` |
-| Isolated base-wheel install + `karmasakshi-acceptance` past `--help` | httpx imports; fails only with a connection error against an unreachable port (RA-006 verified end-to-end again) |
+| Isolated base-wheel install (Python 3.12) + `karmasakshi-acceptance --help` | Import ok; help ok |
+| Buyer acceptance (`karmasakshi-acceptance` against local Gateway) | **25/25 PASS** |
 | Docker Compose acceptance | Not run locally (Docker unavailable in this environment, same limitation the original audit disclosed); left to this PR's GitHub Actions `compose-acceptance` job |
 
 Baseline for comparison (`docs/product/RELEASE_AUDIT.md`, audited commit

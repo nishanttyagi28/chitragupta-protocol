@@ -46,6 +46,24 @@ class MultiTenantControlPlane:
                 )
             return state
 
+    def get_state_unchecked(self, tenant_id: str) -> ApiState:
+        """Return ``tenant_id``'s built runtime without the active-tenant
+        gate `get_state()` enforces.
+
+        For internal maintenance use only -- e.g. rehydrating durable
+        Gateway-layer state immediately after `create_tenant()`, including
+        for a tenant registered as suspended. Never use this to serve an
+        actual request; `get_state()` is the request-serving entry point
+        and must keep failing closed on a suspended/unknown tenant.
+        """
+        with self._lock:
+            state = self._states.get(tenant_id)
+            if state is None:
+                raise TenantIsolationError(
+                    f"no control-plane state for tenant {tenant_id!r} (fail closed)"
+                )
+            return state
+
     def reject_cross_tenant(self, *, acting_tenant_id: str, resource_tenant_id: str) -> None:
         require_active_tenant(self.registry, acting_tenant_id)
         if acting_tenant_id != resource_tenant_id:
