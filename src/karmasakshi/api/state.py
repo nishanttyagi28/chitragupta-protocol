@@ -24,7 +24,12 @@ from karmasakshi.audit.sqlite_backend import SQLiteAuditBackend
 from karmasakshi.causal.graph import CausalEffectGraph
 from karmasakshi.compensation.passport import CompensationPassport
 from karmasakshi.crypto.keyring import Keyring
-from karmasakshi.crypto.keys import SigningKey, generate_signing_key
+from karmasakshi.crypto.keys import (
+    SigningKey,
+    generate_signing_key,
+    load_signing_key_from_file,
+    save_signing_key_to_file,
+)
 from karmasakshi.domain.common import Principal
 from karmasakshi.domain.seal import SealedManifest
 from karmasakshi.engine.context import EngineContext
@@ -85,14 +90,34 @@ class ApiState:
 
 def build_default_state(data_dir: Path | None = None) -> ApiState:
     """Build a ready-to-use state with the three reference adapters wired up
-    against a fresh signing key -- suitable for local development and demos.
-    Production embedding should construct ``ApiState`` directly with real
-    keys/adapters instead of calling this.
+    against a durable dev signing key -- suitable for local development and
+    demos. Production embedding should construct ``ApiState`` directly with
+    real keys/adapters instead of calling this.
+
+    RA-002 follow-up: the signing key is persisted to (and reloaded from)
+    ``data_dir`` rather than regenerated every call, using the same
+    ``save_signing_key_to_file``/``load_signing_key_from_file`` helpers
+    already used elsewhere for dev-mode key storage (best-effort
+    owner-only file permissions -- see docs/limitations.md). Without this,
+    every process restart minted a new key, and the keyring only ever
+    trusted the newest one -- so any content signed before a restart
+    (grants, policy bundles, approval statements) failed signature
+    verification against the post-restart keyring. That silently broke
+    two things once refund-journey state became durable: any org with an
+    active policy could no longer propose new refunds after a restart
+    (the activated bundle's signature no longer verified), and every
+    already-completed refund's Action Passport permanently reported
+    ``grant_verified: False`` afterward.
     """
     data_dir = data_dir or Path.cwd() / ".karmasakshi-api"
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    signing_key = generate_signing_key("api-dev-issuer")
+    signing_key_path = data_dir / "signing-key.bin"
+    if signing_key_path.exists():
+        signing_key = load_signing_key_from_file(signing_key_path, key_id="api-dev-issuer")
+    else:
+        signing_key = generate_signing_key("api-dev-issuer")
+        save_signing_key_to_file(signing_key, signing_key_path)
     keyring = Keyring([signing_key.verification_key()])
     adapter_registry = build_reference_registry()
     engine = KarmaSakshiEngine(

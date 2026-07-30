@@ -213,20 +213,27 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   -- it is not yet its own separate review/quorum step the way the
   original refund is. See [docs/gateway.md](gateway.md) and
   [docs/control-center.md](control-center.md).
-- **A Gateway process restart reconnects durable per-tenant storage, but
-  not process-local refund-runtime state (RA-002).** At startup, every
-  durable organization's tenant is re-registered and its `ApiState` is
-  rebuilt, reopening that tenant's already-durable audit, grant, lifecycle,
-  and payment-ledger-adjacent SQLite stores (`karmasakshi.gateway.api.rehydrate_tenant_registrations`),
-  so organization/user rows, audit history, grants, and lifecycle records
-  survive a restart and no longer 500 on the first request afterward. What
-  does **not** survive: the per-process Ed25519 signing key identity (a
-  fresh key is generated each process start), in-flight sealed-manifest/
-  assessment/active-policy-bundle caches for anything not yet committed,
-  and the in-memory `PaymentSimulator` ledger balance (`api/state.py`). A
-  restart mid-journey can therefore still lose an uncommitted refund's
-  in-progress state even though the organization itself is not lost. See
-  [docs/gateway.md](gateway.md).
+- **A Gateway process restart reconnects durable per-tenant storage,
+  including the refund journey itself and the per-tenant signing key
+  (RA-002).** At startup, every durable organization's tenant is
+  re-registered and its `ApiState` is rebuilt, reopening that tenant's
+  already-durable audit, grant, lifecycle, and payment-ledger-adjacent
+  SQLite stores. The Gateway's own refund-journey state (sealed
+  manifests, assessments, grants, commit results, outcome proofs, policy
+  bundles, approval statements --
+  `karmasakshi.gateway.api.rehydrate_tenant_registrations`,
+  `karmasakshi.gateway.refund_state`) and the tenant's Ed25519 signing key
+  (`karmasakshi.api.state.build_default_state`) are also durable and
+  reloaded, not regenerated -- without that, content signed before a
+  restart failed signature verification against a fresh post-restart key.
+  A refund that was fully committed and independently verified before a
+  restart, including its Action Passport, remains visible and correctly
+  verified afterward; an in-flight (partially approved) refund can also
+  be driven to completion across a restart. What still does **not**
+  survive: the in-memory `PaymentSimulator` ledger balance
+  (`api/state.py`) -- the simulator's own account balances reset each
+  process start even though the Gateway's record of what happened does
+  not. See [docs/gateway.md](gateway.md).
 - **The Gateway SDK (`karmasakshi.sdk`) is a client for the Gateway
   surface above only** -- not a general client for every protocol
   feature (decision envelopes, causal graphs, witness quorum, ...). One

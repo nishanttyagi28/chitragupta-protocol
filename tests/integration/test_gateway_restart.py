@@ -231,13 +231,24 @@ def test_committed_and_verified_refund_survives_a_restart(monkeypatch, tmp_path)
         headers=headers2,
     )
     assert passport.status_code == 200
-    assert passport.json()["outcome_status"] == "verified_match"
+    passport_body = passport.json()
+    assert passport_body["outcome_status"] == "verified_match"
+    # The signing key must also be durable (RA-002 follow-up): a passport
+    # generated post-restart must still verify the pre-restart grant's
+    # signature, not just report a plausible-looking outcome status.
+    assert passport_body["verification"]["seal_verified"] is True
+    assert passport_body["verification"]["grant_verified"] is True
+    assert passport_body["verification"]["audit_chain_verified"] is True
 
 
 def test_proposed_but_unapproved_refund_survives_a_restart(monkeypatch, tmp_path):
     """A refund that was only proposed (never approved) must also remain
     visible after a restart, with its rehydrated assessment intact, and
-    recording a fresh approval statement against it must still work."""
+    the approval workflow must be drivable all the way to a grant and a
+    successful execute *across* the restart -- this requires the
+    per-tenant Ed25519 signing key to also be durable (not just the
+    refund-journey dicts), since `authorize_with_quorum` re-verifies the
+    pre-restart sealed manifest's seal against the current keyring."""
     monkeypatch.setenv(DEV_MODE_ENV, "1")
     data_dir = tmp_path / "api-data"
 
@@ -281,17 +292,68 @@ def test_proposed_but_unapproved_refund_survives_a_restart(monkeypatch, tmp_path
     assert detail.json()["decision_status"] == "pending"
     assert detail.json()["assessment"]["score"] is not None
 
-    # Recording further approvals still works post-restart (the approval
-    # statement is freshly signed each time)...
-    first_approve = client2.post(
-        f"/gateway/organizations/acme/refunds/{manifest_id}/approve", json={}, headers=headers2
+    approve = _approve_to_quorum(client2, headers2, "acme", manifest_id)
+    assert approve.json()["authorized"] is True
+    grant_id = approve.json()["grant_id"]
+    assert grant_id is not None
+
+    execute = client2.post(
+        f"/gateway/organizations/acme/refunds/{manifest_id}/execute",
+        json={"grant_id": grant_id},
+        headers=headers2,
     )
-    assert first_approve.status_code == 200
-    # ...but this deliberately does not assert that the workflow can be
-    # driven all the way to a new grant post-restart: the per-process
-    # Ed25519 signing key is not durable (see docs/limitations.md), so
-    # `authorize_with_quorum`'s re-verification of the pre-restart sealed
-    # manifest's seal against the new process's keyring is expected to
-    # fail once quorum is reached. That is a distinct, already-disclosed
-    # gap (signing-key persistence) from the one this fix closes (durable
-    # visibility of the refund-journey read model itself).
+    assert execute.status_code == 200
+    assert execute.json()["success"] is True
+
+
+def test_active_policy_and_new_proposals_survive_a_restart(monkeypatch, tmp_path):
+    """Regression for the signing-key durability gap the second
+    independent post-remediation audit found: once an organization has
+    activated a policy, every subsequent proposal re-verifies that
+    policy bundle's signature. Before the per-tenant signing key was made
+    durable, the keyring only ever trusted the newest (post-restart) key,
+    so this deterministically 409'd for any org with an active policy."""
+    monkeypatch.setenv(DEV_MODE_ENV, "1")
+    data_dir = tmp_path / "api-data"
+
+    app1 = create_app(data_dir=data_dir)
+    client1 = TestClient(app1)
+    _bootstrap(client1)
+    token1 = _login(client1).json()["session_token"]
+    headers1 = {"Authorization": f"Bearer {token1}"}
+    client1.post(
+        "/gateway/organizations/acme/agents",
+        json={"agent_id": "refund-agent-1", "display_name": "Refund Agent"},
+        headers=headers1,
+    )
+    client1.post(
+        "/gateway/organizations/acme/adapters",
+        json={"adapter_id": "payment.simulator", "adapter_version": "1.0.0"},
+        headers=headers1,
+    )
+    policy = client1.post(
+        "/gateway/organizations/acme/policy",
+        json={"bundle_id": "policy-a", "block_threshold": 95, "review_threshold": 90},
+        headers=headers1,
+    )
+    assert policy.status_code == 200
+
+    app2 = create_app(data_dir=data_dir)
+    client2 = TestClient(app2)
+    token2 = _login(client2).json()["session_token"]
+    headers2 = {"Authorization": f"Bearer {token2}"}
+
+    propose = client2.post(
+        "/gateway/organizations/acme/refunds/propose",
+        json={
+            "agent_id": "refund-agent-1",
+            "requested_by": "customer-1",
+            "beneficiary": "customer-acct-1",
+            "amount_minor_units": 50000,
+            "reference": "idem-restart-policy",
+            "idempotency_key": "idem-restart-policy",
+        },
+        headers=headers2,
+    )
+    assert propose.status_code == 200
+    assert propose.json()["assessment"]["policy_id"] == "policy-a"

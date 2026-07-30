@@ -108,11 +108,16 @@ def rehydrate_tenant_registrations(gateway_state: GatewayApiState) -> None:
     verified before a restart remains visible (detail, Passport, list)
     afterward -- not just a bare "the organization still exists."
 
-    This does not restore process-local state that was never durable: the
-    per-process signing key identity and the payment simulator's ledger are
-    still lost on restart -- see docs/limitations.md. Idempotent:
-    organizations already registered in this process (the common,
-    non-restart case) are skipped.
+    The per-tenant Ed25519 signing key is also now durable (persisted to
+    and reloaded from the tenant's data directory, see
+    `karmasakshi.api.state.build_default_state`) -- without that, content
+    signed before a restart (grants, policy bundles, approval statements)
+    failed signature verification against a freshly-generated post-restart
+    key, which defeated durable refund-journey rehydration in practice.
+    The payment simulator's ledger is still process-local and lost on
+    restart -- see docs/limitations.md. Idempotent: organizations already
+    registered in this process (the common, non-restart case) are
+    skipped.
     """
     control_plane = gateway_state.control_plane
     for org in gateway_state.store.list_organizations():

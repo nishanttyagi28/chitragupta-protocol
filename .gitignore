@@ -19,6 +19,7 @@ coverage.xml
 *.db-wal
 *.sqlite3
 .karmasakshi-api/
+.karmasakshi-tenants/
 .env
 !.env.example
 *.pem
