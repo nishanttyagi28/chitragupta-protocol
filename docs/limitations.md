@@ -229,11 +229,14 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   A refund that was fully committed and independently verified before a
   restart, including its Action Passport, remains visible and correctly
   verified afterward; an in-flight (partially approved) refund can also
-  be driven to completion across a restart. What still does **not**
-  survive: the in-memory `PaymentSimulator` ledger balance
-  (`api/state.py`) -- the simulator's own account balances reset each
-  process start even though the Gateway's record of what happened does
-  not. See [docs/gateway.md](gateway.md).
+  be driven to completion across a restart. Missing, corrupt, or
+  mismatched signing-key material for a data directory that already holds
+  durable protocol artifacts fails closed at startup (no silent
+  replacement identity). Clean first-start of an empty directory still
+  generates a fresh key. What still does **not** survive: the in-memory
+  `PaymentSimulator` ledger balance (`api/state.py`) -- the simulator's
+  own account balances reset each process start even though the Gateway's
+  record of what happened does not. See [docs/gateway.md](gateway.md).
 - **The Gateway SDK (`karmasakshi.sdk`) is a client for the Gateway
   surface above only** -- not a general client for every protocol
   feature (decision envelopes, causal graphs, witness quorum, ...). One

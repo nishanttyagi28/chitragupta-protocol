@@ -10,6 +10,9 @@ tamper-evident record of what happened.
 
 from __future__ import annotations
 
+import contextlib
+import os
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -35,6 +38,7 @@ from karmasakshi.domain.seal import SealedManifest
 from karmasakshi.engine.context import EngineContext
 from karmasakshi.engine.core import KarmaSakshiEngine
 from karmasakshi.envelope.model import DecisionEnvelope
+from karmasakshi.errors import KeyLoadError
 from karmasakshi.grants.model import ExecutionGrant
 from karmasakshi.integrations.agenteval import FailureMemoryStore
 from karmasakshi.intelligence.model import EffectAssessment
@@ -43,6 +47,82 @@ from karmasakshi.policy.bundle import SealedPolicyBundle
 from karmasakshi.stores.lifecycle_sqlite import SQLiteLifecycleStore
 from karmasakshi.stores.sqlite import SQLiteGrantStore
 from karmasakshi.witness.model import WitnessStatement
+
+_SIGNING_KEY_FILENAME = "signing-key.bin"
+_SIGNING_PUB_FILENAME = "signing-key.pub"
+# Files that indicate this data_dir already held a signing identity or
+# signed protocol state. If the private key is missing while any of these
+# exist, fail closed rather than mint a replacement identity that would
+# invalidate prior seals/grants/policy signatures.
+_PRIOR_IDENTITY_MARKERS = (
+    _SIGNING_PUB_FILENAME,
+    "grants.db",
+    "audit.db",
+    "lifecycle.db",
+    "outbox.db",
+    "ledger.db",
+    "agenteval-memory.jsonl",
+)
+
+
+def _write_public_key_sidecar(signing_key: SigningKey, pub_path: Path) -> None:
+    pub_path.write_bytes(signing_key.public_bytes())
+    with contextlib.suppress(OSError):
+        os.chmod(pub_path, stat.S_IRUSR | stat.S_IWUSR)  # 0o600; best-effort on Windows
+
+
+def _has_prior_signing_identity(data_dir: Path) -> bool:
+    return any((data_dir / name).exists() for name in _PRIOR_IDENTITY_MARKERS)
+
+
+def _load_or_create_durable_signing_key(data_dir: Path, *, key_id: str) -> SigningKey:
+    """Load the durable dev signing key, or create one only on clean first start.
+
+    Fail closed when:
+    - the private key file is corrupt / unreadable;
+    - the private key is missing but this directory already has durable
+      protocol artifacts or a public-key sidecar (would otherwise silently
+      mint a new identity for existing signed records);
+    - the private key's public material does not match the recorded
+      ``signing-key.pub`` sidecar (mismatched identity).
+    """
+    key_path = data_dir / _SIGNING_KEY_FILENAME
+    pub_path = data_dir / _SIGNING_PUB_FILENAME
+
+    if key_path.exists():
+        signing_key = load_signing_key_from_file(key_path, key_id=key_id)
+        if pub_path.exists():
+            try:
+                expected_public = pub_path.read_bytes()
+            except OSError as exc:
+                raise KeyLoadError(
+                    "could not read signing-key.pub public identity sidecar (fail closed)"
+                ) from exc
+            if len(expected_public) != 32:
+                raise KeyLoadError(
+                    "signing-key.pub is corrupt (expected 32 raw Ed25519 public key bytes)"
+                )
+            if signing_key.public_bytes() != expected_public:
+                raise KeyLoadError(
+                    "signing key does not match recorded public identity (fail closed)"
+                )
+        else:
+            # Upgrade path from the first durable-key fix (private key only):
+            # record the public identity so later mismatch detection works.
+            _write_public_key_sidecar(signing_key, pub_path)
+        return signing_key
+
+    if _has_prior_signing_identity(data_dir):
+        raise KeyLoadError(
+            "signing key missing for existing tenant data directory (fail closed); "
+            "refusing to generate a replacement identity that would invalidate "
+            "prior signatures"
+        )
+
+    signing_key = generate_signing_key(key_id)
+    save_signing_key_to_file(signing_key, key_path)
+    _write_public_key_sidecar(signing_key, pub_path)
+    return signing_key
 
 
 @dataclass
@@ -108,16 +188,16 @@ def build_default_state(data_dir: Path | None = None) -> ApiState:
     (the activated bundle's signature no longer verified), and every
     already-completed refund's Action Passport permanently reported
     ``grant_verified: False`` afterward.
+
+    Missing, corrupt, or mismatched key material fails closed when the
+    data directory already holds durable protocol artifacts: a new
+    identity is never silently minted for existing signed records.
+    Clean first-start (empty data directory) still generates a fresh key.
     """
     data_dir = data_dir or Path.cwd() / ".karmasakshi-api"
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    signing_key_path = data_dir / "signing-key.bin"
-    if signing_key_path.exists():
-        signing_key = load_signing_key_from_file(signing_key_path, key_id="api-dev-issuer")
-    else:
-        signing_key = generate_signing_key("api-dev-issuer")
-        save_signing_key_to_file(signing_key, signing_key_path)
+    signing_key = _load_or_create_durable_signing_key(data_dir, key_id="api-dev-issuer")
     keyring = Keyring([signing_key.verification_key()])
     adapter_registry = build_reference_registry()
     engine = KarmaSakshiEngine(

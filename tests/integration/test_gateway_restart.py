@@ -20,6 +20,9 @@ from fastapi.testclient import TestClient
 
 from karmasakshi.api.app import create_app
 from karmasakshi.api.auth import DEV_MODE_ENV
+from karmasakshi.api.state import build_default_state
+from karmasakshi.crypto.keys import generate_signing_key, save_signing_key_to_file
+from karmasakshi.errors import KeyLoadError
 
 
 def _bootstrap(client, org_id="acme", owner_email="alice@acme.com", owner_password="hunter2"):
@@ -357,3 +360,125 @@ def test_active_policy_and_new_proposals_survive_a_restart(monkeypatch, tmp_path
     )
     assert propose.status_code == 200
     assert propose.json()["assessment"]["policy_id"] == "policy-a"
+
+
+def test_missing_signing_key_with_existing_records_fails_closed(monkeypatch, tmp_path):
+    """Independent audit finding: deleting signing-key.bin for a tenant
+    that already has durable signed records must not mint a replacement
+    identity. Pre-fix behaviour regenerated a new Ed25519 key on the
+    next create_app(), so prior grants/policies failed verification and
+    looked like tampering rather than operator key-loss."""
+    monkeypatch.setenv(DEV_MODE_ENV, "1")
+    data_dir = tmp_path / "api-data"
+
+    app1 = create_app(data_dir=data_dir)
+    client1 = TestClient(app1)
+    _bootstrap(client1)
+    token1 = _login(client1).json()["session_token"]
+    headers1 = {"Authorization": f"Bearer {token1}"}
+    client1.post(
+        "/gateway/organizations/acme/agents",
+        json={"agent_id": "refund-agent-1", "display_name": "Refund Agent"},
+        headers=headers1,
+    )
+    client1.post(
+        "/gateway/organizations/acme/adapters",
+        json={"adapter_id": "payment.simulator", "adapter_version": "1.0.0"},
+        headers=headers1,
+    )
+    policy = client1.post(
+        "/gateway/organizations/acme/policy",
+        json={"bundle_id": "policy-a", "block_threshold": 95, "review_threshold": 90},
+        headers=headers1,
+    )
+    assert policy.status_code == 200
+    propose = client1.post(
+        "/gateway/organizations/acme/refunds/propose",
+        json={
+            "agent_id": "refund-agent-1",
+            "requested_by": "customer-1",
+            "beneficiary": "customer-acct-1",
+            "amount_minor_units": 50000,
+            "reference": "idem-missing-key",
+            "idempotency_key": "idem-missing-key",
+        },
+        headers=headers1,
+    )
+    assert propose.status_code == 200
+
+    tenant_key = data_dir / "tenants" / "acme" / "signing-key.bin"
+    assert tenant_key.exists()
+    tenant_key.unlink()
+    assert not tenant_key.exists()
+
+    with pytest.raises(KeyLoadError, match="missing for existing tenant"):
+        create_app(data_dir=data_dir)
+
+
+def test_corrupt_signing_key_fails_closed(monkeypatch, tmp_path):
+    """Corrupt private-key bytes must fail closed at startup, never be
+    treated as a clean first-start that regenerates identity."""
+    monkeypatch.setenv(DEV_MODE_ENV, "1")
+    data_dir = tmp_path / "api-data"
+
+    app1 = create_app(data_dir=data_dir)
+    client1 = TestClient(app1)
+    _bootstrap(client1)
+    token1 = _login(client1).json()["session_token"]
+    headers1 = {"Authorization": f"Bearer {token1}"}
+    # Force durable protocol artifacts into the tenant directory.
+    client1.post(
+        "/gateway/organizations/acme/agents",
+        json={"agent_id": "refund-agent-1", "display_name": "Refund Agent"},
+        headers=headers1,
+    )
+
+    tenant_key = data_dir / "tenants" / "acme" / "signing-key.bin"
+    assert tenant_key.exists()
+    tenant_key.write_bytes(b"not-a-valid-ed25519-private-key!!")
+
+    with pytest.raises(KeyLoadError):
+        create_app(data_dir=data_dir)
+
+
+def test_mismatched_signing_key_fails_closed(monkeypatch, tmp_path):
+    """Replacing the private key while leaving the public-identity sidecar
+    (or swapping in an unrelated valid Ed25519 key) must fail closed."""
+    monkeypatch.setenv(DEV_MODE_ENV, "1")
+    data_dir = tmp_path / "api-data"
+
+    app1 = create_app(data_dir=data_dir)
+    client1 = TestClient(app1)
+    _bootstrap(client1)
+
+    tenant_dir = data_dir / "tenants" / "acme"
+    tenant_key = tenant_dir / "signing-key.bin"
+    tenant_pub = tenant_dir / "signing-key.pub"
+    assert tenant_key.exists()
+    assert tenant_pub.exists()
+    original_pub = tenant_pub.read_bytes()
+
+    replacement = generate_signing_key("api-dev-issuer")
+    save_signing_key_to_file(replacement, tenant_key)
+    # Sidecar still records the original public identity.
+    assert tenant_pub.read_bytes() == original_pub
+    assert replacement.public_bytes() != original_pub
+
+    with pytest.raises(KeyLoadError, match="does not match recorded public identity"):
+        create_app(data_dir=data_dir)
+
+
+def test_clean_first_start_generates_signing_key(tmp_path):
+    """An empty data directory is a genuine first start: mint a new key
+    and record its public identity. Distinct from restart restoration."""
+    data_dir = tmp_path / "fresh-tenant"
+    state = build_default_state(data_dir)
+    key_path = data_dir / "signing-key.bin"
+    pub_path = data_dir / "signing-key.pub"
+    assert key_path.exists()
+    assert pub_path.exists()
+    assert pub_path.read_bytes() == state.signing_key.public_bytes()
+
+    # Second construction against the same directory restores, not regenerates.
+    state2 = build_default_state(data_dir)
+    assert state2.signing_key.public_bytes() == state.signing_key.public_bytes()
