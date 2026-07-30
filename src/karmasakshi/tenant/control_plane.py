@@ -15,6 +15,7 @@ from karmasakshi.api.state import ApiState, build_default_state
 from karmasakshi.errors import TenantIsolationError
 from karmasakshi.tenant.enforce import require_active_tenant
 from karmasakshi.tenant.model import Tenant
+from karmasakshi.tenant.org_id import validate_canonical_org_id
 from karmasakshi.tenant.registry import TenantRegistry
 
 
@@ -54,8 +55,17 @@ class MultiTenantControlPlane:
             )
 
     def _build_state(self, tenant_id: str) -> ApiState:
-        root = self.data_root or Path.cwd() / ".karmasakshi-tenants"
-        tenant_dir = root / tenant_id
+        # RA-001: this is the storage boundary where tenant_id becomes a
+        # filesystem path. Re-validate here even though `Tenant.__post_init__`
+        # already did -- this method must independently prove containment
+        # and must never trust that a caller upheld the model invariant.
+        validate_canonical_org_id(tenant_id)
+        root = (self.data_root or Path.cwd() / ".karmasakshi-tenants").resolve()
+        tenant_dir = (root / tenant_id).resolve()
+        if tenant_dir == root or not tenant_dir.is_relative_to(root):
+            raise TenantIsolationError(
+                "resolved tenant path escapes the configured data root (fail closed)"
+            )
         tenant_dir.mkdir(parents=True, exist_ok=True)
         state = build_default_state(tenant_dir)
         state.engine.context.tenant_id = tenant_id

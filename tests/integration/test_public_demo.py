@@ -14,7 +14,7 @@ pytest.importorskip("jinja2")
 from fastapi.testclient import TestClient
 
 from karmasakshi.api.app import PublicDemoMisconfiguredError, create_app
-from karmasakshi.api.auth import DEV_MODE_ENV, PUBLIC_DEMO_ENV
+from karmasakshi.api.auth import DEV_MODE_ENV, PUBLIC_DEMO_ENV, TOKEN_ENV
 from karmasakshi.web import demo_state
 from karmasakshi.web.demo_scenarios import SCENARIO_ORDER
 from karmasakshi.web.rate_limit import reset_rate_limiter
@@ -36,7 +36,12 @@ def demo_client(monkeypatch):
     return TestClient(app, follow_redirects=False)
 
 
-def test_public_demo_not_mounted_by_default():
+def test_public_demo_not_mounted_by_default(monkeypatch):
+    # RA-010: a plain (non-dev, non-public-demo) deployment now refuses to
+    # start at all without a configured token, so this needs one to
+    # construct the app -- it is only asserting the demo router isn't
+    # mounted, not exercising auth.
+    monkeypatch.setenv(TOKEN_ENV, "correct-token")
     app = create_app()
     client = TestClient(app)
     assert client.get("/demo/").status_code == 404

@@ -45,20 +45,32 @@ def derive_outcome_status(passport: ActionPassport) -> OutcomeStatus:
     state = (passport.lifecycle_state or "").lower()
     if passport.was_revoked or state == "revoked":
         return OutcomeStatus.REVOKED
-    if state == "failed":
-        return OutcomeStatus.FAILED
+    # A later, separately-authorized compensation outcome takes priority
+    # over the original effect's own verification -- it is a temporally
+    # later fact about the same manifest.
     if passport.compensation_passport_status == "verified" or (
         passport.compensation_succeeded is True and passport.compensation_attempted is True
     ):
         return OutcomeStatus.COMPENSATION_VERIFIED
     if passport.compensation_attempted is True:
         return OutcomeStatus.COMPENSATION_ATTEMPTED
-    if passport.commit_detail and "ambiguous" in passport.commit_detail.lower():
-        return OutcomeStatus.AMBIGUOUS
+    # RA-004: an independent post-commit observation is the strongest
+    # available signal -- a commit response is never treated as proof on
+    # its own (see the Gateway's /verify and /recover routes), so a
+    # *matched* proof must outrank both a stale terminal "failed" lifecycle
+    # label and free-text "ambiguous" commit-detail sniffing below. This is
+    # what makes the Gateway read model's verification_status and this
+    # Passport agree once ambiguous-outcome recovery has actually
+    # confirmed what happened, instead of the Passport reporting FAILED
+    # while the read model reports verified_match for the same manifest.
     if passport.observed_matched_expected is True:
         return OutcomeStatus.VERIFIED_MATCH
     if passport.observed_matched_expected is False:
         return OutcomeStatus.VERIFIED_MISMATCH
+    if state == "failed":
+        return OutcomeStatus.FAILED
+    if passport.commit_detail and "ambiguous" in passport.commit_detail.lower():
+        return OutcomeStatus.AMBIGUOUS
     if passport.commit_success is True:
         return OutcomeStatus.COMMITTED_UNVERIFIED
     if passport.grant_id is not None and not passport.commit_attempted:

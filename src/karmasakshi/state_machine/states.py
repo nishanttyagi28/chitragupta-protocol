@@ -23,6 +23,13 @@ class LifecycleState(str, Enum):
     COMMITTED = "committed"
     VERIFIED = "verified"
     FAILED = "failed"
+    #: RA-004: reached only from FAILED, only via
+    #: ``KarmaSakshiEngine.recover_ambiguous_commit`` finding independent
+    #: evidence (``OutcomeProof.matched_expected``) that the effect actually
+    #: succeeded despite a locally-recorded ambiguous/failed outcome. FAILED
+    #: itself is never rewritten -- this is a distinct, honestly-labeled
+    #: terminal state, not a retroactive edit of history.
+    RECOVERED_COMMITTED = "recovered_committed"
     REVOKED = "revoked"
     EXPIRED = "expired"
     COMPENSATING = "compensating"
@@ -42,9 +49,11 @@ REVOCABLE_STATES = frozenset(
 )
 
 #: Terminal states: no outgoing transitions.
+#: FAILED is deliberately *not* here: its one legal exit is
+#: RECOVERED_COMMITTED (RA-004 ambiguous-outcome reconciliation).
 TERMINAL_STATES = frozenset(
     {
-        LifecycleState.FAILED,
+        LifecycleState.RECOVERED_COMMITTED,
         LifecycleState.REVOKED,
         LifecycleState.EXPIRED,
         LifecycleState.COMPENSATED,
@@ -83,7 +92,8 @@ TRANSITIONS: dict[LifecycleState, frozenset[LifecycleState]] = {
     LifecycleState.COMMITTED: frozenset({LifecycleState.VERIFIED}),
     LifecycleState.VERIFIED: frozenset({LifecycleState.COMPENSATING, LifecycleState.COMPENSATED}),
     LifecycleState.COMPENSATING: frozenset({LifecycleState.COMPENSATED, LifecycleState.FAILED}),
-    LifecycleState.FAILED: frozenset(),
+    LifecycleState.FAILED: frozenset({LifecycleState.RECOVERED_COMMITTED}),
+    LifecycleState.RECOVERED_COMMITTED: frozenset(),
     LifecycleState.REVOKED: frozenset(),
     LifecycleState.EXPIRED: frozenset(),
     LifecycleState.COMPENSATED: frozenset(),

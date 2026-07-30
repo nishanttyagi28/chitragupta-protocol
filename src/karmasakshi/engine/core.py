@@ -74,8 +74,10 @@ from karmasakshi.evidence.model import EvidenceAssessment, EvidencePolicy, Evide
 from karmasakshi.grants.issuer import issue_grant
 from karmasakshi.grants.model import ExecutionGrant, ScopeConstraints
 from karmasakshi.grants.verifier import verify_grant
+from karmasakshi.intelligence.engine import EffectIntelligenceEngine
 from karmasakshi.intelligence.facts import AssessmentFacts
 from karmasakshi.intelligence.model import EffectAssessment
+from karmasakshi.intelligence.policy import IntelligencePolicy
 from karmasakshi.observability.model import ObservabilityEvent, ObservabilityEventType
 from karmasakshi.observability.sinks import emit_safely
 from karmasakshi.outbox.memory import OutboxConflictError
@@ -102,7 +104,7 @@ from karmasakshi.saga.model import (
     build_saga_run,
 )
 from karmasakshi.state_machine.record import LifecycleRecord
-from karmasakshi.state_machine.states import LifecycleState, is_revocable
+from karmasakshi.state_machine.states import LifecycleState, is_legal_transition, is_revocable
 from karmasakshi.tenant.enforce import bind_engine_and_policy_tenant
 from karmasakshi.witness.model import WitnessPolicy, WitnessQuorumResult, WitnessStatement
 from karmasakshi.witness.quorum import evaluate_witness_quorum
@@ -388,6 +390,8 @@ class KarmaSakshiEngine:
         self,
         manifest: EffectManifest,
         facts: AssessmentFacts | None = None,
+        *,
+        policy: IntelligencePolicy | None = None,
     ) -> EffectAssessment:
         """Run the deterministic Effect Intelligence Engine over ``manifest``
         and record the result in the audit journal.
@@ -399,8 +403,19 @@ class KarmaSakshiEngine:
         recommendation is advisory in this protocol version: nothing in
         :meth:`authorize`/:meth:`commit` currently reads or enforces it.
         See docs/effect-intelligence.md.
+
+        If ``policy`` is given, this call is scored against that policy
+        instead of the engine context's configured default -- e.g. a
+        caller-verified, currently-activated organization
+        ``IntelligencePolicy`` -- without mutating the engine's own bound
+        policy or affecting any other call.
         """
-        assessment = self._ctx.intelligence.assess(manifest, facts)
+        scorer = (
+            self._ctx.intelligence
+            if policy is None
+            else EffectIntelligenceEngine(policy, clock=self._ctx.clock)
+        )
+        assessment = scorer.assess(manifest, facts)
         self._ctx.audit.record(
             event_type="effect.assessed",
             decision=assessment.recommendation.value,
@@ -1667,6 +1682,23 @@ class KarmaSakshiEngine:
                 pending = self._ctx.outbox_store.get(manifest.idempotency_key)
                 if pending is not None and pending.status == "pending":
                     self._ctx.outbox_store.mark_confirmed(manifest.idempotency_key, outcome_ref)
+            # RA-004: honestly reconcile the lifecycle with what recovery
+            # just confirmed. Only fires when FAILED -> RECOVERED_COMMITTED
+            # is actually legal (i.e. this manifest previously reached
+            # FAILED, typically via an ambiguous commit outcome) -- a
+            # manifest recovery is probed for before ever reaching FAILED
+            # (e.g. a crash before commit was attempted at all) is left
+            # exactly as before, matching prior behavior.
+            current_state = self._get_record(manifest.manifest_id).state
+            if is_legal_transition(current_state, LifecycleState.RECOVERED_COMMITTED):
+                self._transition(
+                    manifest.manifest_id,
+                    LifecycleState.RECOVERED_COMMITTED,
+                    event_type="effect.ambiguous_recovery_confirmed",
+                    manifest_hash=manifest.canonical_hash(),
+                    actor_id=manifest.actor.principal_id,
+                    metadata={"outcome_ref": outcome_ref[:200]},
+                )
         return proof
 
     def list_pending_outbox(self) -> list[OutboxEntry]:

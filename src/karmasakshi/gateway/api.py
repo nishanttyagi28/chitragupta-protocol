@@ -27,11 +27,13 @@ from karmasakshi.errors import (
     GatewayAgentNotFoundError,
     GatewayAuthenticationError,
     GatewayUserAlreadyExistsError,
+    InvalidOrganizationIdError,
     KarmaSakshiError,
     OrganizationAlreadyExistsError,
     OrganizationNotFoundError,
     OrganizationSuspendedError,
     TenantIsolationError,
+    UnknownTenantError,
     UntrustedAdapterError,
 )
 from karmasakshi.gateway.models import (
@@ -40,6 +42,7 @@ from karmasakshi.gateway.models import (
     GatewayUser,
     GatewayUserRole,
     Organization,
+    OrganizationStatus,
 )
 from karmasakshi.gateway.schemas import (
     GatewayAdapterListOut,
@@ -59,7 +62,8 @@ from karmasakshi.gateway.schemas import (
 from karmasakshi.gateway.sessions import GatewaySessionStore
 from karmasakshi.gateway.store import GatewayStore
 from karmasakshi.tenant.control_plane import MultiTenantControlPlane
-from karmasakshi.tenant.model import Tenant
+from karmasakshi.tenant.model import Tenant, TenantStatus
+from karmasakshi.tenant.org_id import validate_canonical_org_id
 
 router = APIRouter(prefix="/gateway", tags=["gateway"])
 
@@ -81,6 +85,42 @@ class GatewayApiState:
 
 def _state(request: Request) -> GatewayApiState:
     return request.app.state.karmasakshi_gateway  # type: ignore[no-any-return]
+
+
+def rehydrate_tenant_registrations(gateway_state: GatewayApiState) -> None:
+    """Restore tenant control-plane registrations for every durable
+    organization after a process restart (RA-002).
+
+    ``MultiTenantControlPlane`` starts each process with an empty registry
+    and no built runtimes; without this, an org-scoped route for a
+    pre-existing organization raised an unhandled ``UnknownTenantError``
+    after restart, surfaced to callers as an HTTP 500. Calling this at
+    startup re-registers each durable organization and rebuilds its
+    ``ApiState``, which reopens the tenant's already-durable audit, grant,
+    lifecycle, and ledger SQLite stores.
+
+    This does not restore process-local state that was never durable:
+    the per-process signing key identity, in-flight sealed
+    manifests/assessments/policy-activation caches, and the payment
+    simulator's ledger are still lost on restart -- see
+    docs/limitations.md. Idempotent: organizations already registered in
+    this process (the common, non-restart case) are skipped.
+    """
+    control_plane = gateway_state.control_plane
+    for org in gateway_state.store.list_organizations():
+        if control_plane.registry.get(org.org_id) is not None:
+            continue
+        status: TenantStatus = (
+            "suspended" if org.status == OrganizationStatus.SUSPENDED else "active"
+        )
+        control_plane.create_tenant(
+            Tenant(
+                tenant_id=org.org_id,
+                display_name=org.name,
+                status=status,
+                created_at=org.created_at,
+            )
+        )
 
 
 def _user_out(user: GatewayUser) -> GatewayUserOut:
@@ -124,6 +164,13 @@ async def require_gateway_session(
 
 
 def _assert_org_scope(request: Request, user: GatewayUser, org_id: str) -> None:
+    # RA-001: every org-scoped route (including path-param routes that never
+    # go through `OrganizationBootstrapIn`) funnels through here, so reject a
+    # malformed org_id before any store lookup or control-plane access.
+    try:
+        validate_canonical_org_id(org_id)
+    except InvalidOrganizationIdError as exc:
+        raise HTTPException(400, str(exc)) from exc
     state = _state(request)
     try:
         state.store.assert_user_belongs_to_organization(user, org_id)
@@ -146,7 +193,12 @@ def resolve_org_runtime(request: Request, user: GatewayUser, org_id: str) -> Api
     state = _state(request)
     try:
         return state.control_plane.get_state(org_id)
-    except TenantIsolationError as exc:
+    except (TenantIsolationError, UnknownTenantError) as exc:
+        # RA-002: an org can be a durable Gateway row without (yet) having a
+        # rebuilt control-plane runtime -- e.g. rehydration raced with this
+        # request, or the tenant directory was removed out of band. Fail
+        # closed with a safe, non-500 response rather than letting an
+        # unhandled UnknownTenantError surface as an internal server error.
         raise HTTPException(404, str(exc)) from exc
 
 
@@ -206,6 +258,11 @@ def bootstrap_organization(
         state.control_plane.create_tenant(
             Tenant(tenant_id=body.org_id, display_name=body.name, created_at=org.created_at)
         )
+    except InvalidOrganizationIdError as exc:
+        # Defense in depth: `OrganizationBootstrapIn.org_id` already rejects
+        # this at the schema boundary, so this should be unreachable in
+        # practice, but this call site must not trust that upstream check.
+        raise HTTPException(400, str(exc)) from exc
     except TenantIsolationError as exc:
         raise HTTPException(409, str(exc)) from exc
     return OrganizationBootstrapOut(
@@ -292,6 +349,11 @@ def create_organization_user(
     user: Annotated[GatewayUser, Depends(require_gateway_session)],
 ) -> GatewayUserOut:
     _assert_org_scope(request, user, org_id)
+    # RA-005: user creation controls who can satisfy the refund-approval
+    # quorum. Membership alone must not be sufficient to self-provision
+    # additional accounts -- only an owner may add organization users.
+    if user.role != GatewayUserRole.OWNER:
+        raise HTTPException(403, "only an organization owner may create additional users")
     state = _state(request)
     try:
         created = state.store.create_user(

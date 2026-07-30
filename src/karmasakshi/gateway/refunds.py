@@ -34,7 +34,7 @@ from karmasakshi.gateway.api import (
     require_registered_refund_resources,
     resolve_org_runtime,
 )
-from karmasakshi.gateway.models import GatewayUser
+from karmasakshi.gateway.models import GatewayUser, GatewayUserRole
 from karmasakshi.gateway.refund_schemas import (
     RefundAssessmentOut,
     RefundDenyIn,
@@ -47,7 +47,12 @@ from karmasakshi.gateway.refund_schemas import (
 )
 from karmasakshi.gateway.schemas import validate_principal_safe_id
 from karmasakshi.grants.model import ScopeConstraints
-from karmasakshi.intelligence.policy import IntelligencePolicy, build_policy_bundle
+from karmasakshi.intelligence.policy import (
+    POLICY_TYPE_INTELLIGENCE,
+    IntelligencePolicy,
+    build_policy_bundle,
+    policy_from_bundle_payload,
+)
 from karmasakshi.passports import (
     build_passport,
     build_passport_v2,
@@ -56,7 +61,7 @@ from karmasakshi.passports import (
     render_passport_v2_html,
     render_passport_v2_markdown,
 )
-from karmasakshi.policy import seal_policy_bundle
+from karmasakshi.policy import seal_policy_bundle, verify_policy_bundle
 from karmasakshi.portable import build_evidence_pack
 
 router = APIRouter(prefix="/gateway/organizations/{org_id}", tags=["gateway-refunds"])
@@ -117,6 +122,36 @@ def _agent(principal_id: str) -> Principal:
 
 def _human(principal_id: str) -> Principal:
     return Principal(principal_id=principal_id, principal_type=PrincipalType.HUMAN)
+
+
+def _active_intelligence_policy(state: Any) -> IntelligencePolicy | None:
+    """Resolve and verify this organization's currently activated
+    `IntelligencePolicy`, or ``None`` if no policy has been activated
+    (RA-003).
+
+    Fails closed with an ``HTTPException`` rather than silently falling
+    back to the engine's default policy if an activated bundle exists but
+    no longer verifies (tampered, expired, or wrong type) -- silently
+    assessing under a different, possibly more lenient policy than the one
+    the organization believes is active would defeat the point of this
+    fix.
+    """
+    bundle_id = state.active_policy_bundle_id
+    if bundle_id is None:
+        return None
+    sealed_bundle = state.policy_bundles.get(bundle_id)
+    if sealed_bundle is None:
+        raise HTTPException(500, "active policy bundle is unavailable")
+    try:
+        verify_policy_bundle(
+            sealed_bundle,
+            state.keyring,
+            now=state.engine.context.clock.now(),
+            expected_policy_type=POLICY_TYPE_INTELLIGENCE,
+        )
+    except KarmaSakshiError as exc:
+        raise HTTPException(409, f"active policy bundle failed verification: {exc}") from exc
+    return policy_from_bundle_payload(sealed_bundle.bundle.payload)
 
 
 def _assessment_out(assessment: Any) -> RefundAssessmentOut:
@@ -326,8 +361,15 @@ def activate_policy(
     is the authenticated session user, never a client-supplied identity
     claim."""
     state = resolve_org_runtime(request, user, org_id)
+    # RA-005: the active policy now actually governs assessment (RA-003),
+    # so any member being able to activate a lenient policy would let them
+    # weaken risk scoring for their own proposals. Restrict activation to
+    # owners, same as user creation.
+    if user.role != GatewayUserRole.OWNER:
+        raise HTTPException(403, "only an organization owner may activate a policy")
     now = datetime.now(timezone.utc)
     policy = IntelligencePolicy(
+        policy_id=body.bundle_id,
         block_threshold=body.block_threshold,
         review_threshold=body.review_threshold,
     )
@@ -424,10 +466,11 @@ def propose_refund(
         reference=body.reference,
         idempotency_key=body.idempotency_key,
     )
+    active_policy = _active_intelligence_policy(state)
     try:
         manifest = state.engine.prepare(adapter, payment_request, context=None)
         sealed = state.engine.seal(manifest, state.signing_key)
-        assessment = state.engine.assess(manifest)
+        assessment = state.engine.assess(manifest, policy=active_policy)
     except KarmaSakshiError as exc:
         raise HTTPException(422, str(exc)) from exc
     state.sealed_manifests[manifest.manifest_id] = sealed
@@ -697,7 +740,11 @@ def compensate_refund(
     """Compensation as a separate, separately-authorized effect: builds a
     compensation manifest cryptographically bound to the original
     (invariant #43), authorizes and commits it in one call for buyer
-    evaluation simplicity. Reports the honest triad -- attempted vs.
+    evaluation simplicity. The caller must have been one of the original
+    refund's distinct quorum approvers (RA-008) -- this narrows who may
+    single-handedly authorize a reversal, but it is not yet a full
+    separate compensation quorum/review step of its own; see
+    docs/limitations.md. Reports the honest triad -- attempted vs.
     succeeded are independent booleans; a settled payment's compensation
     is truthfully refused (`succeeded=False`), never silently upgraded.
     The approver is the authenticated session user."""
@@ -706,6 +753,20 @@ def compensate_refund(
     original_commit = state.commit_results.get(manifest_id)
     if original is None or original_commit is None:
         raise HTTPException(404, "manifest or commit result not found")
+    # RA-008: compensation is a distinct authorized effect, but nothing
+    # required the caller to have had any part in authorizing the
+    # *original* refund -- any authenticated org member could single-
+    # handedly reverse a refund they had no prior authority over. Require
+    # the caller to have been one of the original refund's distinct
+    # quorum approvers (a real, not fabricated, prior involvement).
+    original_approvers = {
+        statement.approver.principal_id
+        for statement in state.approval_statements.get(manifest_id, [])
+    }
+    if user.user_id not in original_approvers:
+        raise HTTPException(
+            403, "only a user who approved the original refund may authorize its compensation"
+        )
     now = datetime.now(timezone.utc)
     adapter = state.adapters[_PAYMENT_ADAPTER_ID]
     try:

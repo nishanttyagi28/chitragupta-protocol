@@ -57,7 +57,7 @@ def test_illegal_transitions_rejected(current, target):
 
 def test_terminal_states_have_no_outgoing_transitions():
     for state in (
-        LifecycleState.FAILED,
+        LifecycleState.RECOVERED_COMMITTED,
         LifecycleState.REVOKED,
         LifecycleState.EXPIRED,
         LifecycleState.COMPENSATED,
@@ -65,6 +65,19 @@ def test_terminal_states_have_no_outgoing_transitions():
         assert is_terminal(state)
         for other in LifecycleState:
             assert not is_legal_transition(state, other)
+
+
+def test_failed_is_not_a_zero_exit_terminal_but_has_exactly_one_legal_exit():
+    """RA-004: FAILED is deliberately not in TERMINAL_STATES -- its one
+    legal exit is RECOVERED_COMMITTED, reached only via
+    ``KarmaSakshiEngine.recover_ambiguous_commit`` finding independent
+    evidence the effect actually succeeded. FAILED itself is never
+    rewritten; this is a distinct, honestly-labeled next state."""
+    assert not is_terminal(LifecycleState.FAILED)
+    legal_targets = [
+        other for other in LifecycleState if is_legal_transition(LifecycleState.FAILED, other)
+    ]
+    assert legal_targets == [LifecycleState.RECOVERED_COMMITTED]
 
 
 def test_committing_committed_verified_are_not_revocable():

@@ -13,6 +13,7 @@ from karmasakshi.gateway.models import (
     GatewayUserRole,
     OrganizationStatus,
 )
+from karmasakshi.tenant.org_id import validate_canonical_org_id
 
 #: Same charset `karmasakshi.domain.common.Principal.principal_id` requires
 #: -- `user_id` doubles as the refund-journey's approving/activating
@@ -29,6 +30,22 @@ def validate_principal_safe_id(value: str) -> str:
     return value
 
 
+#: RA-009: minimum length for a *newly set* password (bootstrap owner
+#: password, additional-user password). Deliberately not applied to
+#: `LoginIn.password` -- login only ever checks a submitted string against
+#: an existing hash, so rejecting it early would just turn a wrong-length
+#: password into a confusing 422 instead of the correct 401.
+MIN_PASSWORD_LENGTH = 6
+
+
+def validate_new_password(value: str) -> str:
+    if len(value) < MIN_PASSWORD_LENGTH:
+        raise ValueError(f"password must be at least {MIN_PASSWORD_LENGTH} characters")
+    if not value.strip():
+        raise ValueError("password must not be entirely whitespace")
+    return value
+
+
 class OrganizationBootstrapIn(BaseModel):
     """Create an organization together with its first (owner) user in one
     call -- an organization cannot exist with zero users to administer
@@ -41,6 +58,19 @@ class OrganizationBootstrapIn(BaseModel):
     owner_email: str
     owner_display_name: str
     owner_password: str
+
+    @field_validator("org_id")
+    @classmethod
+    def _validate_org_id(cls, v: str) -> str:
+        # RA-001: org_id becomes a tenant filesystem path segment; reject
+        # anything unsafe here, at the outermost HTTP boundary, before any
+        # organization row or tenant directory is created.
+        return validate_canonical_org_id(v)
+
+    @field_validator("owner_password")
+    @classmethod
+    def _validate_owner_password(cls, v: str) -> str:
+        return validate_new_password(v)
 
 
 class OrganizationOut(BaseModel):
@@ -83,6 +113,11 @@ class GatewayUserCreateIn(BaseModel):
     @classmethod
     def _validate_user_id(cls, v: str) -> str:
         return validate_principal_safe_id(v)
+
+    @field_validator("password")
+    @classmethod
+    def _validate_password(cls, v: str) -> str:
+        return validate_new_password(v)
 
 
 class LoginIn(BaseModel):
@@ -145,6 +180,7 @@ class GatewayAdapterListOut(BaseModel):
 
 
 __all__ = [
+    "MIN_PASSWORD_LENGTH",
     "PRINCIPAL_SAFE_ID_RE",
     "GatewayAdapterListOut",
     "GatewayAdapterRegisterIn",
@@ -159,5 +195,6 @@ __all__ = [
     "OrganizationBootstrapOut",
     "OrganizationOut",
     "UserListOut",
+    "validate_new_password",
     "validate_principal_safe_id",
 ]

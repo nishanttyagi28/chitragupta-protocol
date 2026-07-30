@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from karmasakshi.adapters.base import CompensationResult
 from karmasakshi.adapters.email_sandbox import EmailRequest
@@ -108,19 +109,38 @@ def health() -> dict[str, str]:
 
 
 @router.get("/ready")
-def ready(request: Request) -> dict[str, Any]:
+def ready(request: Request) -> JSONResponse:
     state = _state(request)
     try:
         state.engine.context.audit.verify_chain()
         audit_ok = True
     except KarmaSakshiError:
         audit_ok = False
-    return {
-        "status": "ready" if audit_ok else "degraded",
+    # RA-010: also surface whether the Gateway's durable organization
+    # store is actually reachable -- a readiness probe that only checks
+    # the protocol core's audit chain can report "ready" while every
+    # Gateway-scoped route is unusable (e.g. an unreachable/corrupted
+    # gateway.db). Best-effort: the Gateway may not be mounted at all in
+    # a bare protocol-core deployment, which is not itself a failure.
+    gateway_ok = True
+    gateway_state = getattr(request.app.state, "karmasakshi_gateway", None)
+    if gateway_state is not None:
+        try:
+            gateway_state.store.list_organizations()
+        except KarmaSakshiError:
+            gateway_ok = False
+    overall_ok = audit_ok and gateway_ok
+    payload = {
+        "status": "ready" if overall_ok else "degraded",
         "dev_mode": is_dev_mode(),
         "kill_switch_engaged": state.kill_switch_engaged,
         "audit_chain_verified": audit_ok,
+        "gateway_store_reachable": gateway_ok,
     }
+    # RA-010: a degraded process must fail an HTTP-status-code-only health
+    # probe (e.g. a container orchestrator's default check), not just say
+    # "degraded" in a JSON body nobody is parsing.
+    return JSONResponse(payload, status_code=200 if overall_ok else 503)
 
 
 @router.post("/principals", dependencies=[Depends(require_auth)])

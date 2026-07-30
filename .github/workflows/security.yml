@@ -32,7 +32,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e ".[all]" pip-audit
+      - run: pip install --upgrade pip
+      # RA-011: this used to install only the [all] runtime extras, so
+      # pip-audit never scanned the dev dependency group (pytest et al.)
+      # at all -- a real advisory (PYSEC-2026-1845, pytest<9.0.3) shipped
+      # undetected here. --group installs the PEP 735 dependency-groups
+      # entry from pyproject.toml alongside the runtime extras.
+      - run: pip install -e ".[all]" --group dev
       - run: pip-audit --skip-editable
 
   codeql:
