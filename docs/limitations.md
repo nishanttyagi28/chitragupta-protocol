@@ -206,8 +206,12 @@ versioned, experimental protocol (schema `1.0`). It is **not**:
   quorum or activate the policy that governs it (RA-005). There is still
   no per-user signing key, durable background worker, or real provider
   implied by the server-rendered Control Center, and "owner" remains an
-  authenticated account, not a verified human identity. See
-  [docs/gateway.md](gateway.md) and
+  authenticated account, not a verified human identity. Compensation
+  (reversal) requires the caller to have been one of the original
+  refund's distinct quorum approvers (RA-008), but is still a single HTTP
+  call that itself prepares, seals, authorizes, and commits the reversal
+  -- it is not yet its own separate review/quorum step the way the
+  original refund is. See [docs/gateway.md](gateway.md) and
   [docs/control-center.md](control-center.md).
 - **A Gateway process restart reconnects durable per-tenant storage, but
   not process-local refund-runtime state (RA-002).** At startup, every

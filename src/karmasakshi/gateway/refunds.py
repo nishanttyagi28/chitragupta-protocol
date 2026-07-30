@@ -740,7 +740,11 @@ def compensate_refund(
     """Compensation as a separate, separately-authorized effect: builds a
     compensation manifest cryptographically bound to the original
     (invariant #43), authorizes and commits it in one call for buyer
-    evaluation simplicity. Reports the honest triad -- attempted vs.
+    evaluation simplicity. The caller must have been one of the original
+    refund's distinct quorum approvers (RA-008) -- this narrows who may
+    single-handedly authorize a reversal, but it is not yet a full
+    separate compensation quorum/review step of its own; see
+    docs/limitations.md. Reports the honest triad -- attempted vs.
     succeeded are independent booleans; a settled payment's compensation
     is truthfully refused (`succeeded=False`), never silently upgraded.
     The approver is the authenticated session user."""
@@ -749,6 +753,20 @@ def compensate_refund(
     original_commit = state.commit_results.get(manifest_id)
     if original is None or original_commit is None:
         raise HTTPException(404, "manifest or commit result not found")
+    # RA-008: compensation is a distinct authorized effect, but nothing
+    # required the caller to have had any part in authorizing the
+    # *original* refund -- any authenticated org member could single-
+    # handedly reverse a refund they had no prior authority over. Require
+    # the caller to have been one of the original refund's distinct
+    # quorum approvers (a real, not fabricated, prior involvement).
+    original_approvers = {
+        statement.approver.principal_id
+        for statement in state.approval_statements.get(manifest_id, [])
+    }
+    if user.user_id not in original_approvers:
+        raise HTTPException(
+            403, "only a user who approved the original refund may authorize its compensation"
+        )
     now = datetime.now(timezone.utc)
     adapter = state.adapters[_PAYMENT_ADAPTER_ID]
     try:

@@ -447,6 +447,55 @@ def test_compensation_is_a_separate_authorized_effect(dev_client):
     assert body["succeeded"] is False
 
 
+def test_compensation_requires_the_caller_to_have_approved_the_original_refund(dev_client):
+    """RA-008 regression: before this fix, any authenticated org member --
+    not just someone who had any part in authorizing the original refund
+    -- could single-handedly compensate (reverse) a committed refund."""
+    client, _app = dev_client
+    owner_headers = _bootstrap_and_login(client)
+    manifest_id = _propose(client, headers=owner_headers, idempotency_key="idem-comp-auth").json()[
+        "manifest_id"
+    ]
+    grant_id = _approve_to_quorum(client, owner_headers, manifest_id).json()["grant_id"]
+    client.post(
+        f"/gateway/organizations/acme/refunds/{manifest_id}/execute",
+        json={"grant_id": grant_id},
+        headers=owner_headers,
+    )
+
+    created = client.post(
+        "/gateway/organizations/acme/users",
+        json={
+            "user_id": "outsider",
+            "email": "outsider@acme.com",
+            "display_name": "Outsider",
+            "password": "password123",
+            "role": "member",
+        },
+        headers=owner_headers,
+    )
+    assert created.status_code == 200
+    outsider_token = client.post(
+        "/gateway/auth/login",
+        json={"org_id": "acme", "email": "outsider@acme.com", "password": "password123"},
+    ).json()["session_token"]
+    outsider_headers = {"Authorization": f"Bearer {outsider_token}"}
+
+    denied = client.post(
+        f"/gateway/organizations/acme/refunds/{manifest_id}/compensate",
+        json={},
+        headers=outsider_headers,
+    )
+    assert denied.status_code == 403
+
+    allowed = client.post(
+        f"/gateway/organizations/acme/refunds/{manifest_id}/compensate",
+        json={},
+        headers=owner_headers,
+    )
+    assert allowed.status_code == 200
+
+
 def test_ambiguous_outcome_recovered_honestly(dev_client):
     client, _app = dev_client
     headers = _bootstrap_and_login(client)
