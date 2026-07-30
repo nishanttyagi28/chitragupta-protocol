@@ -636,3 +636,82 @@ def test_verify_without_prior_execute_404s(dev_client):
     manifest_id = _propose(client, headers, idempotency_key="idem-verify-404").json()["manifest_id"]
     resp = client.post(f"/gateway/organizations/acme/refunds/{manifest_id}/verify", headers=headers)
     assert resp.status_code == 404
+
+
+# --- RA-003: activated policy must actually govern assessment -------------------
+
+
+def test_activated_policy_changes_the_assessment_not_just_the_grant_binding(dev_client):
+    """RA-003 exact regression: before this fix, `propose` always scored
+    against the engine's default policy and only looked the active bundle
+    up later, for grant binding. A caller could activate a much stricter
+    (or laxer) policy and see zero effect on the assessment/recommendation
+    a refund actually receives at proposal time."""
+    client, _app = dev_client
+    headers = _bootstrap_and_login(client)
+
+    # Exact reproduction from RELEASE_AUDIT.md RA-003: this shape of refund
+    # scores 87 under the default policy (block_threshold=85), so the
+    # default (unactivated) baseline recommends BLOCK.
+    baseline = _propose(client, headers, idempotency_key="idem-ra003-baseline")
+    assert baseline.status_code == 200
+    baseline_assessment = baseline.json()["assessment"]
+    assert baseline_assessment["policy_id"] == "default"
+    assert baseline_assessment["score"] == 87
+    assert baseline_assessment["recommendation"] == "block"
+
+    # Activating a *lenient* policy (thresholds above 87) must change the
+    # very next proposal's assessment, not just later grant binding.
+    activate = client.post(
+        "/gateway/organizations/acme/policy",
+        json={"bundle_id": "lenient-policy", "block_threshold": 95, "review_threshold": 90},
+        headers=headers,
+    )
+    assert activate.status_code == 200
+
+    lenient = _propose(client, headers, idempotency_key="idem-ra003-lenient")
+    assert lenient.status_code == 200
+    lenient_assessment = lenient.json()["assessment"]
+    # The exact same shape of refund, scored under the newly activated
+    # policy, must reflect that policy's identity and its (much higher)
+    # thresholds -- not silently reuse the engine default that would have
+    # blocked it.
+    assert lenient_assessment["policy_id"] == "lenient-policy"
+    assert lenient_assessment["score"] == 87
+    assert lenient_assessment["recommendation"] == "allow"
+
+
+def test_no_activated_policy_still_uses_the_engine_default(dev_client):
+    """Backward compatibility: an organization that never calls
+    POST .../policy must keep getting the previous (default-policy)
+    assessment behavior unchanged."""
+    client, _app = dev_client
+    headers = _bootstrap_and_login(client)
+    resp = _propose(client, headers, idempotency_key="idem-ra003-no-policy")
+    assert resp.status_code == 200
+    assert resp.json()["assessment"]["policy_id"] == "default"
+
+
+def test_propose_fails_closed_if_active_policy_bundle_is_tampered(dev_client):
+    """A tampered/corrupted active bundle must never be silently ignored
+    in favor of the default policy -- that would defeat the point of
+    fixing RA-003. It must fail closed instead."""
+    client, app = dev_client
+    headers = _bootstrap_and_login(client)
+    activate = client.post(
+        "/gateway/organizations/acme/policy",
+        json={"bundle_id": "tamper-me"},
+        headers=headers,
+    )
+    assert activate.status_code == 200
+
+    gateway_state = app.state.karmasakshi_gateway
+    runtime = gateway_state.control_plane.get_state("acme")
+    sealed_bundle = runtime.policy_bundles["tamper-me"]
+    tampered_bundle = sealed_bundle.bundle.model_copy(update={"bundle_version": "2.0"})
+    runtime.policy_bundles["tamper-me"] = sealed_bundle.model_copy(
+        update={"bundle": tampered_bundle}
+    )
+
+    resp = _propose(client, headers, idempotency_key="idem-ra003-tampered")
+    assert resp.status_code == 409

@@ -47,7 +47,12 @@ from karmasakshi.gateway.refund_schemas import (
 )
 from karmasakshi.gateway.schemas import validate_principal_safe_id
 from karmasakshi.grants.model import ScopeConstraints
-from karmasakshi.intelligence.policy import IntelligencePolicy, build_policy_bundle
+from karmasakshi.intelligence.policy import (
+    POLICY_TYPE_INTELLIGENCE,
+    IntelligencePolicy,
+    build_policy_bundle,
+    policy_from_bundle_payload,
+)
 from karmasakshi.passports import (
     build_passport,
     build_passport_v2,
@@ -56,7 +61,7 @@ from karmasakshi.passports import (
     render_passport_v2_html,
     render_passport_v2_markdown,
 )
-from karmasakshi.policy import seal_policy_bundle
+from karmasakshi.policy import seal_policy_bundle, verify_policy_bundle
 from karmasakshi.portable import build_evidence_pack
 
 router = APIRouter(prefix="/gateway/organizations/{org_id}", tags=["gateway-refunds"])
@@ -117,6 +122,36 @@ def _agent(principal_id: str) -> Principal:
 
 def _human(principal_id: str) -> Principal:
     return Principal(principal_id=principal_id, principal_type=PrincipalType.HUMAN)
+
+
+def _active_intelligence_policy(state: Any) -> IntelligencePolicy | None:
+    """Resolve and verify this organization's currently activated
+    `IntelligencePolicy`, or ``None`` if no policy has been activated
+    (RA-003).
+
+    Fails closed with an ``HTTPException`` rather than silently falling
+    back to the engine's default policy if an activated bundle exists but
+    no longer verifies (tampered, expired, or wrong type) -- silently
+    assessing under a different, possibly more lenient policy than the one
+    the organization believes is active would defeat the point of this
+    fix.
+    """
+    bundle_id = state.active_policy_bundle_id
+    if bundle_id is None:
+        return None
+    sealed_bundle = state.policy_bundles.get(bundle_id)
+    if sealed_bundle is None:
+        raise HTTPException(500, "active policy bundle is unavailable")
+    try:
+        verify_policy_bundle(
+            sealed_bundle,
+            state.keyring,
+            now=state.engine.context.clock.now(),
+            expected_policy_type=POLICY_TYPE_INTELLIGENCE,
+        )
+    except KarmaSakshiError as exc:
+        raise HTTPException(409, f"active policy bundle failed verification: {exc}") from exc
+    return policy_from_bundle_payload(sealed_bundle.bundle.payload)
 
 
 def _assessment_out(assessment: Any) -> RefundAssessmentOut:
@@ -328,6 +363,7 @@ def activate_policy(
     state = resolve_org_runtime(request, user, org_id)
     now = datetime.now(timezone.utc)
     policy = IntelligencePolicy(
+        policy_id=body.bundle_id,
         block_threshold=body.block_threshold,
         review_threshold=body.review_threshold,
     )
@@ -424,10 +460,11 @@ def propose_refund(
         reference=body.reference,
         idempotency_key=body.idempotency_key,
     )
+    active_policy = _active_intelligence_policy(state)
     try:
         manifest = state.engine.prepare(adapter, payment_request, context=None)
         sealed = state.engine.seal(manifest, state.signing_key)
-        assessment = state.engine.assess(manifest)
+        assessment = state.engine.assess(manifest, policy=active_policy)
     except KarmaSakshiError as exc:
         raise HTTPException(422, str(exc)) from exc
     state.sealed_manifests[manifest.manifest_id] = sealed

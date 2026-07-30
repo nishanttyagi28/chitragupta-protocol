@@ -74,8 +74,10 @@ from karmasakshi.evidence.model import EvidenceAssessment, EvidencePolicy, Evide
 from karmasakshi.grants.issuer import issue_grant
 from karmasakshi.grants.model import ExecutionGrant, ScopeConstraints
 from karmasakshi.grants.verifier import verify_grant
+from karmasakshi.intelligence.engine import EffectIntelligenceEngine
 from karmasakshi.intelligence.facts import AssessmentFacts
 from karmasakshi.intelligence.model import EffectAssessment
+from karmasakshi.intelligence.policy import IntelligencePolicy
 from karmasakshi.observability.model import ObservabilityEvent, ObservabilityEventType
 from karmasakshi.observability.sinks import emit_safely
 from karmasakshi.outbox.memory import OutboxConflictError
@@ -388,6 +390,8 @@ class KarmaSakshiEngine:
         self,
         manifest: EffectManifest,
         facts: AssessmentFacts | None = None,
+        *,
+        policy: IntelligencePolicy | None = None,
     ) -> EffectAssessment:
         """Run the deterministic Effect Intelligence Engine over ``manifest``
         and record the result in the audit journal.
@@ -399,8 +403,19 @@ class KarmaSakshiEngine:
         recommendation is advisory in this protocol version: nothing in
         :meth:`authorize`/:meth:`commit` currently reads or enforces it.
         See docs/effect-intelligence.md.
+
+        If ``policy`` is given, this call is scored against that policy
+        instead of the engine context's configured default -- e.g. a
+        caller-verified, currently-activated organization
+        ``IntelligencePolicy`` -- without mutating the engine's own bound
+        policy or affecting any other call.
         """
-        assessment = self._ctx.intelligence.assess(manifest, facts)
+        scorer = (
+            self._ctx.intelligence
+            if policy is None
+            else EffectIntelligenceEngine(policy, clock=self._ctx.clock)
+        )
+        assessment = scorer.assess(manifest, facts)
         self._ctx.audit.record(
             event_type="effect.assessed",
             decision=assessment.recommendation.value,
