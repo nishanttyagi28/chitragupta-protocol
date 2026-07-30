@@ -25,7 +25,7 @@ separately.
 | RA-008 | Medium | **Fixed (partial)** | `b6e0350` |
 | RA-009 | Medium | **Fixed** | `0d16b94` |
 | RA-010 | Medium | **Fixed** | `c1bc8d7` |
-| RA-011 | Medium | Pending | |
+| RA-011 | Medium | **Fixed** | `b18cdfa` |
 | RA-012 | Low | Not in this remediation pass | |
 | RA-013 | Low | Not in this remediation pass | |
 | RA-014 | Low | Not in this remediation pass | |
@@ -467,3 +467,39 @@ new/changed assertions confirmed to fail against the pre-fix code.
 `tests/integration/test_public_demo.py` -- **99 passed**. Full suite:
 `1034 passed, 8 skipped`. `ruff check`, `ruff format --check`, and `mypy
 src` all clean.
+
+## RA-011 — Medium — Fresh dependency audit fails
+
+**Status: Fixed** (`b18cdfa`)
+
+**Root cause:** `pyproject.toml` constrained `pytest` to `<9`, excluding
+`9.0.3` (the fixed release for `PYSEC-2026-1845`), so a fresh `pip-audit`
+failed. Separately, the Security workflow's `pip-audit` job installed
+only `.[all]` (runtime extras), never the PEP 735 `dev` dependency group
+pytest lives in -- so its successful run had never actually audited
+pytest at all.
+
+**Fix:** bumped `pytest` to `>=9.0.3,<10` and `pytest-asyncio` to
+`>=1.0,<2` (0.23-0.26 pin `pytest<9`; `pytest-cov` and `hypothesis` had
+no upper pytest bound and needed no change). Verified compatibility
+directly rather than assuming it: installed both upgraded packages in
+the dev venv and ran the complete local suite -- `1034 passed, 8
+skipped`, no code changes needed anywhere. Fresh `pip-audit` now reports
+no known vulnerabilities. Verified `python -m build` + `twine check`
+still both pass.
+
+`security.yml`'s `pip-audit` job now installs `--group dev` alongside
+the runtime extras (verified with a dry-run resolve), so dev tooling
+being silently unaudited doesn't recur.
+
+**Focused tests:** full local suite, `1034 passed, 8 skipped`. `ruff
+check`, `ruff format --check`, `mypy src`, `pip-audit`, `build`, and
+`twine check` all clean/passing.
+
+---
+
+All six medium findings (RA-006 through RA-011) are now fixed. Combined
+with RA-001 through RA-005, every Critical/High/Medium finding in the
+baseline audit has a corresponding fix commit in this ledger. Low-severity
+findings (RA-012/013/014) remain out of scope for this pass per the top of
+this document.
