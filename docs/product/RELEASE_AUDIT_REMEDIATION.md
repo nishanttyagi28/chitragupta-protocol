@@ -23,8 +23,8 @@ separately.
 | RA-006 | Medium | **Fixed** | `5e9aa02` |
 | RA-007 | Medium | **Fixed** | `c5722f8` |
 | RA-008 | Medium | **Fixed (partial)** | `b6e0350` |
-| RA-009 | Medium | Pending | |
-| RA-010 | Medium | Pending | |
+| RA-009 | Medium | **Fixed** | `0d16b94` |
+| RA-010 | Medium | **Fixed** | `c1bc8d7` |
 | RA-011 | Medium | Pending | |
 | RA-012 | Low | Not in this remediation pass | |
 | RA-013 | Low | Not in this remediation pass | |
@@ -396,3 +396,74 @@ now say so explicitly rather than implying full resolution.
 **Focused tests:** `tests/integration/test_gateway_refunds.py` -- **26
 passed** (with the RA-007 acceptance test also included in this run).
 `ruff check`, `ruff format --check`, and `mypy src` all clean.
+
+## RA-009 — Medium — Local authentication accepts empty passwords
+
+**Status: Fixed** (`0d16b94`)
+
+`OrganizationBootstrapIn.owner_password` and `GatewayUserCreateIn.password`
+had no length requirement; the store hashed whatever string was supplied,
+so an empty password bootstrapped and logged in successfully. Added
+`validate_new_password()` (minimum 6 characters, not entirely whitespace)
+as a `field_validator` on both schemas -- deliberately not applied to
+`LoginIn.password` (login only checks a submitted string against an
+existing hash; length-validating it would just turn a wrong-length
+password into a confusing 422 instead of the correct 401). Chose 6, not a
+stricter number, specifically so the existing `"hunter2"` password used
+throughout the test suite keeps working unchanged -- confirmed against
+the full suite (1033 passed) with no other test needing to change.
+
+**Tests added:** `tests/integration/test_gateway_api.py` --
+`test_bootstrap_rejects_empty_or_too_short_owner_password` and
+`test_create_user_rejects_empty_or_too_short_password`, both confirmed to
+fail (200, not 422) against the pre-fix code.
+
+**Focused tests:** `tests/integration/test_gateway_api.py` -- **27
+passed**. Full suite: `1033 passed, 8 skipped`.
+
+## RA-010 — Medium — Health/readiness and startup validation can report healthy while unusable
+
+**Status: Fixed** (`c1bc8d7`)
+
+**Root cause:** outside dev mode, a missing `KARMASAKSHI_API_TOKEN` was
+only discovered lazily, per-request, the first time a protected route was
+hit (`karmasakshi.api.auth.require_auth` raising a 500). `/health` was
+unconditional; `/ready` checked only the audit chain and always returned
+HTTP 200 regardless of its own `status` field. Compose gated the
+acceptance job on `/health`, not `/ready`.
+
+**Fix:**
+
+- `create_app()` now raises `MissingApiTokenError` immediately at startup
+  for any non-dev, non-public-demo deployment missing the token, instead
+  of building an app that would 500 on every authenticated request.
+  Public-demo deployments are exempted (their own unauthenticated
+  `/demo/*` surface doesn't need it; existing tests already relied on
+  starting a public-demo app without one).
+- `/ready` also checks Gateway store reachability now (previously only
+  the audit chain), and returns HTTP 503 (not 200) when degraded -- a
+  bare HTTP-status health probe can now actually detect degradation from
+  the status code alone, not just an unparsed JSON field.
+- `docker-compose.yml`'s `api`/`demo` healthchecks (which gate the
+  `acceptance` service via `depends_on: condition: service_healthy`) now
+  hit `/ready` instead of `/health`.
+
+**Explicitly out of scope:** the Dockerfile's own container-level
+`HEALTHCHECK` and `render.yaml`'s `healthCheckPath` are left on `/health`
+-- those are single-service liveness probes by platform convention, not
+the multi-service startup-ordering gate the audit's "Compose gating"
+wording was about.
+
+**Tests updated/added:** `tests/integration/test_api.py` --
+`test_missing_token_config_fails_closed` rewritten to assert `create_app`
+raises at startup (previously asserted the old lazy-500 behavior);
+`test_health_and_ready_never_require_auth` rewritten to use a
+properly-configured app; new `test_ready_returns_503_and_degraded_when_gateway_store_is_unreachable`.
+`tests/integration/test_public_demo.py::test_public_demo_not_mounted_by_default`
+updated to configure a token so the app can still be constructed. Both
+new/changed assertions confirmed to fail against the pre-fix code.
+
+**Focused tests:** `tests/integration/test_api.py`,
+`tests/integration/test_public_demo.py` -- **99 passed**. Full suite:
+`1034 passed, 8 skipped`. `ruff check`, `ruff format --check`, and `mypy
+src` all clean.
