@@ -21,7 +21,7 @@ separately.
 | RA-004 | High | **Fixed** | `4c25b2b` |
 | RA-005 | High | **Fixed** | `32b183e` |
 | RA-006 | Medium | **Fixed** | `5e9aa02` |
-| RA-007 | Medium | Pending | |
+| RA-007 | Medium | **Fixed** | `c5722f8` |
 | RA-008 | Medium | Pending | |
 | RA-009 | Medium | Pending | |
 | RA-010 | Medium | Pending | |
