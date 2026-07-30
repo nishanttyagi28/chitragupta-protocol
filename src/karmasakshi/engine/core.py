@@ -104,7 +104,7 @@ from karmasakshi.saga.model import (
     build_saga_run,
 )
 from karmasakshi.state_machine.record import LifecycleRecord
-from karmasakshi.state_machine.states import LifecycleState, is_revocable
+from karmasakshi.state_machine.states import LifecycleState, is_legal_transition, is_revocable
 from karmasakshi.tenant.enforce import bind_engine_and_policy_tenant
 from karmasakshi.witness.model import WitnessPolicy, WitnessQuorumResult, WitnessStatement
 from karmasakshi.witness.quorum import evaluate_witness_quorum
@@ -1682,6 +1682,23 @@ class KarmaSakshiEngine:
                 pending = self._ctx.outbox_store.get(manifest.idempotency_key)
                 if pending is not None and pending.status == "pending":
                     self._ctx.outbox_store.mark_confirmed(manifest.idempotency_key, outcome_ref)
+            # RA-004: honestly reconcile the lifecycle with what recovery
+            # just confirmed. Only fires when FAILED -> RECOVERED_COMMITTED
+            # is actually legal (i.e. this manifest previously reached
+            # FAILED, typically via an ambiguous commit outcome) -- a
+            # manifest recovery is probed for before ever reaching FAILED
+            # (e.g. a crash before commit was attempted at all) is left
+            # exactly as before, matching prior behavior.
+            current_state = self._get_record(manifest.manifest_id).state
+            if is_legal_transition(current_state, LifecycleState.RECOVERED_COMMITTED):
+                self._transition(
+                    manifest.manifest_id,
+                    LifecycleState.RECOVERED_COMMITTED,
+                    event_type="effect.ambiguous_recovery_confirmed",
+                    manifest_hash=manifest.canonical_hash(),
+                    actor_id=manifest.actor.principal_id,
+                    metadata={"outcome_ref": outcome_ref[:200]},
+                )
         return proof
 
     def list_pending_outbox(self) -> list[OutboxEntry]:

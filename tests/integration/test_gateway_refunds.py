@@ -434,6 +434,74 @@ def test_ambiguous_outcome_recovered_honestly(dev_client):
     # retrying or blindly declaring failure.
     assert recover.json()["matched_expected"] is True
 
+    # RA-004 cross-surface regression: lifecycle, the Gateway read model,
+    # and Action Passport V2 must all agree on what actually happened --
+    # none of them may still say "failed" now that recovery has
+    # independently confirmed the effect succeeded.
+    detail = client.get(
+        f"/gateway/organizations/acme/refunds/{manifest_id}", headers=headers
+    ).json()
+    assert detail["lifecycle_state"] == "recovered_committed"
+    assert detail["verification_status"] == "verified_match"
+    assert detail["verification_matched_expected"] is True
+    assert detail["ambiguous"] is False
+
+    passport_v2 = client.get(
+        f"/gateway/organizations/acme/refunds/{manifest_id}/passport",
+        params={"version": "v2"},
+        headers=headers,
+    ).json()
+    assert passport_v2["outcome_status"] == "verified_match"
+    assert passport_v2["lifecycle_state"] == "recovered_committed"
+
+
+def test_ambiguous_outcome_with_no_evidence_stays_honestly_failed(dev_client):
+    """The other half of RA-004: when recovery finds *no* evidence, the
+    lifecycle must correctly stay FAILED (never silently upgraded), and
+    every surface must agree on that too."""
+    client, app = dev_client
+    headers = _bootstrap_and_login(client)
+    manifest_id = _propose(client, headers, idempotency_key="idem-ambiguous-no-evidence").json()[
+        "manifest_id"
+    ]
+    grant_id = _approve_to_quorum(client, headers, manifest_id).json()["grant_id"]
+
+    org_state = app.state.karmasakshi_gateway.control_plane.get_state("acme")
+    org_state.adapters["payment.simulator"].simulator.inject_ambiguous_timeout()
+
+    execute = client.post(
+        f"/gateway/organizations/acme/refunds/{manifest_id}/execute",
+        json={"grant_id": grant_id},
+        headers=headers,
+    )
+    assert execute.status_code == 200
+    assert execute.json()["success"] is False
+
+    # Wipe the simulator's internal record before recovering, so
+    # re-observation genuinely finds no evidence either way.
+    payment_record_store = org_state.adapters["payment.simulator"].simulator._payments
+    payment_record_store.clear()
+
+    recover = client.post(
+        f"/gateway/organizations/acme/refunds/{manifest_id}/recover", headers=headers
+    )
+    assert recover.status_code == 200
+    assert recover.json()["matched_expected"] is False
+
+    detail = client.get(
+        f"/gateway/organizations/acme/refunds/{manifest_id}", headers=headers
+    ).json()
+    assert detail["lifecycle_state"] == "failed"
+    assert detail["verification_status"] == "verified_mismatch"
+
+    passport_v2 = client.get(
+        f"/gateway/organizations/acme/refunds/{manifest_id}/passport",
+        params={"version": "v2"},
+        headers=headers,
+    ).json()
+    assert passport_v2["outcome_status"] == "verified_mismatch"
+    assert passport_v2["lifecycle_state"] == "failed"
+
 
 def test_cross_tenant_access_rejected_on_every_org_scoped_endpoint(dev_client):
     client, _app = dev_client

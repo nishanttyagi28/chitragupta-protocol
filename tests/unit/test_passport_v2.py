@@ -236,7 +236,12 @@ def test_passport_v2_render(full_run, keyring):
 
 def test_derive_outcome_status_failed_ambiguous_compensation(full_run, keyring):
     engine, sealed, grant, commit_result, outcome_proof = full_run
-    failed = build_passport(
+
+    # RA-004: a matched independent observation must override a stale
+    # terminal "failed" lifecycle label -- this is exactly the
+    # ambiguous-recovery reconciliation fix (previously this asserted
+    # OutcomeStatus.FAILED here, which is the bug the release audit found).
+    failed_but_verified = build_passport(
         sealed=sealed,
         keyring=keyring,
         audit=engine.context.audit,
@@ -246,7 +251,20 @@ def test_derive_outcome_status_failed_ambiguous_compensation(full_run, keyring):
         commit_result=commit_result,
         outcome_proof=outcome_proof,
     )
-    assert derive_outcome_status(failed) == OutcomeStatus.FAILED
+    assert derive_outcome_status(failed_but_verified) == OutcomeStatus.VERIFIED_MATCH
+
+    # With no independent evidence at all, a terminal "failed" lifecycle
+    # state is still honestly reported as FAILED.
+    failed_no_evidence = build_passport(
+        sealed=sealed,
+        keyring=keyring,
+        audit=engine.context.audit,
+        lifecycle_state="failed",
+        grant=grant,
+        grant_store=engine.context.grant_store,
+        commit_result=commit_result,
+    )
+    assert derive_outcome_status(failed_no_evidence) == OutcomeStatus.FAILED
 
     from dataclasses import replace
 
